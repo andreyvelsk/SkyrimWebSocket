@@ -27,7 +27,9 @@ static void ExecuteCommand(const std::string& cmd)
     const auto script  = factory ? factory->Create() : nullptr;
     if (script) {
         script->SetCommand(cmd);
-        RE::Script::CompileAndRun(script, RE::PlayerCharacter::GetSingleton());
+        RE::ScriptCompiler compiler;
+        script->CompileAndRun(&compiler, RE::PlayerCharacter::GetSingleton(),
+            RE::COMPILER_NAME::kSystemWindowCompiler);
         delete script;
     }
 }
