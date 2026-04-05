@@ -10,6 +10,9 @@ on:
 env:
   VCPKG_COMMIT: "77df67cfff9c12ccfdb52284e07c87c75092f723"
 
+permissions:
+  contents: read
+
 jobs:
   build:
     runs-on: windows-latest
