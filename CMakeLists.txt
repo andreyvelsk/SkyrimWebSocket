@@ -40,8 +40,10 @@ find_package(CommonLibSSE CONFIG REQUIRED)
 add_commonlibsse_plugin(${PROJECT_NAME} SOURCES plugin.cpp) # <--- specifies plugin.cpp
 target_compile_features(${PROJECT_NAME} PRIVATE cxx_std_23) # <--- use C++23 standard
 target_precompile_headers(${PROJECT_NAME} PRIVATE PCH.h) # <--- PCH.h is required!
-# Add ixwebsocket dependency to the SKSE project
-target_link_libraries(${PROJECT_NAME} PRIVATE ixwebsocket::ixwebsocket)
+# Add ixwebsocket dependency to the SKSE project.
+# bcrypt is required because mbedcrypto (used by ixwebsocket for TLS) calls
+# BCryptGenRandom for entropy, which lives in bcrypt.lib on Windows.
+target_link_libraries(${PROJECT_NAME} PRIVATE ixwebsocket::ixwebsocket bcrypt)
 
 # MSVC 14.44 (VS 2022 17.14) has a parser regression with `constinit` combined
 # with designated initializers.  The SKSEPluginInfo() macro in SKSE/Interfaces.h
