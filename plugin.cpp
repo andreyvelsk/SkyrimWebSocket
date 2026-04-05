@@ -18,7 +18,7 @@ void RunConsoleCommand(const std::string &commandText) {
 // Наш сервер
 void RunWebSocketServer() {
     // Настраиваем логику: что делать, когда клиент подключается или присылает сообщение
-    _webSocketServer.setOnClientMessageCallback([](std::shared_ptr<ix::ConnectionState> connectionState, ix::WebSocket& webSocket, const ix::WebSocketMessagePtr& msg) {
+    _webSocketServer.setOnClientMessageCallback([](std::shared_ptr<ix::ConnectionState> /*connectionState*/, ix::WebSocket& webSocket, const ix::WebSocketMessagePtr& msg) {
         
         // Если пришло обычное текстовое сообщение
         if (msg->type == ix::WebSocketMessageType::Message) {

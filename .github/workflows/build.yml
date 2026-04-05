@@ -1,0 +1,42 @@
+name: Build
+
+on:
+  push:
+    branches: ["**"]
+  pull_request:
+    branches: ["**"]
+  workflow_dispatch:
+
+env:
+  VCPKG_COMMIT: "77df67cfff9c12ccfdb52284e07c87c75092f723"
+
+jobs:
+  build:
+    runs-on: windows-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup MSVC Developer Command Prompt
+        uses: ilammy/msvc-dev-cmd@v1
+        with:
+          arch: x64
+
+      - name: Setup vcpkg
+        uses: lukka/run-vcpkg@v11
+        with:
+          vcpkgGitCommitId: ${{ env.VCPKG_COMMIT }}
+
+      - name: Configure CMake (Release)
+        run: cmake --preset release
+
+      - name: Build (Release)
+        run: cmake --build build/release --config Release
+
+      - name: Upload compiled DLL
+        uses: actions/upload-artifact@v4
+        with:
+          name: WebSocketServerExample-${{ github.sha }}
+          path: build/release/WebSocketServerExample.dll
+          if-no-files-found: error
