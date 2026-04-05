@@ -31,12 +31,6 @@ jobs:
         with:
           vcpkgGitCommitId: ${{ env.VCPKG_COMMIT }}
 
-      - name: Cache vcpkg installed packages
-        uses: actions/cache@v4
-        with:
-          path: build/release/vcpkg_installed
-          key: vcpkg-${{ runner.os }}-${{ env.VCPKG_COMMIT }}-${{ hashFiles('vcpkg.json') }}
-
       - name: Configure CMake (Release)
         run: cmake --preset release
 
