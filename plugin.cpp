@@ -1,7 +1,11 @@
 #include "logger.h"
-#include <ixwebsocket/IXWebSocketServer.h>
+#include <boost/asio.hpp>
+#include <boost/beast.hpp>
 
-static std::unique_ptr<ix::WebSocketServer> g_wsServer;
+namespace asio = boost::asio;
+
+static asio::io_context g_ioc;
+static asio::ip::tcp::acceptor g_acceptor(g_ioc);
 
 SKSEPluginLoad(const SKSE::LoadInterface *skse) {
     SKSE::Init(skse);
@@ -9,9 +13,11 @@ SKSEPluginLoad(const SKSE::LoadInterface *skse) {
 
     SKSE::GetMessagingInterface()->RegisterListener([](SKSE::MessagingInterface::Message *msg) {
         if (msg->type == SKSE::MessagingInterface::kPostLoadGame) {
-            g_wsServer = std::make_unique<ix::WebSocketServer>(8765, "127.0.0.1");
-            auto res = g_wsServer->listen();
-            if (res.first) {
+            boost::system::error_code ec;
+            asio::ip::tcp::endpoint endpoint(asio::ip::make_address("127.0.0.1", ec), 8765);
+            if (!ec) g_acceptor.open(endpoint.protocol(), ec);
+            if (!ec) g_acceptor.bind(endpoint, ec);
+            if (!ec) {
                 RE::ConsoleLog::GetSingleton()->Print("websocket server init success");
             } else {
                 RE::ConsoleLog::GetSingleton()->Print("websocket server init failed");
