@@ -3,6 +3,10 @@
     "name": "skyrim-websocket",
     "version-string": "0.0.1",
     "dependencies": [
-        "commonlibsse-ng"
+        "commonlibsse-ng",
+        {
+            "name": "ixwebsocket",
+            "default-features": false
+        }
     ]
 }
