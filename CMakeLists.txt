@@ -5,21 +5,8 @@ cmake_minimum_required(VERSION 3.21)
 # Set your project name. This will be the name of your SKSE .dll file.
 project(WebSocketServerExample VERSION 0.0.1 LANGUAGES CXX)
 
-# Add dependency on websocketpp
-find_package(websocketpp CONFIG REQUIRED)
-
-# Note: boost-random only seems to be requied when using the C++ *client*
-# You can remove this if you are only using C++ for a WebSocket *server*
-find_package(Boost REQUIRED COMPONENTS random)
-
-# Setup a command line executable for talking to the websocket
-add_executable(TalkToSkyrim command-line.cpp)
-# Enable C++23 features for the console app
-target_compile_features(TalkToSkyrim PRIVATE cxx_std_23)
-# Add websocketpp dependency to the SKSE project
-target_link_libraries(TalkToSkyrim PRIVATE websocketpp::websocketpp)
-# Client seems to also need boost's random library
-target_link_libraries(TalkToSkyrim PRIVATE Boost::boost Boost::random)
+# Add dependency on ixwebsocket
+find_package(ixwebsocket CONFIG REQUIRED)
 
 #
 # YOU DO NOT NEED TO EDIT ANYTHING BELOW HERE
@@ -53,8 +40,8 @@ find_package(CommonLibSSE CONFIG REQUIRED)
 add_commonlibsse_plugin(${PROJECT_NAME} SOURCES plugin.cpp) # <--- specifies plugin.cpp
 target_compile_features(${PROJECT_NAME} PRIVATE cxx_std_23) # <--- use C++23 standard
 target_precompile_headers(${PROJECT_NAME} PRIVATE PCH.h) # <--- PCH.h is required!
-# Add websocketpp dependency to the SKSE project
-target_link_libraries(${PROJECT_NAME} PRIVATE websocketpp::websocketpp)
+# Add ixwebsocket dependency to the SKSE project
+target_link_libraries(${PROJECT_NAME} PRIVATE ixwebsocket::ixwebsocket)
 
 # When your SKSE .dll is compiled, this will automatically copy the .dll into your mods folder.
 # Only works if you configure DEPLOY_ROOT above (or set the SKYRIM_MODS_FOLDER environment variable)
