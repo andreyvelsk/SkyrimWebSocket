@@ -43,6 +43,38 @@ target_precompile_headers(${PROJECT_NAME} PRIVATE PCH.h) # <--- PCH.h is require
 # Add ixwebsocket dependency to the SKSE project
 target_link_libraries(${PROJECT_NAME} PRIVATE ixwebsocket::ixwebsocket)
 
+# MSVC 14.44 (VS 2022 17.14) has a parser regression with `constinit` combined
+# with designated initializers.  The SKSEPluginInfo() macro in SKSE/Interfaces.h
+# emits exactly that pattern, so we overwrite the cmake-generated plugin info
+# file with equivalent content that avoids both `constinit` and designated
+# initializers, using positional aggregate initialisation instead.
+file(WRITE "${CMAKE_CURRENT_BINARY_DIR}/__${PROJECT_NAME}Plugin.cpp"
+    "#include \"REL/Relocation.h\"\n"
+    "#include \"SKSE/SKSE.h\"\n"
+    "\n"
+    "extern \"C\" [[maybe_unused]] __declspec(dllexport)\n"
+    "::SKSE::PluginDeclaration SKSEPlugin_Version(\n"
+    "    ::SKSE::PluginDeclaration::PluginDeclarationInfo{\n"
+    "        REL::Version{${PROJECT_VERSION_MAJOR}, ${PROJECT_VERSION_MINOR}, ${PROJECT_VERSION_PATCH}, 0},\n"
+    "        \"${PROJECT_NAME}\",  // Name\n"
+    "        \"\",               // Author\n"
+    "        \"\",               // SupportEmail\n"
+    "        SKSE::StructCompatibility::Independent,\n"
+    "        SKSE::VersionIndependence::AddressLibrary,\n"
+    "        REL::Version{0, 0, 0, 0}\n"
+    "    }\n"
+    ");\n"
+    "\n"
+    "extern \"C\" [[maybe_unused]] __declspec(dllexport)\n"
+    "bool SKSEPlugin_Query(::SKSE::QueryInterface*, ::SKSE::PluginInfo* pluginInfo)\n"
+    "{\n"
+    "    pluginInfo->infoVersion = ::SKSE::PluginInfo::kVersion;\n"
+    "    pluginInfo->name = SKSEPlugin_Version.GetName().data();\n"
+    "    pluginInfo->version = static_cast<std::uint32_t>(SKSEPlugin_Version.GetVersion().pack());\n"
+    "    return true;\n"
+    "}\n"
+)
+
 # When your SKSE .dll is compiled, this will automatically copy the .dll into your mods folder.
 # Only works if you configure DEPLOY_ROOT above (or set the SKYRIM_MODS_FOLDER environment variable)
 if(DEFINED OUTPUT_FOLDER)
