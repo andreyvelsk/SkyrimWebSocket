@@ -69,7 +69,6 @@ private:
 
             SKSE::GetTaskInterface()->AddTask([msg] {
                 PrintConsole("[WS] Received: " + msg);
-                ExecuteCommand(msg);
             });
 
             self->doRead();
