@@ -153,9 +153,10 @@ static void DoBroadcast()
             return;
         }
 
-        float health  = player->GetActorValue(RE::ActorValue::kHealth);
-        float magicka = player->GetActorValue(RE::ActorValue::kMagicka);
-        float stamina = player->GetActorValue(RE::ActorValue::kStamina);
+        auto* actor = static_cast<RE::Actor*>(player);
+        float health  = actor->GetActorValue(RE::ActorValue::kHealth);
+        float magicka = actor->GetActorValue(RE::ActorValue::kMagicka);
+        float stamina = actor->GetActorValue(RE::ActorValue::kStamina);
 
         if (!std::isfinite(health))  health  = 0.f;
         if (!std::isfinite(magicka)) magicka = 0.f;
