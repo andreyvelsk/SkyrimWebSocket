@@ -1,5 +1,6 @@
 #include "BroadcastService.h"
 #include "SessionManager.h"
+#include "WsSession.h"
 #include "../game/GameReader.h"
 
 #include <boost/beast.hpp>
