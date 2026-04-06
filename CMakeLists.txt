@@ -35,7 +35,15 @@ endif()
 # Setup your SKSE plugin as an SKSE plugin!
 find_package(CommonLibSSE CONFIG REQUIRED)
 find_package(Boost REQUIRED COMPONENTS system)
-add_commonlibsse_plugin(${PROJECT_NAME} SOURCES plugin.cpp) # <--- specifies plugin.cpp
+add_commonlibsse_plugin(${PROJECT_NAME} SOURCES
+    plugin.cpp
+    src/game/GameReader.cpp
+    src/game/GameWriter.cpp
+    src/server/WsSession.cpp
+    src/server/SessionManager.cpp
+    src/server/WsServer.cpp
+    src/server/BroadcastService.cpp
+) # <--- specifies all source files
 target_compile_features(${PROJECT_NAME} PRIVATE cxx_std_23) # <--- use C++23 standard
 target_precompile_headers(${PROJECT_NAME} PRIVATE PCH.h) # <--- PCH.h is required!
 target_link_libraries(${PROJECT_NAME} PRIVATE Boost::system)
