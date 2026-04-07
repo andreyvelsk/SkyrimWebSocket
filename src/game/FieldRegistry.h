@@ -8,8 +8,10 @@ namespace FieldRegistry
 {
     enum class ValueType
     {
-        kCurrent,   // GetActorValue - current value with temporary modifiers
-        kPermanent  // GetPermanentActorValue - base permanent value
+        kCurrent,    // GetActorValue - current value with temporary modifiers
+        kPermanent,  // GetPermanentActorValue - base permanent value
+        kBase,       // GetBaseActorValue - explicit base value (similar to permanent)
+        kClamped     // GetClampedActorValue - value clamped to valid min/max ranges
     };
 
     struct Entry

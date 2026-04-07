@@ -27,9 +27,23 @@ namespace GameReader
                 continue;
 
             const auto& entry = entryOpt.value();
-            float val         = (entry.valueType == FieldRegistry::ValueType::kPermanent)
-                                    ? avo->GetPermanentActorValue(entry.av)
-                                    : avo->GetActorValue(entry.av);
+            float val         = 0.f;
+
+            switch (entry.valueType) {
+                case FieldRegistry::ValueType::kCurrent:
+                    val = avo->GetActorValue(entry.av);
+                    break;
+                case FieldRegistry::ValueType::kPermanent:
+                    val = avo->GetPermanentActorValue(entry.av);
+                    break;
+                case FieldRegistry::ValueType::kBase:
+                    val = avo->GetBaseActorValue(entry.av);
+                    break;
+                case FieldRegistry::ValueType::kClamped:
+                    val = avo->GetClampedActorValue(entry.av);
+                    break;
+            }
+
             if (!std::isfinite(val))
                 val = 0.f;
 
