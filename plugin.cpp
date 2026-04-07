@@ -23,7 +23,7 @@ SKSEPluginLoad(const SKSE::LoadInterface* skse)
 
     SKSE::GetMessagingInterface()->RegisterListener([](SKSE::MessagingInterface::Message* msg) {
         if (msg->type == SKSE::MessagingInterface::kPostLoadGame && !g_server) {
-            tcp::endpoint endpoint(asio::ip::make_address("127.0.0.1"), WEBSOCKET_PORT);
+            tcp::endpoint endpoint(asio::ip::address_v4::any(), WEBSOCKET_PORT);
             g_server = std::make_unique<WsServer>(g_ioc, endpoint,
                 [](const std::string& json) {
                     GameWriter::ApplyClientCommand(json);

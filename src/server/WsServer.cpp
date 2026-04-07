@@ -37,7 +37,7 @@ WsServer::WsServer(asio::io_context& ioc, tcp::endpoint endpoint,
     }
 
     SKSE::GetTaskInterface()->AddTask([p = endpoint.port()] {
-        PrintConsole("[WS] Server started on 127.0.0.1:" + std::to_string(p));
+        PrintConsole("[WS] Server started on 0.0.0.0:" + std::to_string(p));
     });
     doAccept();
 }
