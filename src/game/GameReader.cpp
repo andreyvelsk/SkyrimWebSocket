@@ -22,11 +22,28 @@ namespace GameReader
         bool           anyChanged = false;
 
         for (auto& [alias, registryKey] : state.fields) {
-            auto avOpt = FieldRegistry::Resolve(registryKey);
-            if (!avOpt)
+            auto entryOpt = FieldRegistry::Resolve(registryKey);
+            if (!entryOpt)
                 continue;
 
-            float val = avo->GetActorValue(*avOpt);
+            const auto& entry = entryOpt.value();
+            float val         = 0.f;
+
+            switch (entry.valueType) {
+                case FieldRegistry::ValueType::kCurrent:
+                    val = avo->GetActorValue(entry.av);
+                    break;
+                case FieldRegistry::ValueType::kPermanent:
+                    val = avo->GetPermanentActorValue(entry.av);
+                    break;
+                case FieldRegistry::ValueType::kBase:
+                    val = avo->GetBaseActorValue(entry.av);
+                    break;
+                case FieldRegistry::ValueType::kClamped:
+                    val = avo->GetClampedActorValue(entry.av);
+                    break;
+            }
+
             if (!std::isfinite(val))
                 val = 0.f;
 
