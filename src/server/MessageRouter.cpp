@@ -53,7 +53,7 @@ namespace MessageRouter
 
             if (msg.contains("settings") && msg["settings"].is_object()) {
                 auto& s        = msg["settings"];
-                state.frequencyMs  = std::max(50, s.value("frequency", 500));
+                state.frequencyMs  = s.value("frequency", 500);
                 state.sendOnChange = s.value("sendOnChange", false);
             }
 

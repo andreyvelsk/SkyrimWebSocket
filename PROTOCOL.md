@@ -218,7 +218,7 @@ in the client application.
 ### Example 2 — Skill tracker with `sendOnChange`
 
 A client shows a skill progress panel. Skills change rarely, so bandwidth
-should be wasted only when something actually changes.
+should not be wasted when nothing has changed.
 
 **Client sends:**
 ```json
