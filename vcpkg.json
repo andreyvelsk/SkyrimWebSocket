@@ -5,6 +5,7 @@
     "dependencies": [
         "commonlibsse-ng",
         "boost-beast",
-        "boost-asio"
+        "boost-asio",
+        "nlohmann-json"
     ]
 }

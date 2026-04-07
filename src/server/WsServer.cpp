@@ -1,6 +1,5 @@
 #include "WsServer.h"
 #include "WsSession.h"
-#include "SessionManager.h"
 #include "../Utils.h"
 
 #include <boost/beast.hpp>
@@ -9,9 +8,8 @@ namespace asio  = boost::asio;
 namespace beast = boost::beast;
 using     tcp   = asio::ip::tcp;
 
-WsServer::WsServer(asio::io_context& ioc, tcp::endpoint endpoint,
-                   std::function<void(const std::string&)> onMessage)
-    : acceptor_(ioc), onMessage_(std::move(onMessage))
+WsServer::WsServer(asio::io_context& ioc, tcp::endpoint endpoint)
+    : acceptor_(ioc), ioc_(ioc)
 {
     beast::error_code ec;
 
@@ -46,8 +44,7 @@ void WsServer::doAccept()
 {
     acceptor_.async_accept([this](beast::error_code ec, tcp::socket socket) {
         if (!ec) {
-            auto session = std::make_shared<WsSession>(std::move(socket), onMessage_);
-            SessionManager::Register(session);
+            auto session = std::make_shared<WsSession>(std::move(socket), ioc_);
             session->run();
         }
         doAccept();
