@@ -147,14 +147,14 @@ All field values are `float`.
 | `ActorValue::kAttackDamageMult` | Attack damage multiplier |
 | `ActorValue::kCriticalChance` | Critical hit chance |
 | `ActorValue::kDamageResist` | Physical damage resistance |
-| `ActorValue::kMagicResist` | Magic resistance |
-| `ActorValue::kFireResist` | Fire resistance |
-| `ActorValue::kFrostResist` | Frost resistance |
-| `ActorValue::kShockResist` | Shock resistance |
+| `ActorValue::kResistMagic` | Magic resistance |
+| `ActorValue::kResistFire` | Fire resistance |
+| `ActorValue::kResistFrost` | Frost resistance |
+| `ActorValue::kResistShock` | Shock resistance |
 | `ActorValue::kPoisonResist` | Poison resistance |
 | `ActorValue::kOneHanded` | One-Handed skill level |
 | `ActorValue::kTwoHanded` | Two-Handed skill level |
-| `ActorValue::kMarksman` | Archery skill level |
+| `ActorValue::kArchery` | Archery skill level |
 | `ActorValue::kBlock` | Block skill level |
 | `ActorValue::kSmithing` | Smithing skill level |
 | `ActorValue::kAlchemy` | Alchemy skill level |
@@ -253,10 +253,10 @@ sheet. It uses `"query"` instead of subscribing to avoid unnecessary traffic.
 {
   "type": "query",
   "fields": {
-    "fireRes":   "ActorValue::kFireResist",
-    "frostRes":  "ActorValue::kFrostResist",
-    "shockRes":  "ActorValue::kShockResist",
-    "magicRes":  "ActorValue::kMagicResist",
+    "fireRes":   "ActorValue::kResistFire",
+    "frostRes":  "ActorValue::kResistFrost",
+    "shockRes":  "ActorValue::kResistShock",
+    "magicRes":  "ActorValue::kResistMagic",
     "poisonRes": "ActorValue::kPoisonResist"
   }
 }

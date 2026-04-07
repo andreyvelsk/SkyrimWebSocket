@@ -29,16 +29,16 @@ namespace FieldRegistry
 
         // Resistances
         { "ActorValue::kDamageResist",     { RE::ActorValue::kDamageResist,     "Physical damage resistance"        } },
-        { "ActorValue::kMagicResist",      { RE::ActorValue::kMagicResist,      "Magic resistance"                  } },
-        { "ActorValue::kFireResist",       { RE::ActorValue::kFireResist,       "Fire resistance"                   } },
-        { "ActorValue::kFrostResist",      { RE::ActorValue::kFrostResist,      "Frost resistance"                  } },
-        { "ActorValue::kShockResist",      { RE::ActorValue::kShockResist,      "Shock resistance"                  } },
+        { "ActorValue::kResistMagic",      { RE::ActorValue::kResistMagic,      "Magic resistance"                  } },
+        { "ActorValue::kResistFire",       { RE::ActorValue::kResistFire,       "Fire resistance"                   } },
+        { "ActorValue::kResistFrost",      { RE::ActorValue::kResistFrost,      "Frost resistance"                  } },
+        { "ActorValue::kResistShock",      { RE::ActorValue::kResistShock,      "Shock resistance"                  } },
         { "ActorValue::kPoisonResist",     { RE::ActorValue::kPoisonResist,     "Poison resistance"                 } },
 
         // Combat skills
         { "ActorValue::kOneHanded",        { RE::ActorValue::kOneHanded,        "One-Handed skill level"            } },
         { "ActorValue::kTwoHanded",        { RE::ActorValue::kTwoHanded,        "Two-Handed skill level"            } },
-        { "ActorValue::kMarksman",         { RE::ActorValue::kMarksman,         "Archery skill level"               } },
+        { "ActorValue::kArchery",          { RE::ActorValue::kArchery,          "Archery skill level"               } },
         { "ActorValue::kBlock",            { RE::ActorValue::kBlock,            "Block skill level"                 } },
 
         // Crafting skills
