@@ -36,7 +36,7 @@ static std::string GetIniPath()
     if (lastSlash != std::string::npos)
         path = path.substr(0, lastSlash);
 
-    return path + "\\WebSocketServerExample.ini";
+    return path + "\\SkyrimWebSocket.ini";
 }
 
 SKSEPluginLoad(const SKSE::LoadInterface* skse)

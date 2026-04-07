@@ -70,7 +70,7 @@ into your "`mods`" folder:
 The plugin reads an optional INI file placed next to the DLL:
 
 ```
-Data/SKSE/Plugins/WebSocketServerExample.ini
+Data/SKSE/Plugins/SkyrimWebSocket.ini
 ```
 
 If the file is absent, the plugin uses safe defaults (`127.0.0.1:8765`).
@@ -80,7 +80,7 @@ If the file is absent, the plugin uses safe defaults (`127.0.0.1:8765`).
 | `[Server] ListenAddress` | `127.0.0.1` | Bind address. Use `0.0.0.0` to accept remote connections (e.g. for debugging). |
 | `[Server] Port` | `8765` | TCP port the WebSocket server listens on. |
 
-An annotated template is available in the repository as `WebSocketServerExample.ini.example`.
+An annotated template is available in the repository as `SkyrimWebSocket.ini.example`.
 
 ## Setup your own repository
 

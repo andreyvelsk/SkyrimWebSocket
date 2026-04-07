@@ -306,7 +306,7 @@ sheet. It uses `"query"` instead of subscribing to avoid unnecessary traffic.
 The plugin reads an optional INI file from the same directory as the DLL:
 
 ```
-Data/SKSE/Plugins/WebSocketServerExample.ini
+Data/SKSE/Plugins/SkyrimWebSocket.ini
 ```
 
 If the file does not exist, the defaults shown below are used.
@@ -323,5 +323,5 @@ ListenAddress=127.0.0.1
 Port=8765
 ```
 
-An annotated example file `WebSocketServerExample.ini.example` is included in the repository root.
-Copy it to `Data/SKSE/Plugins/WebSocketServerExample.ini` and edit as needed.
+An annotated example file `SkyrimWebSocket.ini.example` is included in the repository root.
+Copy it to `Data/SKSE/Plugins/SkyrimWebSocket.ini` and edit as needed.
