@@ -1,6 +1,7 @@
 # WebSocket Protocol — SkyrimWebSocket Plugin
 
-The plugin starts a WebSocket server on `ws://127.0.0.1:8765`.
+The plugin starts a WebSocket server. By default it binds to `ws://127.0.0.1:8765`.
+The address and port can be changed via an INI configuration file (see the [Configuration](#configuration) section).
 
 After the connection is established the client drives all behaviour: it declares
 which fields it wants, how often they should be delivered, and can query data
@@ -297,3 +298,30 @@ sheet. It uses `"query"` instead of subscribing to avoid unnecessary traffic.
   }
 }
 ```
+
+---
+
+## Configuration
+
+The plugin reads an optional INI file from the same directory as the DLL:
+
+```
+Data/SKSE/Plugins/WebSocketServerExample.ini
+```
+
+If the file does not exist, the defaults shown below are used.
+
+```ini
+[Server]
+; Address the WebSocket server binds to.
+; Use 127.0.0.1 (default) to accept connections from localhost only.
+; Use 0.0.0.0 to accept connections from any network interface (useful for debugging from a remote client).
+ListenAddress=127.0.0.1
+
+; TCP port the WebSocket server listens on.
+; Default: 8765
+Port=8765
+```
+
+An annotated example file `WebSocketServerExample.ini.example` is included in the repository root.
+Copy it to `Data/SKSE/Plugins/WebSocketServerExample.ini` and edit as needed.

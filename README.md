@@ -65,9 +65,24 @@ into your "`mods`" folder:
 
 <img src="https://raw.githubusercontent.com/SkyrimScripting/Resources/main/Screenshots/Setting%20Environment%20Variables/SKYRIM_MODS_FOLDER.png" height="150">
 
-## Setup your own repository
+## Configuration
 
-If you clone this template on GitHub, please:
+The plugin reads an optional INI file placed next to the DLL:
+
+```
+Data/SKSE/Plugins/WebSocketServerExample.ini
+```
+
+If the file is absent, the plugin uses safe defaults (`127.0.0.1:8765`).
+
+| Key | Default | Description |
+|---|---|---|
+| `[Server] ListenAddress` | `127.0.0.1` | Bind address. Use `0.0.0.0` to accept remote connections (e.g. for debugging). |
+| `[Server] Port` | `8765` | TCP port the WebSocket server listens on. |
+
+An annotated template is available in the repository as `WebSocketServerExample.ini.example`.
+
+## Setup your own repository
 
 - Go into `LICENSE` and change the year and change `<YOUR NAME HERE>` to your name.
 - Go into `CODE_OF_CONDUCT.md` and change `<YOUR CONTACT INFO HERE>` to your contact information.
