@@ -1,0 +1,52 @@
+{
+  "types": [
+    { "type": "feat", "section": "✨ Features" },
+    { "type": "fix", "section": "🐛 Bug Fixes" },
+    { "type": "perf", "section": "⚡ Performance" },
+    { "type": "refactor", "section": "🔧 Refactoring", "hidden": true },
+    { "type": "docs", "section": "📚 Documentation", "hidden": true },
+    { "type": "style", "section": "💅 Styles", "hidden": true },
+    { "type": "test", "section": "🧪 Tests", "hidden": true },
+    { "type": "chore", "section": "🧹 Chores", "hidden": true },
+    { "type": "ci", "section": "🤖 CI/CD", "hidden": true },
+    { "type": "security", "section": "🔒 Security" },
+    { "type": "revert", "section": "⏮️ Reverts" }
+  ],
+  "bumpFiles": [
+    {
+      "filename": "CMakeLists.txt",
+      "type": "plain-text",
+      "search": "VERSION\\s+\\d+\\.\\d+\\.\\d+",
+      "replace": "VERSION {{version}}"
+    },
+    {
+      "filename": "vcpkg.json",
+      "type": "plain-text",
+      "search": "\"version-string\":\\s+\"\\d+\\.\\d+\\.\\d+\"",
+      "replace": "\"version-string\": \"{{version}}\""
+    },
+    {
+      "filename": "package.json",
+      "type": "json"
+    }
+  ],
+  "packageFiles": [
+    {
+      "filename": "package.json",
+      "type": "json"
+    },
+    {
+      "filename": "vcpkg.json",
+      "type": "json",
+      "search": "\"version-string\":\\s+\"\\d+\\.\\d+\\.\\d+\"",
+      "replace": "\"version-string\": \"{{version}}\""
+    }
+  ],
+  "skip": {
+    "bump": false,
+    "commit": false,
+    "tag": false
+  },
+  "releaseCommitMessageFormat": "chore(release): v{{currentTag}}",
+  "issuePrefixes": ["#"]
+}
