@@ -13,7 +13,6 @@ using     tcp  = asio::ip::tcp;
 static asio::io_context          g_ioc;
 static std::unique_ptr<WsServer> g_server;
 static std::thread               g_ioThread;
-s
 SKSEPluginLoad(const SKSE::LoadInterface* skse)
 {
     SKSE::Init(skse);
