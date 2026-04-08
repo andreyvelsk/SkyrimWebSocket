@@ -12,6 +12,7 @@ struct SubscriptionState
     // value: registry key, e.g. "ActorValue::kHealth"
     std::unordered_map<std::string, std::string> fields;
 
-    // previous values used for sendOnChange comparison
-    std::unordered_map<std::string, float> lastValues;
+    // previous serialised values used for sendOnChange comparison.
+    // stored as JSON dump strings so float and JSON fields can be compared uniformly.
+    std::unordered_map<std::string, std::string> lastValues;
 };

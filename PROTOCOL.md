@@ -130,7 +130,10 @@ Sent when a message cannot be processed. The current subscription (if any) is
 
 ## Available field keys
 
-All field values are `float`.
+Field values are either `float` (all `ActorValue::*` keys) or JSON `array` / `integer` (all `Inventory::*` keys).
+Fields of different types can be freely mixed in a single `subscribe` or `query` message.
+
+### ActorValue fields — `float`
 
 | Registry key | Description |
 |---|---|
@@ -173,6 +176,36 @@ All field values are `float`.
 | `ActorValue::kRestoration` | Restoration skill level |
 | `ActorValue::kDragonSouls` | Collected dragon souls |
 | `ActorValue::kShoutRecoveryMult` | Shout recovery multiplier |
+
+Each `ActorValue` key also has `::Base`, `::Permanent`, and `::Clamped` variants
+(e.g. `ActorValue::kHealth::Base`).
+
+### Inventory fields — `array` / `integer`
+
+| Registry key | Value type | Description |
+|---|---|---|
+| `Inventory::Categories` | `array` | Non-empty inventory categories with total item counts |
+| `Inventory::Gold` | `integer` | Player's current gold amount |
+| `Inventory::Items::Weapons` | `array` | Weapons in player inventory |
+| `Inventory::Items::Apparel` | `array` | Apparel in player inventory |
+| `Inventory::Items::Books` | `array` | Books in player inventory |
+| `Inventory::Items::Potions` | `array` | Potions/food in player inventory |
+| `Inventory::Items::Ingredients` | `array` | Ingredients in player inventory |
+| `Inventory::Items::Misc` | `array` | Miscellaneous items in player inventory |
+| `Inventory::Items::Ammo` | `array` | Ammunition in player inventory |
+| `Inventory::Items::Keys` | `array` | Keys in player inventory |
+| `Inventory::Items::SoulGems` | `array` | Soul gems in player inventory |
+| `Inventory::Items::Scrolls` | `array` | Scrolls in player inventory |
+
+**`Inventory::Categories` element shape:**
+```jsonc
+{ "name": "Weapons", "count": 5 }
+```
+
+**`Inventory::Items::*` element shape:**
+```jsonc
+{ "name": "Iron Sword", "formId": "0x00012EB7", "count": 1, "weight": 9.0, "value": 25 }
+```
 
 Use `{ "type": "describe" }` at runtime to get the full list with descriptions.
 
@@ -292,9 +325,50 @@ sheet. It uses `"query"` instead of subscribing to avoid unnecessary traffic.
 {
   "type": "describe",
   "fields": {
-    "ActorValue::kHealth":    { "valueType": "float", "description": "Current health points" },
-    "ActorValue::kMagicka":   { "valueType": "float", "description": "Current magicka points" },
+    "ActorValue::kHealth":    { "valueType": "float",   "valueCategory": "current", "description": "Current health points" },
+    "ActorValue::kMagicka":   { "valueType": "float",   "valueCategory": "current", "description": "Current magicka points" },
+    "Inventory::Categories":  { "valueType": "array",   "description": "Array of inventory categories with item counts" },
+    "Inventory::Gold":        { "valueType": "integer", "description": "Player's current gold amount" },
     // ... all registered fields
+  }
+}
+```
+
+---
+
+### Example 5 — Mixed-type subscription (vitals + inventory)
+
+A client wants to display a HUD that shows both the player's health and their
+current weapon loadout in a single push stream.
+
+**Client sends:**
+```json
+{
+  "type": "subscribe",
+  "settings": { "frequency": 1000, "sendOnChange": true },
+  "fields": {
+    "hp":      "ActorValue::kHealth",
+    "cats":    "Inventory::Categories",
+    "weapons": "Inventory::Items::Weapons"
+  }
+}
+```
+
+**Server replies (whenever any value changes):**
+```json
+{
+  "type": "data",
+  "ts": 1712462400123,
+  "fields": {
+    "hp": 320.5,
+    "cats": [
+      { "name": "Weapons", "count": 2 },
+      { "name": "Apparel", "count": 7 }
+    ],
+    "weapons": [
+      { "name": "Iron Sword",    "formId": "0x00012EB7", "count": 1, "weight": 9.0,  "value": 25  },
+      { "name": "Steel Dagger",  "formId": "0x00013CE6", "count": 1, "weight": 2.5,  "value": 22  }
+    ]
   }
 }
 ```

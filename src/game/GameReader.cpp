@@ -22,40 +22,59 @@ namespace GameReader
         bool           anyChanged = false;
 
         for (auto& [alias, registryKey] : state.fields) {
+            // --- float ActorValue fields ---
             auto entryOpt = FieldRegistry::Resolve(registryKey);
-            if (!entryOpt)
+            if (entryOpt) {
+                const auto& entry = entryOpt.value();
+                float val         = 0.f;
+
+                switch (entry.valueType) {
+                    case FieldRegistry::ValueType::kCurrent:
+                        val = avo->GetActorValue(entry.av);
+                        break;
+                    case FieldRegistry::ValueType::kPermanent:
+                        val = avo->GetPermanentActorValue(entry.av);
+                        break;
+                    case FieldRegistry::ValueType::kBase:
+                        val = avo->GetBaseActorValue(entry.av);
+                        break;
+                    case FieldRegistry::ValueType::kClamped:
+                        val = avo->GetClampedActorValue(entry.av);
+                        break;
+                }
+
+                if (!std::isfinite(val))
+                    val = 0.f;
+
+                std::string valStr = nlohmann::json(val).dump();
+                if (state.sendOnChange) {
+                    auto it = state.lastValues.find(alias);
+                    if (it != state.lastValues.end() && it->second == valStr)
+                        continue;  // value unchanged — skip
+                    anyChanged = true;
+                }
+
+                dataFields[alias]       = val;
+                state.lastValues[alias] = std::move(valStr);
                 continue;
-
-            const auto& entry = entryOpt.value();
-            float val         = 0.f;
-
-            switch (entry.valueType) {
-                case FieldRegistry::ValueType::kCurrent:
-                    val = avo->GetActorValue(entry.av);
-                    break;
-                case FieldRegistry::ValueType::kPermanent:
-                    val = avo->GetPermanentActorValue(entry.av);
-                    break;
-                case FieldRegistry::ValueType::kBase:
-                    val = avo->GetBaseActorValue(entry.av);
-                    break;
-                case FieldRegistry::ValueType::kClamped:
-                    val = avo->GetClampedActorValue(entry.av);
-                    break;
             }
 
-            if (!std::isfinite(val))
-                val = 0.f;
+            // --- JSON fields (inventory, etc.) ---
+            auto jsonEntryOpt = FieldRegistry::ResolveJson(registryKey);
+            if (jsonEntryOpt) {
+                nlohmann::json val    = jsonEntryOpt->resolve();
+                std::string    valStr = val.dump();
 
-            if (state.sendOnChange) {
-                auto it = state.lastValues.find(alias);
-                if (it != state.lastValues.end() && it->second == val)
-                    continue;  // value unchanged — skip
-                anyChanged = true;
+                if (state.sendOnChange) {
+                    auto it = state.lastValues.find(alias);
+                    if (it != state.lastValues.end() && it->second == valStr)
+                        continue;  // value unchanged — skip
+                    anyChanged = true;
+                }
+
+                dataFields[alias]       = std::move(val);
+                state.lastValues[alias] = std::move(valStr);
             }
-
-            dataFields[alias]       = val;
-            state.lastValues[alias] = val;
         }
 
         if (state.sendOnChange && !anyChanged)
