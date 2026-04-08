@@ -56,7 +56,7 @@ namespace InventoryReader
             return 0;
 
         auto inv = player->GetInventory([](RE::TESBoundObject& obj) {
-            return obj.GetFormID() == 0x0000000F;
+            return obj.GetFormID() == kGoldFormID;
         });
 
         auto it = inv.find(goldForm);
@@ -86,7 +86,7 @@ namespace InventoryReader
                 value = vf->value;
 
             nlohmann::json entry;
-            entry["name"]   = std::string(item->GetName());
+            entry["name"]   = item->GetName();
             entry["formId"] = std::format("0x{:08X}", item->GetFormID());
             entry["count"]  = data.first;
             entry["weight"] = weight;
