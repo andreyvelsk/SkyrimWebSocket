@@ -27,7 +27,7 @@ namespace InventoryReader
     // Gets the TESDescription text for forms that carry it (armor, soul gems, scrolls…).
     static std::string GetFormDescription(RE::TESBoundObject* item)
     {
-        const auto* desc = item->As<RE::TESDescription>();
+        auto* desc = item->As<RE::TESDescription>();
         if (!desc)
             return "";
         RE::BSString buf;
@@ -206,7 +206,7 @@ namespace InventoryReader
             auto j          = BuildBaseEntry(item, data);
             j["isEquipped"] = data.second ? data.second->IsWorn() : false;
 
-            const auto* armor = item->As<RE::TESObjectARMO>();
+            auto* armor = item->As<RE::TESObjectARMO>();
             if (armor) {
                 // Determine armor type via keywords (BGSBipedObjectForm::GetArmorType is
                 // not exposed in CommonLibSSE-NG; keyword checking is the safe approach).
