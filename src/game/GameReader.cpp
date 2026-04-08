@@ -1,5 +1,6 @@
 #include "GameReader.h"
 #include "FieldRegistry.h"
+#include "InventoryRegistry.h"
 
 #include <chrono>
 #include <cmath>
@@ -22,6 +23,46 @@ namespace GameReader
         bool           anyChanged = false;
 
         for (auto& [alias, registryKey] : state.fields) {
+            // Check if this is an Inventory request
+            if (registryKey.find("Inventory::") == 0) {
+                std::string invType = registryKey.substr(11);  // Remove "Inventory::" prefix
+                nlohmann::json invData;
+
+                if (invType == "kAll") {
+                    invData = InventoryRegistry::GetInventoryJson(player);
+                } else if (invType == "kWeapon") {
+                    invData = InventoryRegistry::GetInventoryByTypeJson(InventoryRegistry::ItemType::kWeapon, player);
+                } else if (invType == "kArmor") {
+                    invData = InventoryRegistry::GetInventoryByTypeJson(InventoryRegistry::ItemType::kArmor, player);
+                } else if (invType == "kAmmo") {
+                    invData = InventoryRegistry::GetInventoryByTypeJson(InventoryRegistry::ItemType::kAmmo, player);
+                } else if (invType == "kPotion") {
+                    invData = InventoryRegistry::GetInventoryByTypeJson(InventoryRegistry::ItemType::kPotion, player);
+                } else if (invType == "kFood") {
+                    invData = InventoryRegistry::GetInventoryByTypeJson(InventoryRegistry::ItemType::kFood, player);
+                } else if (invType == "kBook") {
+                    invData = InventoryRegistry::GetInventoryByTypeJson(InventoryRegistry::ItemType::kBook, player);
+                } else if (invType == "kIngredient") {
+                    invData = InventoryRegistry::GetInventoryByTypeJson(InventoryRegistry::ItemType::kIngredient, player);
+                } else if (invType == "kMisc") {
+                    invData = InventoryRegistry::GetInventoryByTypeJson(InventoryRegistry::ItemType::kMisc, player);
+                } else {
+                    continue;
+                }
+
+                if (state.sendOnChange) {
+                    auto it = state.lastJsonValues.find(alias);
+                    if (it != state.lastJsonValues.end() && it->second == invData)
+                        continue;  // value unchanged — skip
+                    anyChanged = true;
+                }
+
+                dataFields[alias]                  = invData;
+                state.lastJsonValues[alias] = invData;
+                continue;
+            }
+
+            // Regular ActorValue field
             auto entryOpt = FieldRegistry::Resolve(registryKey);
             if (!entryOpt)
                 continue;

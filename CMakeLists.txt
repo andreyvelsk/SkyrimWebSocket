@@ -40,6 +40,7 @@ add_commonlibsse_plugin(${PROJECT_NAME} SOURCES
     plugin.cpp
     src/game/FieldRegistry.cpp
     src/game/GameReader.cpp
+    src/game/InventoryRegistry.cpp
     src/server/MessageRouter.cpp
     src/server/WsSession.cpp
     src/server/SessionManager.cpp

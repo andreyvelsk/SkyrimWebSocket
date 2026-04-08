@@ -301,6 +301,169 @@ sheet. It uses `"query"` instead of subscribing to avoid unnecessary traffic.
 
 ---
 
+## Inventory Field Keys
+
+In addition to ActorValue fields, the plugin supports inventory queries. These keys follow the
+`Inventory::k*` naming convention, similar to ActorValue keys, and return complex JSON objects containing item data.
+
+### Supported inventory types:
+
+| Registry key | Description | Returns |
+|---|---|---|
+| `Inventory::kAll` | Complete player inventory grouped by type | Object with arrays for each item type |
+| `Inventory::kWeapon` | All weapons in inventory | Array of weapon objects |
+| `Inventory::kArmor` | All armor pieces in inventory | Array of armor objects |
+| `Inventory::kAmmo` | All ammunition | Array of ammo objects |
+| `Inventory::kPotion` | All potions and poisons | Array of potion objects |
+| `Inventory::kFood` | All food and drinks | Array of food objects |
+| `Inventory::kBook` | All books and spell tomes | Array of book objects |
+| `Inventory::kIngredient` | All alchemy ingredients | Array of ingredient objects |
+| `Inventory::kMisc` | All miscellaneous items | Array of misc objects |
+
+### Item object structure:
+
+All items contain these base fields:
+- `name` (string): Item name
+- `itemType` (string): Type of item ("weapon", "armor", "ammo", "potion", "food", "book", "ingredient", "misc", "spell")
+- `formId` (uint32): Form ID of the item
+- `count` (int): Quantity in inventory
+- `weight` (float): Weight per item
+- `value` (float): Gold value per item
+- `isQuestItem` (bool): Is this a quest item
+- `durability` (float or null): Item durability (0-100), or -1 if not applicable
+
+### Weapon object fields:
+
+Extended fields for weapons:
+- `weaponType` (string): "oneHanded", "twoHanded", "bow", "crossbow"
+- `damage` (float): Weapon damage
+- `attackSpeed` (float): Attack speed modifier
+- `reach` (float): Attack reach
+- `enchantment` (object or null): Enchantment info if present
+  - `name` (string): Enchantment name
+  - `cost` (uint32): Magicka cost
+  - `charge` (float): Current charge (0-100), or -1 if not enchanted
+
+### Armor object fields:
+
+Extended fields for armor:
+- `armorType` (string): "head", "chest", "gloves", "boots", "shield"
+- `armor` (float): Armor rating
+- `enchantment` (object or null): Enchantment info if present
+  - `name` (string): Enchantment name
+  - `cost` (uint32): Magicka cost
+  - `charge` (float): Current charge (0-100), or -1 if not enchanted
+
+### Potion/Poison object fields:
+
+Extended fields for potions and poisons:
+- `isPoison` (bool): true for poisons, false for potions
+- `effects` (array): Array of active effects
+  - `name` (string): Effect name
+  - `magnitude` (float): Effect magnitude
+  - `duration` (uint32): Duration in seconds
+  - `area` (uint32): Area of effect
+
+### Book object fields:
+
+Extended fields for books:
+- `isSkillBook` (bool): Is this a skill-increasing book
+- `skill` (uint32 or null): Skill ID if this is a skill book
+- `relatedQuest` (string or null): Quest name if related to a quest
+
+### Ammo object fields:
+
+Extended fields for ammunition:
+- `damage` (float): Damage per shot
+
+### Ingredient object fields:
+
+Extended fields for ingredients:
+- `effects` (array): Array of alchemy effects
+  - `name` (string): Effect name
+
+---
+
+## Inventory Examples
+
+### Example 5 — Query player weapons
+
+**Client sends:**
+```json
+{
+  "type": "query",
+  "fields": {
+    "weapons": "Inventory::kWeapon"
+  }
+}
+```
+
+**Server replies:**
+```jsonc
+{
+  "type": "data",
+  "ts": 1712462400123,
+  "fields": {
+    "weapons": [
+      {
+        "name": "Iron Sword",
+        "itemType": "weapon",
+        "formId": 12345,
+        "count": 1,
+        "weight": 12.0,
+        "value": 50,
+        "isQuestItem": false,
+        "durability": 95.5,
+        "weaponType": "oneHanded",
+        "damage": 8.0,
+        "attackSpeed": 1.0,
+        "reach": 1.3,
+        "enchantment": null
+      },
+      {
+        "name": "Daedric Bow",
+        "itemType": "weapon",
+        "formId": 67890,
+        "count": 1,
+        "weight": 18.0,
+        "value": 250,
+        "isQuestItem": false,
+        "durability": 100.0,
+        "weaponType": "bow",
+        "damage": 15.0,
+        "attackSpeed": 0.5,
+        "reach": 1.5,
+        "enchantment": {
+          "name": "Shock Damage",
+          "cost": 15,
+          "charge": 75.0
+        }
+      }
+    ]
+  }
+}
+```
+
+### Example 6 — Subscribe to inventory changes
+
+**Client sends:**
+```json
+{
+  "type": "subscribe",
+  "settings": {
+    "frequency": 1000,
+    "sendOnChange": true
+  },
+  "fields": {
+    "inventory": "Inventory::kAll"
+  }
+}
+```
+
+Server will send complete inventory data only when it changes (items picked up, dropped, or equipped).
+
+---
+
 ## Configuration
 
 The plugin reads an optional INI file from the same directory as the DLL:
