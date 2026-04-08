@@ -17,8 +17,13 @@ namespace InventoryRegistry
                 return ItemType::kArmor;
             case RE::FormType::Ammo:
                 return ItemType::kAmmo;
-            case RE::FormType::Potion:
+            case RE::FormType::AlchemyItem: {
+                if (auto* alch = item->As<RE::AlchemyItem>()) {
+                    if (alch->IsFood())
+                        return ItemType::kFood;
+                }
                 return ItemType::kPotion;
+            }
             case RE::FormType::Book:
                 return ItemType::kBook;
             case RE::FormType::Ingredient:
@@ -65,18 +70,17 @@ namespace InventoryRegistry
             return ArmorType::kUnknown;
 
         using Slot = RE::BGSBipedObjectForm::BipedObjectSlot;
-        auto partMask = armor->GetSlotMask();
 
         // Проверяем в порядке приоритета
-        if (partMask & Slot::kHead)
+        if (armor->HasPartOf(Slot::kHead))
             return ArmorType::kHead;
-        if (partMask & Slot::kBody)
+        if (armor->HasPartOf(Slot::kBody))
             return ArmorType::kChest;
-        if (partMask & Slot::kHands)
+        if (armor->HasPartOf(Slot::kHands))
             return ArmorType::kGloves;
-        if (partMask & Slot::kFeet)
+        if (armor->HasPartOf(Slot::kFeet))
             return ArmorType::kBoots;
-        if (partMask & Slot::kShield)
+        if (armor->HasPartOf(Slot::kShield))
             return ArmorType::kShield;
 
         return ArmorType::kUnknown;
@@ -184,13 +188,7 @@ namespace InventoryRegistry
         info.keywords   = "";
 
         // Пытаемся получить дополнительную информацию в зависимости от типа
-        if (auto book = item->As<RE::TESObjectBOOK>()) {
-            info.isQuestItem = book->IsQuestItem();
-        } else if (auto wep = item->As<RE::TESObjectWEAP>()) {
-            info.isQuestItem = wep->IsQuestItem();
-        } else if (auto arm = item->As<RE::TESObjectARMO>()) {
-            info.isQuestItem = arm->IsQuestItem();
-        }
+        // isQuestItem is tracked via InventoryEntryData::IsQuestObject() if available
 
         return info;
     }
@@ -214,14 +212,14 @@ namespace InventoryRegistry
         WeaponType wepType = DetermineWeaponType(weapon);
         j["weaponType"]    = GetWeaponTypeString(wepType);
         j["damage"]        = weapon->GetAttackDamage();
-        j["attackSpeed"]   = weapon->speed;
-        j["reach"]         = weapon->reach;
+        j["attackSpeed"]   = weapon->GetSpeed();
+        j["reach"]         = weapon->GetReach();
 
         // Информация об чаре
-        if (auto ench = weapon->enchantment) {
+        if (auto ench = weapon->formEnchanting) {
             nlohmann::json enchJson;
             enchJson["name"]  = ench->GetName();
-            enchJson["cost"]  = ench->GetCastingCost(nullptr);
+            enchJson["cost"]  = ench->CalculateMagickaCost(nullptr);
             enchJson["charge"] = GetEnchantmentCharge(extraList);
             j["enchantment"]  = enchJson;
         } else {
@@ -252,10 +250,10 @@ namespace InventoryRegistry
         j["armor"]          = armor->GetArmorRating();
 
         // Информация об чаре
-        if (auto ench = armor->enchantment) {
+        if (auto ench = armor->formEnchanting) {
             nlohmann::json enchJson;
             enchJson["name"]   = ench->GetName();
-            enchJson["cost"]   = ench->GetCastingCost(nullptr);
+            enchJson["cost"]   = ench->CalculateMagickaCost(nullptr);
             enchJson["charge"] = GetEnchantmentCharge(extraList);
             j["enchantment"]   = enchJson;
         } else {
@@ -280,7 +278,7 @@ namespace InventoryRegistry
         j["value"]       = baseInfo->value;
         j["isQuestItem"] = baseInfo->isQuestItem;
 
-        j["isPoison"]    = potion->GetRecipeFilter(nullptr) == RE::AlchemyItem::RecipeFilter::kPoison;
+        j["isPoison"]    = potion->IsPoison();
 
         // Эффекты зелья
         nlohmann::json effects = nlohmann::json::array();
@@ -291,9 +289,9 @@ namespace InventoryRegistry
                 auto* mgef = effect->baseEffect;
                 if (mgef) {
                     effJson["name"]     = mgef->GetName();
-                    effJson["magnitude"] = effect->magnitude;
-                    effJson["duration"] = effect->duration;
-                    effJson["area"]     = effect->area;
+                    effJson["magnitude"] = effect->effectItem.magnitude;
+                    effJson["duration"] = effect->effectItem.duration;
+                    effJson["area"]     = effect->effectItem.area;
                     effects.push_back(effJson);
                 }
             }
@@ -319,12 +317,8 @@ namespace InventoryRegistry
         j["isQuestItem"] = baseInfo->isQuestItem;
 
         j["isSkillBook"] = book->TeachesSkill();
-        if (auto skillTaught = book->GetSkill()) {
-            j["skill"] = static_cast<uint32_t>(skillTaught);
-        }
-
-        if (auto quest = book->GetQuest()) {
-            j["relatedQuest"] = quest->GetName();
+        if (book->TeachesSkill()) {
+            j["skill"] = static_cast<uint32_t>(book->GetSkill());
         }
 
         return j;
@@ -344,7 +338,7 @@ namespace InventoryRegistry
         j["count"]       = baseInfo->count;
         j["value"]       = baseInfo->value;
         j["isQuestItem"] = baseInfo->isQuestItem;
-        j["damage"]      = ammo->GetDamage();
+        j["damage"]      = ammo->GetRuntimeData().data.damage;
 
         return j;
     }
@@ -406,7 +400,7 @@ namespace InventoryRegistry
         j["name"]       = spell->GetName();
         j["itemType"]   = "spell";
         j["formId"]     = spell->GetFormID();
-        j["cost"]       = spell->GetMagickaCost(nullptr);
+        j["cost"]       = spell->CalculateMagickaCost(nullptr);
         j["castType"]   = static_cast<uint32_t>(spell->GetSpellType());
 
         // Эффекты заклинания
@@ -418,9 +412,9 @@ namespace InventoryRegistry
                 auto* mgef = effect->baseEffect;
                 if (mgef) {
                     effJson["name"]     = mgef->GetName();
-                    effJson["magnitude"] = effect->magnitude;
-                    effJson["duration"] = effect->duration;
-                    effJson["area"]     = effect->area;
+                    effJson["magnitude"] = effect->effectItem.magnitude;
+                    effJson["duration"] = effect->effectItem.duration;
+                    effJson["area"]     = effect->effectItem.area;
                     effects.push_back(effJson);
                 }
             }
@@ -455,7 +449,7 @@ namespace InventoryRegistry
                     return PotionInfoToJson(pot, 1, extraList);
                 break;
             case ItemType::kFood:
-                if (auto food = item->As<RE::TESObjectFOOD>()) {
+                if (auto food = item->As<RE::AlchemyItem>()) {
                     auto baseInfo = GetItemInfo(food, 1);
                     if (!baseInfo)
                         return std::nullopt;
@@ -502,12 +496,9 @@ namespace InventoryRegistry
             return nullptr;
 
         nlohmann::json result = nlohmann::json::array();
-        auto*          inv    = actor->GetInventory();
+        auto           inv    = actor->GetInventory();
 
-        if (!inv)
-            return result;
-
-        for (auto& [item, data] : *inv) {
+        for (auto& [item, data] : inv) {
             if (!item)
                 continue;
 
@@ -515,10 +506,14 @@ namespace InventoryRegistry
             if (filter != ItemType::kUnknown && itemType != filter)
                 continue;
 
-            auto count       = data.first;
-            auto& extraDataList = data.second;
+            auto* entryData = data.second.get();
 
-            auto itemJson = GetItemJson(item, extraDataList.empty() ? nullptr : &extraDataList[0]);
+            RE::ExtraDataList* extraList = nullptr;
+            if (entryData && entryData->extraLists && !entryData->extraLists->empty()) {
+                extraList = entryData->extraLists->front();
+            }
+
+            auto itemJson = GetItemJson(item, extraList);
             if (itemJson) {
                 result.push_back(itemJson.value());
             }
