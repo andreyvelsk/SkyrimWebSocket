@@ -4,10 +4,33 @@
 
 #include <chrono>
 #include <cmath>
+#include <unordered_set>
 #include <nlohmann/json.hpp>
 
 namespace GameReader
 {
+    static const std::unordered_set<std::string> s_inventoryKeys = {
+        "Inventory::kAll",
+        "Inventory::kWeapon",
+        "Inventory::kArmor",
+        "Inventory::kAmmo",
+        "Inventory::kPotion",
+        "Inventory::kFood",
+        "Inventory::kBook",
+        "Inventory::kIngredient",
+        "Inventory::kMisc",
+    };
+
+    bool IsKnownInventoryKey(const std::string& key)
+    {
+        return s_inventoryKeys.count(key) > 0;
+    }
+
+    const std::unordered_set<std::string>& GetInventoryKeys()
+    {
+        return s_inventoryKeys;
+    }
+
     std::string BuildSubscriptionJson(SubscriptionState& state)
     {
         if (state.fields.empty())

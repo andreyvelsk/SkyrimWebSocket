@@ -24,7 +24,7 @@ namespace MessageRouter
                 return false;
             }
             std::string registryKey = keyVal.get<std::string>();
-            if (!FieldRegistry::Resolve(registryKey)) {
+            if (!FieldRegistry::Resolve(registryKey) && !GameReader::IsKnownInventoryKey(registryKey)) {
                 nlohmann::json err;
                 err["type"]    = "error";
                 err["message"] = "Unknown field key: '" + registryKey + "'";
@@ -68,7 +68,12 @@ namespace MessageRouter
             session->CancelSubscription();
 
         } else if (type == "describe") {
-            session->send(FieldRegistry::BuildDescribeJson());
+            nlohmann::json desc = nlohmann::json::parse(FieldRegistry::BuildDescribeJson());
+            auto& fields = desc["fields"];
+            for (const auto& key : GameReader::GetInventoryKeys()) {
+                fields[key] = { { "valueType", "json" }, { "valueCategory", "inventory" }, { "description", "Inventory data" } };
+            }
+            session->send(desc.dump());
 
         } else if (type == "query") {
             if (!msg.contains("fields") || !msg["fields"].is_object()) {
