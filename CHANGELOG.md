@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+### [1.2.1](https://github.com/yourusername/SkyrimWebSocket/compare/v1.2.0...v1.2.1) (2026-04-08)
+
+
+### 🐛 Bug Fixes
+
+* **semantic:** corerct change release version ([6e29c29](https://github.com/yourusername/SkyrimWebSocket/commits/6e29c29899874d3d30959b8c28d2c3f8390ceb57))
+
 ## [1.2.0](https://github.com/yourusername/SkyrimWebSocket/compare/v1.0.0...v1.2.0) (2026-04-07)
 
 
