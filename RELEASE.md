@@ -51,12 +51,12 @@ npm run release
 **What happens:**
 1. All commits since the last release are analyzed
 2. New version is determined (major, minor, patch)
-3. Files are updated:
+3. Files are automatically updated:
    - `CMakeLists.txt` — project version
    - `vcpkg.json` — vcpkg package version (`version-string`)
-   - `package.json` — package version
+   - `package.json` — npm package version
    - `CHANGELOG.md` — change entries are created
-4. Git tag is created (e.g., `v1.2.3`)
+4. Git tag is created (e.g., `v1.2.0`)
 5. Everything is automatically committed
 
 ### 5. Push the Release

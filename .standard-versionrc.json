@@ -16,13 +16,13 @@
     {
       "filename": "CMakeLists.txt",
       "type": "plain-text",
-      "search": "VERSION\\s+\\d+\\.\\d+\\.\\d+",
-      "replace": "VERSION {{version}}"
+      "search": "project\\(SkyrimWebSocket VERSION [0-9.]+",
+      "replace": "project(SkyrimWebSocket VERSION {{version}}"
     },
     {
       "filename": "vcpkg.json",
       "type": "plain-text",
-      "search": "\"version-string\":\\s+\"\\d+\\.\\d+\\.\\d+\"",
+      "search": "\"version-string\": \"[0-9.]+\"",
       "replace": "\"version-string\": \"{{version}}\""
     },
     {
@@ -34,12 +34,6 @@
     {
       "filename": "package.json",
       "type": "json"
-    },
-    {
-      "filename": "vcpkg.json",
-      "type": "json",
-      "search": "\"version-string\":\\s+\"\\d+\\.\\d+\\.\\d+\"",
-      "replace": "\"version-string\": \"{{version}}\""
     }
   ],
   "skip": {
