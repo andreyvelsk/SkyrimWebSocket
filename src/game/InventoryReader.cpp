@@ -7,16 +7,16 @@ namespace InventoryReader
 {
     // clang-format off
     static const std::unordered_map<RE::FormType, std::string> s_formTypeNames = {
-        { RE::FormType::kWeapon,      "Weapons"     },
-        { RE::FormType::kArmor,       "Apparel"     },
-        { RE::FormType::kBook,        "Books"       },
-        { RE::FormType::kAlchemyItem, "Potions"     },
-        { RE::FormType::kIngredient,  "Ingredients" },
-        { RE::FormType::kMisc,        "Misc"        },
-        { RE::FormType::kAmmo,        "Ammo"        },
-        { RE::FormType::kKey,         "Keys"        },
-        { RE::FormType::kSoulGem,     "SoulGems"    },
-        { RE::FormType::kScroll,      "Scrolls"     },
+        { RE::FormType::Weapon,      "Weapons"     },
+        { RE::FormType::Armor,       "Apparel"     },
+        { RE::FormType::Book,        "Books"       },
+        { RE::FormType::AlchemyItem, "Potions"     },
+        { RE::FormType::Ingredient,  "Ingredients" },
+        { RE::FormType::Misc,        "Misc"        },
+        { RE::FormType::Ammo,        "Ammo"        },
+        { RE::FormType::KeyMaster,   "Keys"        },
+        { RE::FormType::SoulGem,     "SoulGems"    },
+        { RE::FormType::Scroll,      "Scrolls"     },
     };
     // clang-format on
 
