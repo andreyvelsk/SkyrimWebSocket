@@ -1,0 +1,46 @@
+{
+  "types": [
+    { "type": "feat", "section": "✨ Features" },
+    { "type": "fix", "section": "🐛 Bug Fixes" },
+    { "type": "perf", "section": "⚡ Performance" },
+    { "type": "refactor", "section": "🔧 Refactoring", "hidden": true },
+    { "type": "docs", "section": "📚 Documentation", "hidden": true },
+    { "type": "style", "section": "💅 Styles", "hidden": true },
+    { "type": "test", "section": "🧪 Tests", "hidden": true },
+    { "type": "chore", "section": "🧹 Chores", "hidden": true },
+    { "type": "ci", "section": "🤖 CI/CD", "hidden": true },
+    { "type": "security", "section": "🔒 Security" },
+    { "type": "revert", "section": "⏮️ Reverts" }
+  ],
+  "bumpFiles": [
+    {
+      "filename": "CMakeLists.txt",
+      "type": "plain-text",
+      "search": "project\\(SkyrimWebSocket VERSION [0-9.]+",
+      "replace": "project(SkyrimWebSocket VERSION {{version}}"
+    },
+    {
+      "filename": "vcpkg.json",
+      "type": "plain-text",
+      "search": "\"version-string\": \"[0-9.]+\"",
+      "replace": "\"version-string\": \"{{version}}\""
+    },
+    {
+      "filename": "package.json",
+      "type": "json"
+    }
+  ],
+  "packageFiles": [
+    {
+      "filename": "package.json",
+      "type": "json"
+    }
+  ],
+  "skip": {
+    "bump": false,
+    "commit": false,
+    "tag": false
+  },
+  "releaseCommitMessageFormat": "chore(release): v{{currentTag}}",
+  "issuePrefixes": ["#"]
+}

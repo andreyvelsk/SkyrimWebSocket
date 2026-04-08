@@ -1,0 +1,4 @@
+# For C++ projects, pre-commit hook can be used for linting/formatting
+# Currently, just skip and let CI/CD handle the checks
+# npx lint-staged  # Uncomment if you add linting rules
+exit 0

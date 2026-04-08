@@ -1,7 +1,7 @@
 {
     "$schema": "https://raw.githubusercontent.com/microsoft/vcpkg/master/scripts/vcpkg.schema.json",
     "name": "skyrim-websocket",
-    "version-string": "1.0.1",
+    "version-string": "1.2.1",
     "dependencies": [
         "commonlibsse-ng",
         "boost-beast",
