@@ -130,7 +130,7 @@ Sent when a message cannot be processed. The current subscription (if any) is
 
 ## Available field keys
 
-All ActorValue fields return `float` values. For a complete list of available fields with detailed descriptions and value type modifiers, see [FIELDS_ACTORVALUE.md](FIELDS_ACTORVALUE.md).
+All ActorValue fields return `float` values. For a complete list of available fields with detailed descriptions and value type modifiers, see [ACTORVALUE.md](docs/ACTORVALUE.md).
 
 ### Quick Reference
 
@@ -148,7 +148,7 @@ Use `{ "type": "describe" }` at runtime to get the full updated list with all av
 
 ## Inventory field keys
 
-Inventory fields return complex JSON objects. For a complete reference with detailed field structures, see [FIELDS_INVENTORY.md](FIELDS_INVENTORY.md).
+Inventory fields return complex JSON objects. For a complete reference with detailed field structures, see [INVENTORY.md](docs/INVENTORY.md).
 
 ### Quick Reference
 
@@ -301,7 +301,7 @@ sheet. It uses `"query"` instead of subscribing to avoid unnecessary traffic.
 }
 ```
 
-A typical response includes detailed weapon information. For complete response structure details, see [FIELDS_INVENTORY.md](FIELDS_INVENTORY.md).
+A typical response includes detailed weapon information. For complete response structure details, see [INVENTORY.md](docs/INVENTORY.md).
 
 ---
 
