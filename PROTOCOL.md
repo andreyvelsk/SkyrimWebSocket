@@ -184,12 +184,13 @@ Each `ActorValue` key also has `::Base`, `::Permanent`, and `::Clamped` variants
 
 | Registry key | Value type | Description |
 |---|---|---|
-| `Inventory::Categories` | `array` | Non-empty inventory categories with total item counts (food excluded from Potions, gold excluded from Misc; includes a Favorites entry when applicable) |
+| `Inventory::Categories` | `array` | Non-empty inventory categories with total item counts (food is its own "Food" entry, gold excluded from Misc; includes a Favorites entry when applicable) |
 | `Inventory::Gold` | `integer` | Player's current gold amount |
 | `Inventory::Items::Weapons` | `array` | Weapons in player inventory |
 | `Inventory::Items::Apparel` | `array` | Apparel in player inventory |
 | `Inventory::Items::Books` | `array` | Books in player inventory |
 | `Inventory::Items::Potions` | `array` | Potions in player inventory (food excluded) |
+| `Inventory::Items::Food` | `array` | Food items in player inventory |
 | `Inventory::Items::Ingredients` | `array` | Ingredients in player inventory |
 | `Inventory::Items::Misc` | `array` | Miscellaneous items in player inventory (gold excluded) |
 | `Inventory::Items::Ammo` | `array` | Ammunition in player inventory |
@@ -212,13 +213,36 @@ Additional fields per category:
 
 | Category | Extra fields |
 |---|---|
-| Weapons | `isEquipped`, `damage` (float), `enchantment` (string), `enchantmentCharge` (number or null) |
-| Apparel | `isEquipped`, `armorType` (`"Heavy"` / `"Light"` / `"Clothing"`), `armorRating` (float), `enchantment` (string) |
-| Potions | `description` (effect names joined by `"; "`) |
+| Weapons | `isEquipped`, `baseDamage` (float — weapon base damage before perks), `damage` (float — effective damage = `baseDamage × kAttackDamageMult`), `enchantment` (object or null — see below), `enchantmentCharge` (number or null) |
+| Apparel | `isEquipped`, `armorType` (`"Heavy"` / `"Light"` / `"Clothing"`), `armorRating` (float), `bodySlots` (array of strings — e.g. `["Body", "Forearms"]`), `enchantment` (object or null — see below) |
+| Potions | `description` (string — effect summary), `effects` (array — see below) |
+| Food | `description` (string — effect summary), `effects` (array — see below) |
 | Ingredients | `effects` — array of `{ "name": string, "known": bool }` (up to 4 entries) |
-| Scrolls | `description` |
-| SoulGems | `description` |
+| Books | `description` (string) |
+| Scrolls | `description` (string — effect summary), `effects` (array — see below) |
+| SoulGems | `capacity` (string — max soul level: `"Petty"`, `"Lesser"`, `"Common"`, `"Greater"`, `"Grand"`, or `"None"`), `containedSoul` (string — current fill level, same values) |
 | Favorites | `isEquipped`, `type` (category name string, e.g. `"Weapons"`) |
+
+**Enchantment object** (used by Weapons and Apparel — `null` when no enchantment):
+```jsonc
+{
+  "name": "Fiery Soul Trap",
+  "description": "Fire Damage 10 for 1 second; If target dies within 5 seconds, fills a soul gem",
+  "effects": [
+    { "name": "Fire Damage",  "magnitude": 10.0, "duration": 1, "description": "Fire Damage 10 for 1 second" },
+    { "name": "Soul Trap",    "magnitude": 0.0,  "duration": 5, "description": "If target dies within 5 seconds, fills a soul gem" }
+  ]
+}
+```
+
+**Effects array element** (used by Potions, Food, Scrolls, and inside enchantment objects):
+```jsonc
+{ "name": "Restore Health", "magnitude": 50.0, "duration": 0, "description": "Restore Health 50" }
+```
+
+- `magnitude` — raw effect magnitude (e.g. 50 for "Restore Health 50")
+- `duration` — effect duration in seconds (0 = instant)
+- `description` — human-readable string built from name + magnitude + duration
 
 Use `{ "type": "describe" }` at runtime to get the full list with descriptions.
 

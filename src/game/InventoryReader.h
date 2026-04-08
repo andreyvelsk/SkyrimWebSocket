@@ -6,7 +6,8 @@
 namespace InventoryReader
 {
     // Returns an array of {name, count} for each non-empty inventory category.
-    // Excludes food from Potions and gold from Misc. Includes a Favorites count.
+    // Excludes gold from Misc. Food items are counted under "Food", not "Potions".
+    // Includes a Favorites count when any item is favourited.
     // Must be called on the game thread.
     nlohmann::json ReadCategories();
 
@@ -18,13 +19,15 @@ namespace InventoryReader
     nlohmann::json ReadWeapons();
     nlohmann::json ReadApparel();
     nlohmann::json ReadPotions();
+    nlohmann::json ReadFood();
     nlohmann::json ReadIngredients();
     nlohmann::json ReadMisc();
+    nlohmann::json ReadBooks();
     nlohmann::json ReadScrolls();
     nlohmann::json ReadSoulGems();
     nlohmann::json ReadFavorites();
 
-    // Generic resolver for categories without specialised data (Books, Ammo, Keys).
+    // Generic resolver for categories without specialised data (Ammo, Keys).
     // The returned function must be called on the game thread.
     std::function<nlohmann::json()> MakeItemsResolver(RE::FormType formType);
 }
