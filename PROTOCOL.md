@@ -184,28 +184,41 @@ Each `ActorValue` key also has `::Base`, `::Permanent`, and `::Clamped` variants
 
 | Registry key | Value type | Description |
 |---|---|---|
-| `Inventory::Categories` | `array` | Non-empty inventory categories with total item counts |
+| `Inventory::Categories` | `array` | Non-empty inventory categories with total item counts (food excluded from Potions, gold excluded from Misc; includes a Favorites entry when applicable) |
 | `Inventory::Gold` | `integer` | Player's current gold amount |
 | `Inventory::Items::Weapons` | `array` | Weapons in player inventory |
 | `Inventory::Items::Apparel` | `array` | Apparel in player inventory |
 | `Inventory::Items::Books` | `array` | Books in player inventory |
-| `Inventory::Items::Potions` | `array` | Potions/food in player inventory |
+| `Inventory::Items::Potions` | `array` | Potions in player inventory (food excluded) |
 | `Inventory::Items::Ingredients` | `array` | Ingredients in player inventory |
-| `Inventory::Items::Misc` | `array` | Miscellaneous items in player inventory |
+| `Inventory::Items::Misc` | `array` | Miscellaneous items in player inventory (gold excluded) |
 | `Inventory::Items::Ammo` | `array` | Ammunition in player inventory |
 | `Inventory::Items::Keys` | `array` | Keys in player inventory |
 | `Inventory::Items::SoulGems` | `array` | Soul gems in player inventory |
 | `Inventory::Items::Scrolls` | `array` | Scrolls in player inventory |
+| `Inventory::Items::Favorites` | `array` | All favorited items across every category |
 
 **`Inventory::Categories` element shape:**
 ```jsonc
 { "name": "Weapons", "count": 5 }
 ```
 
-**`Inventory::Items::*` element shape:**
+**`Inventory::Items::*` base element shape (all categories):**
 ```jsonc
-{ "name": "Iron Sword", "formId": "0x00012EB7", "count": 1, "weight": 9.0, "value": 25 }
+{ "name": "Iron Sword", "formId": "0x00012EB7", "count": 1, "weight": 9.0, "value": 25, "isFavorite": false }
 ```
+
+Additional fields per category:
+
+| Category | Extra fields |
+|---|---|
+| Weapons | `isEquipped`, `damage` (float), `enchantment` (string), `enchantmentCharge` (number or null) |
+| Apparel | `isEquipped`, `armorType` (`"Heavy"` / `"Light"` / `"Clothing"`), `armorRating` (float), `enchantment` (string) |
+| Potions | `description` (effect names joined by `"; "`) |
+| Ingredients | `effects` — array of `{ "name": string, "known": bool }` (up to 4 entries) |
+| Scrolls | `description` |
+| SoulGems | `description` |
+| Favorites | `isEquipped`, `type` (category name string, e.g. `"Weapons"`) |
 
 Use `{ "type": "describe" }` at runtime to get the full list with descriptions.
 
