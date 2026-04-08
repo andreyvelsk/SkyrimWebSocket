@@ -97,7 +97,7 @@ namespace InventoryRegistry
     nlohmann::json GetInventoryByTypeJson(ItemType type, RE::Actor* actor = nullptr);
 
     // Получить информацию об одном предмете
-    std::optional<nlohmann::json> GetItemJson(RE::TESForm* item, RE::ExtraDataList* extraList = nullptr);
+    std::optional<nlohmann::json> GetItemJson(RE::TESForm* item, RE::ExtraDataList* extraList = nullptr, int count = 1, bool isEquipped = false);
 
     // Получить общую информацию о предмете для любого типа
     std::optional<ItemInfo> GetItemInfo(RE::TESForm* item, int count = 1, RE::ExtraDataList* extraList = nullptr);

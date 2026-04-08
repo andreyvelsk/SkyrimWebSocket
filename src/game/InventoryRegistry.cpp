@@ -193,7 +193,7 @@ namespace InventoryRegistry
         return info;
     }
 
-    nlohmann::json WeaponInfoToJson(RE::TESObjectWEAP* weapon, int count, RE::ExtraDataList* extraList)
+    nlohmann::json WeaponInfoToJson(RE::TESObjectWEAP* weapon, int count, RE::ExtraDataList* extraList, bool isEquipped)
     {
         auto baseInfo = GetItemInfo(weapon, count, extraList);
         if (!baseInfo)
@@ -207,6 +207,7 @@ namespace InventoryRegistry
         j["count"]         = baseInfo->count;
         j["value"]         = baseInfo->value;
         j["isQuestItem"]   = baseInfo->isQuestItem;
+        j["isEquipped"]    = isEquipped;
         j["durability"]    = baseInfo->durability;
 
         WeaponType wepType = DetermineWeaponType(weapon);
@@ -229,7 +230,7 @@ namespace InventoryRegistry
         return j;
     }
 
-    nlohmann::json ArmorInfoToJson(RE::TESObjectARMO* armor, int count, RE::ExtraDataList* extraList)
+    nlohmann::json ArmorInfoToJson(RE::TESObjectARMO* armor, int count, RE::ExtraDataList* extraList, bool isEquipped)
     {
         auto baseInfo = GetItemInfo(armor, count, extraList);
         if (!baseInfo)
@@ -243,6 +244,7 @@ namespace InventoryRegistry
         j["count"]         = baseInfo->count;
         j["value"]         = baseInfo->value;
         j["isQuestItem"]   = baseInfo->isQuestItem;
+        j["isEquipped"]    = isEquipped;
         j["durability"]    = baseInfo->durability;
 
         ArmorType armorType = DetermineArmorType(armor);
@@ -263,7 +265,7 @@ namespace InventoryRegistry
         return j;
     }
 
-    nlohmann::json PotionInfoToJson(RE::AlchemyItem* potion, int count, RE::ExtraDataList* extraList)
+    nlohmann::json PotionInfoToJson(RE::AlchemyItem* potion, int count, RE::ExtraDataList* extraList, bool isEquipped)
     {
         auto baseInfo = GetItemInfo(potion, count, extraList);
         if (!baseInfo)
@@ -277,6 +279,7 @@ namespace InventoryRegistry
         j["count"]       = baseInfo->count;
         j["value"]       = baseInfo->value;
         j["isQuestItem"] = baseInfo->isQuestItem;
+        j["isEquipped"]  = isEquipped;
 
         j["isPoison"]    = potion->IsPoison();
 
@@ -301,7 +304,7 @@ namespace InventoryRegistry
         return j;
     }
 
-    nlohmann::json BookInfoToJson(RE::TESObjectBOOK* book, int count)
+    nlohmann::json BookInfoToJson(RE::TESObjectBOOK* book, int count, bool isEquipped)
     {
         auto baseInfo = GetItemInfo(book, count);
         if (!baseInfo)
@@ -315,6 +318,7 @@ namespace InventoryRegistry
         j["count"]       = baseInfo->count;
         j["value"]       = baseInfo->value;
         j["isQuestItem"] = baseInfo->isQuestItem;
+        j["isEquipped"]  = isEquipped;
 
         j["isSkillBook"] = book->TeachesSkill();
         if (book->TeachesSkill()) {
@@ -324,7 +328,7 @@ namespace InventoryRegistry
         return j;
     }
 
-    nlohmann::json AmmoInfoToJson(RE::TESAmmo* ammo, int count)
+    nlohmann::json AmmoInfoToJson(RE::TESAmmo* ammo, int count, bool isEquipped)
     {
         auto baseInfo = GetItemInfo(ammo, count);
         if (!baseInfo)
@@ -338,12 +342,13 @@ namespace InventoryRegistry
         j["count"]       = baseInfo->count;
         j["value"]       = baseInfo->value;
         j["isQuestItem"] = baseInfo->isQuestItem;
+        j["isEquipped"]  = isEquipped;
         j["damage"]      = ammo->GetRuntimeData().data.damage;
 
         return j;
     }
 
-    nlohmann::json IngredientInfoToJson(RE::IngredientItem* ingredient, int count)
+    nlohmann::json IngredientInfoToJson(RE::IngredientItem* ingredient, int count, bool isEquipped)
     {
         auto baseInfo = GetItemInfo(ingredient, count);
         if (!baseInfo)
@@ -357,6 +362,7 @@ namespace InventoryRegistry
         j["count"]       = baseInfo->count;
         j["value"]       = baseInfo->value;
         j["isQuestItem"] = baseInfo->isQuestItem;
+        j["isEquipped"]  = isEquipped;
 
         // Эффекты ингредиента
         nlohmann::json effects = nlohmann::json::array();
@@ -376,7 +382,7 @@ namespace InventoryRegistry
         return j;
     }
 
-    nlohmann::json MiscInfoToJson(RE::TESObjectMISC* misc, int count)
+    nlohmann::json MiscInfoToJson(RE::TESObjectMISC* misc, int count, bool isEquipped)
     {
         auto baseInfo = GetItemInfo(misc, count);
         if (!baseInfo)
@@ -390,6 +396,7 @@ namespace InventoryRegistry
         j["count"]       = baseInfo->count;
         j["value"]       = baseInfo->value;
         j["isQuestItem"] = baseInfo->isQuestItem;
+        j["isEquipped"]  = isEquipped;
 
         return j;
     }
@@ -424,7 +431,7 @@ namespace InventoryRegistry
         return j;
     }
 
-    std::optional<nlohmann::json> GetItemJson(RE::TESForm* item, RE::ExtraDataList* extraList)
+    std::optional<nlohmann::json> GetItemJson(RE::TESForm* item, RE::ExtraDataList* extraList, int count, bool isEquipped)
     {
         if (!item)
             return std::nullopt;
@@ -434,23 +441,23 @@ namespace InventoryRegistry
         switch (itemType) {
             case ItemType::kWeapon:
                 if (auto wep = item->As<RE::TESObjectWEAP>())
-                    return WeaponInfoToJson(wep, 1, extraList);
+                    return WeaponInfoToJson(wep, count, extraList, isEquipped);
                 break;
             case ItemType::kArmor:
                 if (auto arm = item->As<RE::TESObjectARMO>())
-                    return ArmorInfoToJson(arm, 1, extraList);
+                    return ArmorInfoToJson(arm, count, extraList, isEquipped);
                 break;
             case ItemType::kAmmo:
                 if (auto ammo = item->As<RE::TESAmmo>())
-                    return AmmoInfoToJson(ammo, 1);
+                    return AmmoInfoToJson(ammo, count, isEquipped);
                 break;
             case ItemType::kPotion:
                 if (auto pot = item->As<RE::AlchemyItem>())
-                    return PotionInfoToJson(pot, 1, extraList);
+                    return PotionInfoToJson(pot, count, extraList, isEquipped);
                 break;
             case ItemType::kFood:
                 if (auto food = item->As<RE::AlchemyItem>()) {
-                    auto baseInfo = GetItemInfo(food, 1);
+                    auto baseInfo = GetItemInfo(food, count);
                     if (!baseInfo)
                         return std::nullopt;
                     nlohmann::json j;
@@ -461,20 +468,21 @@ namespace InventoryRegistry
                     j["count"]       = baseInfo->count;
                     j["value"]       = baseInfo->value;
                     j["isQuestItem"] = baseInfo->isQuestItem;
+                    j["isEquipped"]  = isEquipped;
                     return j;
                 }
                 break;
             case ItemType::kBook:
                 if (auto book = item->As<RE::TESObjectBOOK>())
-                    return BookInfoToJson(book, 1);
+                    return BookInfoToJson(book, count, isEquipped);
                 break;
             case ItemType::kIngredient:
                 if (auto ing = item->As<RE::IngredientItem>())
-                    return IngredientInfoToJson(ing, 1);
+                    return IngredientInfoToJson(ing, count, isEquipped);
                 break;
             case ItemType::kMisc:
                 if (auto misc = item->As<RE::TESObjectMISC>())
-                    return MiscInfoToJson(misc, 1);
+                    return MiscInfoToJson(misc, count, isEquipped);
                 break;
             case ItemType::kSpell:
                 if (auto spell = item->As<RE::SpellItem>())
@@ -502,6 +510,10 @@ namespace InventoryRegistry
             if (!item)
                 continue;
 
+            int32_t count = data.first;
+            if (count <= 0)
+                continue;
+
             auto itemType = DetermineItemType(item);
             if (filter != ItemType::kUnknown && itemType != filter)
                 continue;
@@ -509,11 +521,15 @@ namespace InventoryRegistry
             auto* entryData = data.second.get();
 
             RE::ExtraDataList* extraList = nullptr;
-            if (entryData && entryData->extraLists && !entryData->extraLists->empty()) {
-                extraList = entryData->extraLists->front();
+            bool               isEquipped = false;
+            if (entryData) {
+                if (entryData->extraLists && !entryData->extraLists->empty()) {
+                    extraList = entryData->extraLists->front();
+                }
+                isEquipped = entryData->IsWorn();
             }
 
-            auto itemJson = GetItemJson(item, extraList);
+            auto itemJson = GetItemJson(item, extraList, count, isEquipped);
             if (itemJson) {
                 result.push_back(itemJson.value());
             }
