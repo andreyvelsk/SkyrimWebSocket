@@ -84,13 +84,18 @@ namespace InventoryReader
         return str ? str : "";
     }
 
-    // Returns true if at least one ExtraDataList on the entry carries a stolen flag.
+    // Returns true if at least one ExtraDataList on the entry carries an ownership
+    // record.  In Skyrim an item is considered stolen when it has ExtraOwnership data
+    // (set when the item is picked up from a non-player owner).
     static bool IsItemStolen(const RE::InventoryEntryData* entry)
     {
         if (!entry || !entry->extraLists)
             return false;
         for (const auto* xList : *entry->extraLists) {
-            if (xList && xList->HasType<RE::ExtraStolenFlag>())
+            if (!xList)
+                continue;
+            const auto* xOwner = xList->GetByType<RE::ExtraOwnership>();
+            if (xOwner && xOwner->owner)
                 return true;
         }
         return false;
