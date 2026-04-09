@@ -201,48 +201,51 @@ Each `ActorValue` key also has `::Base`, `::Permanent`, and `::Clamped` variants
 
 **`Inventory::Categories` element shape:**
 ```jsonc
-{ "name": "Weapons", "count": 5 }
+{ "categoryId": "Weapons", "name": "Weapons", "count": 5 }
 ```
+- `categoryId` — stable internal identifier, always English (e.g. `"Weapons"`, `"Potions"`)
+- `name` — in-game localized display name when available via GMST, otherwise equals `categoryId`
 
 **`Inventory::Items::*` base element shape (all categories):**
 ```jsonc
-{ "name": "Iron Sword", "formId": "0x00012EB7", "count": 1, "weight": 9.0, "value": 25, "isFavorite": false }
+{ "name": "Iron Sword", "formId": "0x00012EB7", "count": 1, "weight": 9.0, "value": 25, "isFavorite": false, "isStolen": false }
 ```
+- `isStolen` — `true` when the item stack carries a stolen (red-hand) flag
 
 Additional fields per category:
 
 | Category | Extra fields |
 |---|---|
 | Weapons | `isEquipped`, `baseDamage` (float — weapon base damage before perks), `damage` (float — effective damage = `baseDamage × kAttackDamageMult`), `enchantment` (object or null — see below), `enchantmentCharge` (number or null) |
-| Apparel | `isEquipped`, `armorType` (`"Heavy"` / `"Light"` / `"Clothing"`), `armorRating` (float), `bodySlots` (array of strings — e.g. `["Body", "Forearms"]`), `enchantment` (object or null — see below) |
-| Potions | `description` (string — effect summary), `effects` (array — see below) |
-| Food | `description` (string — effect summary), `effects` (array — see below) |
+| Apparel | `isEquipped`, `armorTypeId` (`"Heavy"` / `"Light"` / `"Clothing"` — stable key), `armorType` (localized in-game display name via GMST `sSkillHeavyarmor`/`sSkillLightarmor`), `armorRating` (float — base form value), `bodySlots` (array of strings — e.g. `["Body", "Forearms"]`), `enchantment` (object or null — see below) |
+| Potions | `effects` (array — see below) |
+| Food | `effects` (array — see below) |
 | Ingredients | `effects` — array of `{ "name": string, "known": bool }` (up to 4 entries) |
-| Books | `description` (string) |
-| Scrolls | `description` (string — effect summary), `effects` (array — see below) |
+| Books | `description` (string from game's TESDescription) |
+| Scrolls | `effects` (array — see below) |
 | SoulGems | `capacity` (string — max soul level: `"Petty"`, `"Lesser"`, `"Common"`, `"Greater"`, `"Grand"`, or `"None"`), `containedSoul` (string — current fill level, same values) |
-| Favorites | `isEquipped`, `type` (category name string, e.g. `"Weapons"`) |
+| Favorites | `isEquipped`, `type` (categoryId string, e.g. `"Weapons"`) |
 
 **Enchantment object** (used by Weapons and Apparel — `null` when no enchantment):
 ```jsonc
 {
   "name": "Fiery Soul Trap",
-  "description": "Fire Damage 10 for 1 second; If target dies within 5 seconds, fills a soul gem",
   "effects": [
-    { "name": "Fire Damage",  "magnitude": 10.0, "duration": 1, "description": "Fire Damage 10 for 1 second" },
-    { "name": "Soul Trap",    "magnitude": 0.0,  "duration": 5, "description": "If target dies within 5 seconds, fills a soul gem" }
+    { "name": "Fire Damage", "magnitude": 10.0, "duration": 1, "descriptionTemplate": "Do <mag> points of fire damage." },
+    { "name": "Soul Trap",   "magnitude": 0.0,  "duration": 5, "descriptionTemplate": "If target dies within <dur> seconds, fills a soul gem." }
   ]
 }
 ```
 
 **Effects array element** (used by Potions, Food, Scrolls, and inside enchantment objects):
 ```jsonc
-{ "name": "Restore Health", "magnitude": 50.0, "duration": 0, "description": "Restore Health 50" }
+{ "name": "Restore Health", "magnitude": 50.0, "duration": 0, "descriptionTemplate": "Restore <mag> points of Health." }
 ```
 
-- `magnitude` — raw effect magnitude (e.g. 50 for "Restore Health 50")
-- `duration` — effect duration in seconds (0 = instant)
-- `description` — human-readable string built from name + magnitude + duration
+- `name` — localized effect name from the game (e.g. `"Restore Health"` / `"Восстановление здоровья"`)
+- `magnitude` — effect magnitude; substitute for `<mag>` in `descriptionTemplate`
+- `duration` — effect duration in seconds (0 = instant); substitute for `<dur>` in `descriptionTemplate`
+- `descriptionTemplate` — localized description template directly from the game's EffectSetting record (respects active language); may contain `<mag>` and `<dur>` placeholders that the client should replace with `magnitude` and `duration`
 
 Use `{ "type": "describe" }` at runtime to get the full list with descriptions.
 

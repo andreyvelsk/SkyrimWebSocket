@@ -43,7 +43,7 @@ namespace InventoryReader
 
     // ─── Helpers ──────────────────────────────────────────────────────────
 
-    // Gets the TESDescription text for forms that carry it (books, armor…).
+    // Gets the TESDescription text for forms that carry it (books).
     static std::string GetFormDescription(RE::TESBoundObject* item)
     {
         auto* desc = item->As<RE::TESDescription>();
@@ -54,7 +54,9 @@ namespace InventoryReader
         return buf.empty() ? "" : std::string(buf);
     }
 
-    // Converts a SOUL_LEVEL enum value to a display string.
+    // Converts a SOUL_LEVEL enum value to a stable string key.
+    // These are internal identifiers; the game's localized name (e.g. "Petty Soul Gem")
+    // is available via the soul gem item's own name field.
     static std::string SoulLevelToString(RE::SOUL_LEVEL level)
     {
         switch (level) {
@@ -68,84 +70,78 @@ namespace InventoryReader
         }
     }
 
-    // Builds a human-readable description for a single magic effect using its
-    // magnitude and duration.  For Soul Trap the wording matches in-game tooltips.
-    static std::string BuildEffectDescription(const RE::Effect* eff)
+    // Looks up a GameSetting string by key (e.g. "sSkillHeavyarmor").
+    // Returns an empty string when the key does not exist or is not a string setting.
+    static std::string GetGMSTString(const char* key)
     {
-        if (!eff || !eff->baseEffect)
+        auto* gmst = RE::GameSettingCollection::GetSingleton();
+        if (!gmst)
             return "";
-
-        const std::string   name     = eff->baseEffect->GetName();
-        const float         mag      = eff->effectItem.magnitude;
-        const std::uint32_t duration = eff->effectItem.duration;
-
-        // Special-case Soul Trap so the description matches the in-game tooltip.
-        if (eff->baseEffect->data.archetype == RE::EffectSetting::Archetype::kSoulTrap) {
-            if (duration > 0)
-                return std::format(
-                    "If target dies within {} second{}, fills a soul gem",
-                    duration, duration == 1u ? "" : "s");
-            return "Fills a soul gem";
-        }
-
-        if (mag > 0.f && duration > 0)
-            return std::format("{} {} for {} second{}",
-                               name, static_cast<int>(mag),
-                               duration, duration == 1u ? "" : "s");
-        if (mag > 0.f)
-            return std::format("{} {}", name, static_cast<int>(mag));
-        if (duration > 0)
-            return std::format("{} for {} second{}",
-                               name, duration, duration == 1u ? "" : "s");
-        return name;
+        auto* setting = gmst->GetSetting(key);
+        if (!setting)
+            return "";
+        const char* str = setting->GetString();
+        return str ? str : "";
     }
 
-    // Returns a JSON object for a single magic effect with all raw parameters
-    // plus a human-readable description.
+    // Returns true if at least one ExtraDataList on the entry carries a stolen flag.
+    static bool IsItemStolen(const RE::InventoryEntryData* entry)
+    {
+        if (!entry || !entry->extraLists)
+            return false;
+        for (const auto* xList : *entry->extraLists) {
+            if (xList && xList->HasType<RE::ExtraStolenFlag>())
+                return true;
+        }
+        return false;
+    }
+
+    // Returns a JSON object for a single magic effect.
+    // descriptionTemplate is the localized in-game text obtained from the EffectSetting
+    // via TESDescription::GetDescription.  It may contain unresolved <mag>/<dur>
+    // placeholders when the engine does not substitute them for the base form context;
+    // the client should substitute magnitude and duration itself.
     static nlohmann::json BuildEffectJson(const RE::Effect* eff)
     {
         nlohmann::json j;
         if (!eff || !eff->baseEffect) {
-            j["name"]        = "";
-            j["magnitude"]   = 0.f;
-            j["duration"]    = 0u;
-            j["description"] = "";
+            j["name"]                = "";
+            j["magnitude"]           = 0.f;
+            j["duration"]            = 0u;
+            j["descriptionTemplate"] = "";
             return j;
         }
-        j["name"]        = eff->baseEffect->GetName();
-        j["magnitude"]   = eff->effectItem.magnitude;
-        j["duration"]    = eff->effectItem.duration;
-        j["description"] = BuildEffectDescription(eff);
+        j["name"]      = eff->baseEffect->GetName();
+        j["magnitude"] = eff->effectItem.magnitude;
+        j["duration"]  = eff->effectItem.duration;
+
+        // Retrieve the localized description template directly from the game data.
+        // This respects the active language without any hardcoded strings.
+        RE::BSString buf;
+        if (auto* tDesc = eff->baseEffect->As<RE::TESDescription>())
+            tDesc->GetDescription(buf, eff->baseEffect);
+        j["descriptionTemplate"] = buf.empty() ? "" : std::string(buf.c_str());
+
         return j;
     }
 
-    // Returns a JSON object with a combined "description" string and an "effects"
-    // array for every effect on a MagicItem (potion, scroll, enchantment…).
-    static nlohmann::json BuildMagicItemDetails(const RE::MagicItem* magic)
+    // Returns a JSON array of effect objects for a MagicItem.
+    static nlohmann::json BuildMagicEffectsArray(const RE::MagicItem* magic)
     {
-        std::string    combined;
         nlohmann::json effects = nlohmann::json::array();
-
         if (magic) {
             for (const auto* eff : magic->effects) {
                 if (!eff || !eff->baseEffect)
                     continue;
-                if (!combined.empty())
-                    combined += "; ";
-                combined += BuildEffectDescription(eff);
                 effects.push_back(BuildEffectJson(eff));
             }
         }
-
-        nlohmann::json out;
-        out["description"] = std::move(combined);
-        out["effects"]     = std::move(effects);
-        return out;
+        return effects;
     }
 
     // Returns a JSON object describing the enchantment on an item stack, or
     // JSON null when the item carries no enchantment.
-    // The object shape is: { name, description, effects[] }.
+    // Shape: { "name": string, "effects": [ { name, magnitude, duration, descriptionTemplate } ] }
     static nlohmann::json GetEnchantmentDetails(const RE::TESBoundObject* item,
                                                 const RE::InventoryEntryData* entry)
     {
@@ -168,8 +164,9 @@ namespace InventoryReader
         if (!ench)
             return nullptr;
 
-        auto details     = BuildMagicItemDetails(ench);
-        details["name"]  = ench->GetName();
+        nlohmann::json details;
+        details["name"]    = ench->GetName();
+        details["effects"] = BuildMagicEffectsArray(ench);
         return details;
     }
 
@@ -202,8 +199,29 @@ namespace InventoryReader
         j["weight"]     = entry ? entry->GetWeight() : 0.f;
         j["value"]      = entry ? entry->GetValue() : 0;
         j["isFavorite"] = entry ? entry->IsFavorited() : false;
+        j["isStolen"]   = IsItemStolen(entry);
         return j;
     }
+
+    // Maps stable categoryId strings to the GMST key that holds the in-game
+    // localized display name for that category.  Where no vanilla Skyrim GMST
+    // exists for a category, the value is an empty string and name == categoryId.
+    // clang-format off
+    static const std::unordered_map<std::string, const char*> s_categoryGMSTKeys = {
+        { "Weapons",     "sSkillOneHanded"   },  // "One-Handed" / "Одноручное"… fallback
+        { "Apparel",     ""                  },  // no direct vanilla GMST
+        { "Books",       ""                  },
+        { "Potions",     "sSkillAlchemy"     },  // "Alchemy" / "Алхимия"
+        { "Food",        ""                  },
+        { "Ingredients", "sSkillAlchemy"     },
+        { "Misc",        ""                  },
+        { "Ammo",        ""                  },
+        { "Keys",        ""                  },
+        { "SoulGems",    ""                  },
+        { "Scrolls",     ""                  },
+        { "Favorites",   ""                  },
+    };
+    // clang-format on
 
     // ─── ReadCategories ───────────────────────────────────────────────────
 
@@ -242,10 +260,28 @@ namespace InventoryReader
         }
 
         nlohmann::json result = nlohmann::json::array();
-        for (auto& [name, count] : categoryCounts)
-            result.push_back({ { "name", name }, { "count", count } });
+        for (auto& [catId, count] : categoryCounts) {
+            // Attempt a GMST lookup for the localized display name.  Falls back to
+            // categoryId when no GMST key is configured or the key is not found.
+            std::string displayName;
+            auto gmstIt = s_categoryGMSTKeys.find(catId);
+            if (gmstIt != s_categoryGMSTKeys.end() && gmstIt->second[0] != '\0')
+                displayName = GetGMSTString(gmstIt->second);
+            if (displayName.empty())
+                displayName = catId;
+
+            result.push_back({
+                { "categoryId", catId       },
+                { "name",       displayName },
+                { "count",      count       },
+            });
+        }
         if (favCount > 0)
-            result.push_back({ { "name", "Favorites" }, { "count", favCount } });
+            result.push_back({
+                { "categoryId", "Favorites" },
+                { "name",       "Favorites" },
+                { "count",      favCount    },
+            });
         return result;
     }
 
@@ -323,6 +359,23 @@ namespace InventoryReader
             return obj.GetFormType() == RE::FormType::Armor;
         });
 
+        // Lookup localized armor-type display names once per call.
+        // sSkillHeavyarmor / sSkillLightarmor are vanilla Skyrim GMSTs that
+        // contain the localized skill (and armor-type) names, e.g.
+        //   EN: "Heavy Armor" / "Light Armor"
+        //   RU: "Тяжелая броня" / "Легкая броня"
+        // When a GMST is not found the stable armorTypeId value is used as fallback.
+        const std::string localizedHeavy   = [] {
+            auto s = GetGMSTString("sSkillHeavyarmor");
+            return s.empty() ? "Heavy" : s;
+        }();
+        const std::string localizedLight   = [] {
+            auto s = GetGMSTString("sSkillLightarmor");
+            return s.empty() ? "Light" : s;
+        }();
+        // No vanilla GMST exists for "Clothing" — keep the stable ID as display name.
+        const std::string localizedClothing = "Clothing";
+
         nlohmann::json result = nlohmann::json::array();
         for (auto& [item, data] : inv) {
             if (!item || data.first <= 0)
@@ -333,17 +386,23 @@ namespace InventoryReader
 
             auto* armor = item->As<RE::TESObjectARMO>();
             if (armor) {
-                // Determine armor type via keywords (BGSBipedObjectForm::GetArmorType is
-                // not exposed in CommonLibSSE-NG; keyword checking is the safe approach).
-                std::string armorType = "Clothing";
-                if (armor->HasKeywordString("ArmorHeavy"))
-                    armorType = "Heavy";
-                else if (armor->HasKeywordString("ArmorLight"))
-                    armorType = "Light";
-                j["armorType"]   = std::move(armorType);
+                // armorTypeId is the stable internal key; armorType is the localized
+                // display string suitable for showing directly in a UI.
+                std::string armorTypeId   = "Clothing";
+                std::string armorTypeName = localizedClothing;
+                if (armor->HasKeywordString("ArmorHeavy")) {
+                    armorTypeId   = "Heavy";
+                    armorTypeName = localizedHeavy;
+                } else if (armor->HasKeywordString("ArmorLight")) {
+                    armorTypeId   = "Light";
+                    armorTypeName = localizedLight;
+                }
+                j["armorTypeId"] = std::move(armorTypeId);
+                j["armorType"]   = std::move(armorTypeName);
                 j["armorRating"] = armor->GetArmorRating();
                 j["bodySlots"]   = GetArmorBodySlots(armor);
             } else {
+                j["armorTypeId"] = nullptr;
                 j["armorType"]   = nullptr;
                 j["armorRating"] = 0.f;
                 j["bodySlots"]   = nlohmann::json::array();
@@ -374,11 +433,9 @@ namespace InventoryReader
             if (!item || data.first <= 0)
                 continue;
 
-            auto j               = BuildBaseEntry(item, data);
-            const auto* alch     = item->As<RE::AlchemyItem>();
-            auto        details  = BuildMagicItemDetails(alch);
-            j["description"]     = std::move(details["description"]);
-            j["effects"]         = std::move(details["effects"]);
+            auto j           = BuildBaseEntry(item, data);
+            const auto* alch = item->As<RE::AlchemyItem>();
+            j["effects"]     = BuildMagicEffectsArray(alch);
             result.push_back(std::move(j));
         }
         return result;
@@ -457,12 +514,10 @@ namespace InventoryReader
         for (auto& [item, data] : inv) {
             if (!item || data.first <= 0)
                 continue;
-            auto        j        = BuildBaseEntry(item, data);
-            // Scrolls are MagicItems — build the description from effect data.
-            const auto* magic    = item->As<RE::MagicItem>();
-            auto        details  = BuildMagicItemDetails(magic);
-            j["description"]     = std::move(details["description"]);
-            j["effects"]         = std::move(details["effects"]);
+            auto        j     = BuildBaseEntry(item, data);
+            // Scrolls are MagicItems — build effects from game data (no hardcoded strings).
+            const auto* magic = item->As<RE::MagicItem>();
+            j["effects"]      = BuildMagicEffectsArray(magic);
             result.push_back(std::move(j));
         }
         return result;
@@ -486,11 +541,9 @@ namespace InventoryReader
             if (!item || data.first <= 0)
                 continue;
 
-            auto j               = BuildBaseEntry(item, data);
-            const auto* alch     = item->As<RE::AlchemyItem>();
-            auto        details  = BuildMagicItemDetails(alch);
-            j["description"]     = std::move(details["description"]);
-            j["effects"]         = std::move(details["effects"]);
+            auto j           = BuildBaseEntry(item, data);
+            const auto* alch = item->As<RE::AlchemyItem>();
+            j["effects"]     = BuildMagicEffectsArray(alch);
             result.push_back(std::move(j));
         }
         return result;
