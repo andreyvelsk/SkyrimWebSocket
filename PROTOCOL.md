@@ -231,21 +231,22 @@ Additional fields per category:
 {
   "name": "Fiery Soul Trap",
   "effects": [
-    { "name": "Fire Damage", "magnitude": 10.0, "duration": 1, "descriptionTemplate": "Do <mag> points of fire damage." },
-    { "name": "Soul Trap",   "magnitude": 0.0,  "duration": 5, "descriptionTemplate": "If target dies within <dur> seconds, fills a soul gem." }
+    { "name": "Fire Damage", "magnitude": 10.0, "duration": 1, "descriptionTemplate": "Do <mag> points of fire damage.", "description": "Do 10 points of fire damage." },
+    { "name": "Soul Trap",   "magnitude": 0.0,  "duration": 5, "descriptionTemplate": "If target dies within <dur> seconds, fills a soul gem.", "description": "If target dies within 5 seconds, fills a soul gem." }
   ]
 }
 ```
 
 **Effects array element** (used by Potions, Food, Scrolls, and inside enchantment objects):
 ```jsonc
-{ "name": "Restore Health", "magnitude": 50.0, "duration": 0, "descriptionTemplate": "Restore <mag> points of Health." }
+{ "name": "Restore Health", "magnitude": 50.0, "duration": 0, "descriptionTemplate": "Restore <mag> points of Health.", "description": "Restore 50 points of Health." }
 ```
 
 - `name` — localized effect name from the game (e.g. `"Restore Health"` / `"Восстановление здоровья"`)
-- `magnitude` — effect magnitude; substitute for `<mag>` in `descriptionTemplate`
-- `duration` — effect duration in seconds (0 = instant); substitute for `<dur>` in `descriptionTemplate`
-- `descriptionTemplate` — localized description template from the `EffectSetting` DNAM field (`magicItemDescription`); may contain `<mag>` and `<dur>` placeholders that the client should replace with `magnitude` and `duration`
+- `magnitude` — effect magnitude
+- `duration` — effect duration in seconds (0 = instant)
+- `descriptionTemplate` — localized description template from the `EffectSetting` DNAM field; may contain `<mag>` and `<dur>` placeholders
+- `description` — ready-to-display string with `<mag>` and `<dur>` already replaced by the actual values (integers when no fractional part, otherwise one decimal place)
 
 Use `{ "type": "describe" }` at runtime to get the full list with descriptions.
 

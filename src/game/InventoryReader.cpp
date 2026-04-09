@@ -106,6 +106,23 @@ namespace InventoryReader
     // via TESDescription::GetDescription.  It may contain unresolved <mag>/<dur>
     // placeholders when the engine does not substitute them for the base form context;
     // the client should substitute magnitude and duration itself.
+    // Replace all occurrences of `from` with `to` inside `str`.
+    static void ReplaceAll(std::string& str, const std::string_view from, const std::string& to)
+    {
+        for (std::size_t pos = 0; (pos = str.find(from, pos)) != std::string::npos; pos += to.size())
+            str.replace(pos, from.size(), to);
+    }
+
+    // Format a float: show as integer when there is no fractional part, otherwise
+    // keep one decimal place (matches vanilla inventory display convention).
+    static std::string FormatMagnitude(float v)
+    {
+        float intpart;
+        if (std::modf(v, &intpart) == 0.f)
+            return std::to_string(static_cast<int>(intpart));
+        return std::format("{:.1f}", v);
+    }
+
     static nlohmann::json BuildEffectJson(const RE::Effect* eff)
     {
         nlohmann::json j;
@@ -114,6 +131,7 @@ namespace InventoryReader
             j["magnitude"]           = 0.f;
             j["duration"]            = 0u;
             j["descriptionTemplate"] = "";
+            j["description"]         = "";
             return j;
         }
         j["name"]      = eff->baseEffect->GetName();
@@ -124,7 +142,14 @@ namespace InventoryReader
         // member magicItemDescription (DNAM subrecord).  TESDescription is not
         // in EffectSetting's inheritance chain so As<> / static_cast do not apply.
         const auto& desc = eff->baseEffect->magicItemDescription;
-        j["descriptionTemplate"] = desc.empty() ? "" : std::string(desc.c_str());
+        std::string tmpl = desc.empty() ? "" : std::string(desc.c_str());
+        j["descriptionTemplate"] = tmpl;
+
+        // Build the ready-to-display description by substituting <mag> and <dur>.
+        std::string resolved = tmpl;
+        ReplaceAll(resolved, "<mag>", FormatMagnitude(eff->effectItem.magnitude));
+        ReplaceAll(resolved, "<dur>", std::to_string(eff->effectItem.duration));
+        j["description"] = std::move(resolved);
 
         return j;
     }
