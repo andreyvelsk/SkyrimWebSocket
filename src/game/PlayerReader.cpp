@@ -13,17 +13,23 @@ namespace PlayerReader
     nlohmann::json ReadXPCurrent()
     {
         auto* player = RE::PlayerCharacter::GetSingleton();
-        if (!player || !player->skills || !player->skills->data)
+        if (!player)
             return 0.0f;
-        return player->skills->data->xp;
+        auto& info = player->GetInfoRuntimeData();
+        if (!info.skills || !info.skills->data)
+            return 0.0f;
+        return info.skills->data->xp;
     }
 
     nlohmann::json ReadXPNext()
     {
         auto* player = RE::PlayerCharacter::GetSingleton();
-        if (!player || !player->skills || !player->skills->data)
+        if (!player)
             return 0.0f;
-        return player->skills->data->levelThreshold;
+        auto& info = player->GetInfoRuntimeData();
+        if (!info.skills || !info.skills->data)
+            return 0.0f;
+        return info.skills->data->levelThreshold;
     }
 
     nlohmann::json ReadXPLevelStart()
