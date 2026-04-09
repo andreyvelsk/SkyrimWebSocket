@@ -402,8 +402,8 @@ current weapon loadout in a single push stream.
   "fields": {
     "hp": 320.5,
     "cats": [
-      { "name": "Weapons", "count": 2 },
-      { "name": "Apparel", "count": 7 }
+      { "categoryId": "Weapons", "name": "Weapons", "count": 2 },
+      { "categoryId": "Apparel", "name": "Apparel", "count": 7 }
     ],
     "weapons": [
       { "name": "Iron Sword",    "formId": "0x00012EB7", "count": 1, "weight": 9.0,  "value": 25  },

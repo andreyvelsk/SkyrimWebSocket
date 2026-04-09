@@ -204,22 +204,25 @@ namespace InventoryReader
     }
 
     // Maps stable categoryId strings to the GMST key that holds the in-game
-    // localized display name for that category.  Where no vanilla Skyrim GMST
-    // exists for a category, the value is an empty string and name == categoryId.
+    // localized display name for that category.  Vanilla Skyrim does not expose
+    // dedicated GMST strings for inventory category tab labels, so all entries
+    // use an empty string and name falls back to categoryId.  The map exists to
+    // make it easy to add GMST keys in future if they become available (e.g. via
+    // a UI mod that registers them).
     // clang-format off
     static const std::unordered_map<std::string, const char*> s_categoryGMSTKeys = {
-        { "Weapons",     "sSkillOneHanded"   },  // "One-Handed" / "Одноручное"… fallback
-        { "Apparel",     ""                  },  // no direct vanilla GMST
-        { "Books",       ""                  },
-        { "Potions",     "sSkillAlchemy"     },  // "Alchemy" / "Алхимия"
-        { "Food",        ""                  },
-        { "Ingredients", "sSkillAlchemy"     },
-        { "Misc",        ""                  },
-        { "Ammo",        ""                  },
-        { "Keys",        ""                  },
-        { "SoulGems",    ""                  },
-        { "Scrolls",     ""                  },
-        { "Favorites",   ""                  },
+        { "Weapons",     "" },
+        { "Apparel",     "" },
+        { "Books",       "" },
+        { "Potions",     "" },
+        { "Food",        "" },
+        { "Ingredients", "" },
+        { "Misc",        "" },
+        { "Ammo",        "" },
+        { "Keys",        "" },
+        { "SoulGems",    "" },
+        { "Scrolls",     "" },
+        { "Favorites",   "" },
     };
     // clang-format on
 
