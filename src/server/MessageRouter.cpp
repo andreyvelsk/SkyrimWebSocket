@@ -24,7 +24,7 @@ namespace MessageRouter
                 return false;
             }
             std::string registryKey = keyVal.get<std::string>();
-            if (!FieldRegistry::Resolve(registryKey)) {
+            if (!FieldRegistry::Resolve(registryKey) && !FieldRegistry::ResolveJson(registryKey)) {
                 nlohmann::json err;
                 err["type"]    = "error";
                 err["message"] = "Unknown field key: '" + registryKey + "'";

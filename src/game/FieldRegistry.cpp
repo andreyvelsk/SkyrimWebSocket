@@ -1,4 +1,5 @@
 #include "FieldRegistry.h"
+#include "InventoryReader.h"
 
 #include <nlohmann/json.hpp>
 
@@ -184,6 +185,57 @@ namespace FieldRegistry
         { "ActorValue::kShoutRecoveryMult::Permanent", { RE::ActorValue::kShoutRecoveryMult, "Shout recovery multiplier base value", ValueType::kPermanent } },
         { "ActorValue::kShoutRecoveryMult::Clamped",   { RE::ActorValue::kShoutRecoveryMult, "Clamped shout recovery multiplier",   ValueType::kClamped   } },
     };
+
+    // clang-format off
+    static const std::unordered_map<std::string, JsonEntry> s_json_registry = {
+        // Inventory categories
+        { "Inventory::Categories",
+          { "Array of inventory categories with item counts", "array",
+            &InventoryReader::ReadCategories } },
+
+        // Gold
+        { "Inventory::Gold",
+          { "Player's current gold amount", "integer",
+            &InventoryReader::ReadGold } },
+
+        // Inventory items by category
+        { "Inventory::Items::Weapons",
+          { "Weapons in player inventory", "array",
+            &InventoryReader::ReadWeapons } },
+        { "Inventory::Items::Apparel",
+          { "Apparel in player inventory", "array",
+            &InventoryReader::ReadApparel } },
+        { "Inventory::Items::Books",
+          { "Books in player inventory", "array",
+            &InventoryReader::ReadBooks } },
+        { "Inventory::Items::Potions",
+          { "Potions in player inventory (food excluded)", "array",
+            &InventoryReader::ReadPotions } },
+        { "Inventory::Items::Food",
+          { "Food items in player inventory", "array",
+            &InventoryReader::ReadFood } },
+        { "Inventory::Items::Ingredients",
+          { "Ingredients in player inventory", "array",
+            &InventoryReader::ReadIngredients } },
+        { "Inventory::Items::Misc",
+          { "Miscellaneous items in player inventory (gold excluded)", "array",
+            &InventoryReader::ReadMisc } },
+        { "Inventory::Items::Ammo",
+          { "Ammunition in player inventory", "array",
+            InventoryReader::MakeItemsResolver(RE::FormType::Ammo) } },
+        { "Inventory::Items::Keys",
+          { "Keys in player inventory", "array",
+            InventoryReader::MakeItemsResolver(RE::FormType::KeyMaster) } },
+        { "Inventory::Items::SoulGems",
+          { "Soul gems in player inventory", "array",
+            &InventoryReader::ReadSoulGems } },
+        { "Inventory::Items::Scrolls",
+          { "Scrolls in player inventory", "array",
+            &InventoryReader::ReadScrolls } },
+        { "Inventory::Items::Favorites",
+          { "Favorited items across all categories", "array",
+            &InventoryReader::ReadFavorites } },
+    };
     // clang-format on
 
     const std::unordered_map<std::string, Entry>& GetAll()
@@ -195,6 +247,14 @@ namespace FieldRegistry
     {
         auto it = s_registry.find(key);
         if (it == s_registry.end())
+            return std::nullopt;
+        return it->second;
+    }
+
+    std::optional<JsonEntry> ResolveJson(const std::string& key)
+    {
+        auto it = s_json_registry.find(key);
+        if (it == s_json_registry.end())
             return std::nullopt;
         return it->second;
     }
@@ -221,6 +281,9 @@ namespace FieldRegistry
                     break;
             }
             fields[key] = { { "valueType", "float" }, { "valueCategory", valueTypeStr }, { "description", entry.description } };
+        }
+        for (auto& [key, entry] : s_json_registry) {
+            fields[key] = { { "valueType", entry.valueTypeName }, { "description", entry.description } };
         }
         return result.dump();
     }

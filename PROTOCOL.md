@@ -130,51 +130,14 @@ Sent when a message cannot be processed. The current subscription (if any) is
 
 ## Available field keys
 
-All field values are `float`.
+Field values are either `float` (all `ActorValue::*` keys) or JSON `array` / `integer` (all `Inventory::*` keys).
+Fields of different types can be freely mixed in a single `subscribe` or `query` message.
 
-| Registry key | Description |
-|---|---|
-| `ActorValue::kHealth` | Current health points |
-| `ActorValue::kMagicka` | Current magicka points |
-| `ActorValue::kStamina` | Current stamina points |
-| `ActorValue::kHealRate` | Health regeneration rate |
-| `ActorValue::kMagickaRate` | Magicka regeneration rate |
-| `ActorValue::kStaminaRate` | Stamina regeneration rate |
-| `ActorValue::kHealRateMult` | Health regeneration multiplier |
-| `ActorValue::kMagickaRateMult` | Magicka regeneration multiplier |
-| `ActorValue::kStaminaRateMult` | Stamina regeneration multiplier |
-| `ActorValue::kSpeedMult` | Movement speed multiplier |
-| `ActorValue::kCarryWeight` | Carry weight capacity |
-| `ActorValue::kAttackDamageMult` | Attack damage multiplier |
-| `ActorValue::kCriticalChance` | Critical hit chance |
-| `ActorValue::kDamageResist` | Physical damage resistance |
-| `ActorValue::kResistMagic` | Magic resistance |
-| `ActorValue::kResistFire` | Fire resistance |
-| `ActorValue::kResistFrost` | Frost resistance |
-| `ActorValue::kResistShock` | Shock resistance |
-| `ActorValue::kPoisonResist` | Poison resistance |
-| `ActorValue::kOneHanded` | One-Handed skill level |
-| `ActorValue::kTwoHanded` | Two-Handed skill level |
-| `ActorValue::kArchery` | Archery skill level |
-| `ActorValue::kBlock` | Block skill level |
-| `ActorValue::kSmithing` | Smithing skill level |
-| `ActorValue::kAlchemy` | Alchemy skill level |
-| `ActorValue::kEnchanting` | Enchanting skill level |
-| `ActorValue::kHeavyArmor` | Heavy Armor skill level |
-| `ActorValue::kLightArmor` | Light Armor skill level |
-| `ActorValue::kPickpocket` | Pickpocket skill level |
-| `ActorValue::kLockpicking` | Lockpicking skill level |
-| `ActorValue::kSneak` | Sneak skill level |
-| `ActorValue::kSpeech` | Speech skill level |
-| `ActorValue::kAlteration` | Alteration skill level |
-| `ActorValue::kConjuration` | Conjuration skill level |
-| `ActorValue::kDestruction` | Destruction skill level |
-| `ActorValue::kIllusion` | Illusion skill level |
-| `ActorValue::kRestoration` | Restoration skill level |
-| `ActorValue::kDragonSouls` | Collected dragon souls |
-| `ActorValue::kShoutRecoveryMult` | Shout recovery multiplier |
+**For a complete list of available fields, see:**
+- [docs/ActorValue.md](docs/ActorValue.md) — All ActorValue fields and value type modifiers
+- [docs/Inventory.md](docs/Inventory.md) — All Inventory fields with detailed response structures
 
-Use `{ "type": "describe" }` at runtime to get the full list with descriptions.
+Use `{ "type": "describe" }` at runtime to get the full list of all available fields with descriptions.
 
 ---
 
@@ -292,9 +255,50 @@ sheet. It uses `"query"` instead of subscribing to avoid unnecessary traffic.
 {
   "type": "describe",
   "fields": {
-    "ActorValue::kHealth":    { "valueType": "float", "description": "Current health points" },
-    "ActorValue::kMagicka":   { "valueType": "float", "description": "Current magicka points" },
+    "ActorValue::kHealth":    { "valueType": "float",   "valueCategory": "current", "description": "Current health points" },
+    "ActorValue::kMagicka":   { "valueType": "float",   "valueCategory": "current", "description": "Current magicka points" },
+    "Inventory::Categories":  { "valueType": "array",   "description": "Array of inventory categories with item counts" },
+    "Inventory::Gold":        { "valueType": "integer", "description": "Player's current gold amount" },
     // ... all registered fields
+  }
+}
+```
+
+---
+
+### Example 5 — Mixed-type subscription (vitals + inventory)
+
+A client wants to display a HUD that shows both the player's health and their
+current weapon loadout in a single push stream.
+
+**Client sends:**
+```json
+{
+  "type": "subscribe",
+  "settings": { "frequency": 1000, "sendOnChange": true },
+  "fields": {
+    "hp":      "ActorValue::kHealth",
+    "cats":    "Inventory::Categories",
+    "weapons": "Inventory::Items::Weapons"
+  }
+}
+```
+
+**Server replies (whenever any value changes):**
+```json
+{
+  "type": "data",
+  "ts": 1712462400123,
+  "fields": {
+    "hp": 320.5,
+    "cats": [
+      { "categoryId": "Weapons", "name": "Weapons", "count": 2 },
+      { "categoryId": "Apparel", "name": "Apparel", "count": 7 }
+    ],
+    "weapons": [
+      { "name": "Iron Sword",    "formId": "0x00012EB7", "count": 1, "weight": 9.0,  "value": 25  },
+      { "name": "Steel Dagger",  "formId": "0x00013CE6", "count": 1, "weight": 2.5,  "value": 22  }
+    ]
   }
 }
 ```
