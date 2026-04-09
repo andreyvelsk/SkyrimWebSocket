@@ -120,13 +120,11 @@ namespace InventoryReader
         j["magnitude"] = eff->effectItem.magnitude;
         j["duration"]  = eff->effectItem.duration;
 
-        // Retrieve the localized description template directly from the game data.
-        // This respects the active language without any hardcoded strings.
-        // EffectSetting inherits TESDescription, so use static_cast — As<TESDescription>()
-        // returns nullptr because TESDescription is a mixin, not a registered form type.
-        RE::BSString buf;
-        static_cast<RE::TESDescription*>(eff->baseEffect)->GetDescription(buf, eff->baseEffect);
-        j["descriptionTemplate"] = buf.empty() ? "" : std::string(buf.c_str());
+        // EffectSetting stores its localized description in the BSFixedString
+        // member magicItemDescription (DNAM subrecord).  TESDescription is not
+        // in EffectSetting's inheritance chain so As<> / static_cast do not apply.
+        const auto& desc = eff->baseEffect->magicItemDescription;
+        j["descriptionTemplate"] = desc.empty() ? "" : std::string(desc.c_str());
 
         return j;
     }

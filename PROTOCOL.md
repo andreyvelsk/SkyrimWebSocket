@@ -245,7 +245,7 @@ Additional fields per category:
 - `name` — localized effect name from the game (e.g. `"Restore Health"` / `"Восстановление здоровья"`)
 - `magnitude` — effect magnitude; substitute for `<mag>` in `descriptionTemplate`
 - `duration` — effect duration in seconds (0 = instant); substitute for `<dur>` in `descriptionTemplate`
-- `descriptionTemplate` — localized description template directly from the game's EffectSetting record (respects active language); may contain `<mag>` and `<dur>` placeholders that the client should replace with `magnitude` and `duration`
+- `descriptionTemplate` — localized description template from the `EffectSetting` DNAM field (`magicItemDescription`); may contain `<mag>` and `<dur>` placeholders that the client should replace with `magnitude` and `duration`
 
 Use `{ "type": "describe" }` at runtime to get the full list with descriptions.
 
