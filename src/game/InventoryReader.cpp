@@ -122,9 +122,10 @@ namespace InventoryReader
 
         // Retrieve the localized description template directly from the game data.
         // This respects the active language without any hardcoded strings.
+        // EffectSetting inherits TESDescription, so use static_cast — As<TESDescription>()
+        // returns nullptr because TESDescription is a mixin, not a registered form type.
         RE::BSString buf;
-        if (auto* tDesc = eff->baseEffect->As<RE::TESDescription>())
-            tDesc->GetDescription(buf, eff->baseEffect);
+        static_cast<RE::TESDescription*>(eff->baseEffect)->GetDescription(buf, eff->baseEffect);
         j["descriptionTemplate"] = buf.empty() ? "" : std::string(buf.c_str());
 
         return j;
@@ -407,13 +408,25 @@ namespace InventoryReader
                 }
                 j["armorTypeId"] = std::move(armorTypeId);
                 j["armorType"]   = std::move(armorTypeName);
-                j["armorRating"] = armor->GetArmorRating();
+
+                // baseArmorRating is the raw value from the form.
+                // armorRating is the effective value as shown in the inventory:
+                //   baseArmorRating × (1 + kArmorPerks / 100)
+                // where kArmorPerks is the bonus percentage from armor-skill perks
+                // (e.g. Juggernaut for Heavy Armor, Custom Fit for Light Armor).
+                const float baseArmor = armor->GetArmorRating();
+                const float armorPerks = player->AsActorValueOwner()
+                                             ->GetActorValue(RE::ActorValue::kArmorPerks);
+                j["baseArmorRating"] = baseArmor;
+                j["armorRating"]     = baseArmor * (1.0f + armorPerks / 100.0f);
+
                 j["bodySlots"]   = GetArmorBodySlots(armor);
             } else {
-                j["armorTypeId"] = nullptr;
-                j["armorType"]   = nullptr;
-                j["armorRating"] = 0.f;
-                j["bodySlots"]   = nlohmann::json::array();
+                j["armorTypeId"]     = nullptr;
+                j["armorType"]       = nullptr;
+                j["baseArmorRating"] = 0.f;
+                j["armorRating"]     = 0.f;
+                j["bodySlots"]       = nlohmann::json::array();
             }
 
             j["enchantment"] = GetEnchantmentDetails(item, data.second.get());

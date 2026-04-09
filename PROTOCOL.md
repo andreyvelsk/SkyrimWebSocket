@@ -217,7 +217,7 @@ Additional fields per category:
 | Category | Extra fields |
 |---|---|
 | Weapons | `isEquipped`, `baseDamage` (float — weapon base damage before perks), `damage` (float — effective damage = `baseDamage × kAttackDamageMult`), `enchantment` (object or null — see below), `enchantmentCharge` (number or null) |
-| Apparel | `isEquipped`, `armorTypeId` (`"Heavy"` / `"Light"` / `"Clothing"` — stable key), `armorType` (localized in-game display name via GMST `sSkillHeavyarmor`/`sSkillLightarmor`), `armorRating` (float — base form value), `bodySlots` (array of strings — e.g. `["Body", "Forearms"]`), `enchantment` (object or null — see below) |
+| Apparel | `isEquipped`, `armorTypeId` (`"Heavy"` / `"Light"` / `"Clothing"` — stable key), `armorType` (localized in-game display name via GMST `sSkillHeavyarmor`/`sSkillLightarmor`), `baseArmorRating` (float — raw form value before perks), `armorRating` (float — effective value as shown in inventory = `baseArmorRating × (1 + kArmorPerks/100)`), `bodySlots` (array of strings — e.g. `["Body", "Forearms"]`), `enchantment` (object or null — see below) |
 | Potions | `effects` (array — see below) |
 | Food | `effects` (array — see below) |
 | Ingredients | `effects` — array of `{ "name": string, "known": bool }` (up to 4 entries) |
