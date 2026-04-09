@@ -1,5 +1,6 @@
 #include "FieldRegistry.h"
 #include "InventoryReader.h"
+#include "PlayerReader.h"
 
 #include <nlohmann/json.hpp>
 
@@ -235,6 +236,26 @@ namespace FieldRegistry
         { "Inventory::Items::Favorites",
           { "Favorited items across all categories", "array",
             &InventoryReader::ReadFavorites } },
+
+        // Player stats
+        { "Player::Level",
+          { "Character level", "integer",
+            &PlayerReader::ReadLevel } },
+        { "Player::XP::Current",
+          { "XP earned within the current level (resets to 0 on level-up)", "float",
+            &PlayerReader::ReadXPCurrent } },
+        { "Player::XP::Next",
+          { "XP threshold required to reach the next level", "float",
+            &PlayerReader::ReadXPNext } },
+        { "Player::XP::LevelStart",
+          { "XP value at the start of the current level (always 0; provided for progress-bar math alongside XP::Current and XP::Next)", "float",
+            &PlayerReader::ReadXPLevelStart } },
+        { "Player::InventoryWeight",
+          { "Total weight of all items currently in the player's inventory", "float",
+            &PlayerReader::ReadInventoryWeight } },
+        { "Player::CarryWeight",
+          { "Maximum carry weight (same value as ActorValue::kCarryWeight)", "float",
+            &PlayerReader::ReadCarryWeight } },
     };
     // clang-format on
 

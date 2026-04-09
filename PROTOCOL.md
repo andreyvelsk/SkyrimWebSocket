@@ -136,6 +136,7 @@ Fields of different types can be freely mixed in a single `subscribe` or `query`
 **For a complete list of available fields, see:**
 - [docs/ActorValue.md](docs/ActorValue.md) — All ActorValue fields and value type modifiers
 - [docs/Inventory.md](docs/Inventory.md) — All Inventory fields with detailed response structures
+- [docs/Player.md](docs/Player.md) — Character level, XP, and inventory weight fields
 
 Use `{ "type": "describe" }` at runtime to get the full list of all available fields with descriptions.
 
