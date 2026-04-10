@@ -279,33 +279,4 @@ namespace FieldRegistry
             return std::nullopt;
         return it->second;
     }
-
-    std::string BuildDescribeJson()
-    {
-        nlohmann::json result;
-        result["type"] = "describe";
-        auto& fields   = result["fields"];
-        for (auto& [key, entry] : s_registry) {
-            std::string valueTypeStr;
-            switch (entry.valueType) {
-                case ValueType::kCurrent:
-                    valueTypeStr = "current";
-                    break;
-                case ValueType::kPermanent:
-                    valueTypeStr = "permanent";
-                    break;
-                case ValueType::kBase:
-                    valueTypeStr = "base";
-                    break;
-                case ValueType::kClamped:
-                    valueTypeStr = "clamped";
-                    break;
-            }
-            fields[key] = { { "valueType", "float" }, { "valueCategory", valueTypeStr }, { "description", entry.description } };
-        }
-        for (auto& [key, entry] : s_json_registry) {
-            fields[key] = { { "valueType", entry.valueTypeName }, { "description", entry.description } };
-        }
-        return result.dump();
-    }
 }

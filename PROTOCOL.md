@@ -72,13 +72,14 @@ Performs a **one-shot read** of the requested fields and returns a single
 
 ---
 
-### `describe`
+### `heartbeat`
 
-Returns the full list of field keys supported by the plugin, including their
-value type and description.
+Sent by the client periodically (recommended: every 1 second) to verify that
+the server is alive and reachable. The server replies immediately with a
+`"heartbeat"` message containing the current server timestamp.
 
 ```json
-{ "type": "describe" }
+{ "type": "heartbeat" }
 ```
 
 ---
@@ -100,17 +101,14 @@ Sent in response to a subscription push or a `"query"` request.
 }
 ```
 
-### `describe`
+### `heartbeat`
 
-Sent in response to a `"describe"` request.
+Sent in response to a client `"heartbeat"` request.
 
 ```jsonc
 {
-  "type": "describe",
-  "fields": {
-    "ActorValue::kHealth": { "valueType": "float", "description": "Current health points" },
-    ...
-  }
+  "type": "heartbeat",
+  "ts": 1712462400123   // Unix timestamp in milliseconds (server time)
 }
 ```
 
@@ -137,8 +135,6 @@ Fields of different types can be freely mixed in a single `subscribe` or `query`
 - [docs/ActorValue.md](docs/ActorValue.md) — All ActorValue fields and value type modifiers
 - [docs/Inventory.md](docs/Inventory.md) — All Inventory fields with detailed response structures
 - [docs/Player.md](docs/Player.md) — Character level, XP, and inventory weight fields
-
-Use `{ "type": "describe" }` at runtime to get the full list of all available fields with descriptions.
 
 ---
 
@@ -244,24 +240,20 @@ sheet. It uses `"query"` instead of subscribing to avoid unnecessary traffic.
 
 ---
 
-### Example 4 — Discover available fields
+### Example 4 — Connection keep-alive via heartbeat
 
-**Client sends:**
+A client sends a heartbeat every second to confirm the server is running.
+
+**Client sends (every 1 s):**
 ```json
-{ "type": "describe" }
+{ "type": "heartbeat" }
 ```
 
-**Server replies:**
-```jsonc
+**Server replies immediately:**
+```json
 {
-  "type": "describe",
-  "fields": {
-    "ActorValue::kHealth":    { "valueType": "float",   "valueCategory": "current", "description": "Current health points" },
-    "ActorValue::kMagicka":   { "valueType": "float",   "valueCategory": "current", "description": "Current magicka points" },
-    "Inventory::Categories":  { "valueType": "array",   "description": "Array of inventory categories with item counts" },
-    "Inventory::Gold":        { "valueType": "integer", "description": "Player's current gold amount" },
-    // ... all registered fields
-  }
+  "type": "heartbeat",
+  "ts": 1712462402000
 }
 ```
 
