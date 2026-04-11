@@ -15,7 +15,7 @@ WsSession::WsSession(tcp::socket socket, asio::io_context& ioc)
 
 WsSession::~WsSession()
 {
-    CancelSubscription();
+    CancelAllSubscriptions();
 }
 
 void WsSession::run()
@@ -53,7 +53,7 @@ void WsSession::doRead()
 {
     ws_.async_read(buf_, [self = shared_from_this()](beast::error_code ec, std::size_t) {
         if (ec) {
-            self->CancelSubscription();
+            self->CancelAllSubscriptions();
             SKSE::GetTaskInterface()->AddTask([] { PrintConsole("[WS] Client disconnected"); });
             return;
         }
@@ -69,58 +69,75 @@ void WsSession::doRead()
 
 void WsSession::SetSubscription(SubscriptionState state)
 {
-    CancelSubscription();
+    // Cancel any existing subscription with the same id.
+    CancelSubscription(state.id);
+
     state.frequencyMs = std::max(MIN_FREQUENCY_MS, state.frequencyMs);
-    subscription_     = std::move(state);
-    subTimer_         = std::make_unique<asio::steady_timer>(ioc_);
-    schedulePush();
+
+    SubscriptionEntry entry;
+    entry.state = std::move(state);
+    entry.timer = std::make_unique<asio::steady_timer>(ioc_);
+
+    // Copy the id before moving entry into the map.
+    const std::string id = entry.state.id;
+    subscriptions_.emplace(id, std::move(entry));
+    schedulePush(id);
 }
 
-void WsSession::CancelSubscription()
+void WsSession::CancelSubscription(const std::string& id)
 {
-    if (subTimer_) {
-        subTimer_->cancel();
-        subTimer_.reset();
+    auto it = subscriptions_.find(id);
+    if (it != subscriptions_.end()) {
+        it->second.timer->cancel();
+        subscriptions_.erase(it);
     }
-    subscription_.reset();
 }
 
-void WsSession::schedulePush()
+void WsSession::CancelAllSubscriptions()
 {
-    if (!subscription_ || !subTimer_)
+    for (auto& [id, entry] : subscriptions_)
+        entry.timer->cancel();
+    subscriptions_.clear();
+}
+
+void WsSession::schedulePush(const std::string& id)
+{
+    auto it = subscriptions_.find(id);
+    if (it == subscriptions_.end())
         return;
 
-    subTimer_->expires_after(std::chrono::milliseconds(subscription_->frequencyMs));
-    subTimer_->async_wait([self = shared_from_this()](beast::error_code ec) {
-        if (ec || !self->subscription_)
-            return;
-        self->doPush();
+    it->second.timer->expires_after(std::chrono::milliseconds(it->second.state.frequencyMs));
+    it->second.timer->async_wait([self = shared_from_this(), id](beast::error_code ec) {
+        if (!ec)
+            self->doPush(id);
     });
 }
 
-void WsSession::doPush()
+void WsSession::doPush(const std::string& id)
 {
-    if (!subscription_)
+    auto it = subscriptions_.find(id);
+    if (it == subscriptions_.end())
         return;
 
     // Snapshot the current subscription state for the game thread.
     // lastValues is propagated back to the session after the read.
-    SubscriptionState snapshot = *subscription_;
+    SubscriptionState snapshot = it->second.state;
 
     SKSE::GetTaskInterface()->AddTask([self = shared_from_this(), snapshot]() mutable {
         std::string json = GameReader::BuildSubscriptionJson(snapshot);
 
-        asio::post(self->ioc_, [self, json, lastValues = snapshot.lastValues] {
-            if (!self->subscription_)
+        asio::post(self->ioc_, [self, json, id = snapshot.id, lastValues = snapshot.lastValues] {
+            auto it = self->subscriptions_.find(id);
+            if (it == self->subscriptions_.end())
                 return;
 
             // Propagate updated lastValues back to the live subscription.
-            self->subscription_->lastValues = lastValues;
+            it->second.state.lastValues = lastValues;
 
             if (!json.empty())
                 self->send(json);
 
-            self->schedulePush();
+            self->schedulePush(id);
         });
     });
 }

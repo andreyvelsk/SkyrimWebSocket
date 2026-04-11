@@ -89,6 +89,7 @@ namespace GameReader
 
         nlohmann::json msg;
         msg["type"]   = "data";
+        msg["id"]     = state.id;
         msg["ts"]     = nowMs;
         msg["fields"] = dataFields;
         return msg.dump();

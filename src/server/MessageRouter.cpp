@@ -50,7 +50,13 @@ namespace MessageRouter
         const std::string type = msg.value("type", "");
 
         if (type == "subscribe") {
+            if (!msg.contains("id") || !msg["id"].is_string()) {
+                session->send(R"({"type":"error","message":"Missing or invalid 'id' in subscribe"})");
+                return;
+            }
+
             SubscriptionState state;
+            state.id = msg["id"].get<std::string>();
 
             if (msg.contains("settings") && msg["settings"].is_object()) {
                 auto& s        = msg["settings"];
@@ -66,7 +72,10 @@ namespace MessageRouter
             session->SetSubscription(std::move(state));
 
         } else if (type == "unsubscribe") {
-            session->CancelSubscription();
+            if (msg.contains("id") && msg["id"].is_string())
+                session->CancelSubscription(msg["id"].get<std::string>());
+            else
+                session->CancelAllSubscriptions();
 
         } else if (type == "heartbeat") {
             const auto nowMs = std::chrono::duration_cast<std::chrono::milliseconds>(

@@ -6,8 +6,8 @@
 #include <boost/beast/websocket.hpp>
 #include <deque>
 #include <memory>
-#include <optional>
 #include <string>
+#include <unordered_map>
 
 class WsSession : public std::enable_shared_from_this<WsSession>
 {
@@ -16,9 +16,14 @@ class WsSession : public std::enable_shared_from_this<WsSession>
     std::deque<std::string>                                        writeQueue_;
     bool                                                           writing_ = false;
 
-    boost::asio::io_context&                   ioc_;
-    std::optional<SubscriptionState>           subscription_;
-    std::unique_ptr<boost::asio::steady_timer> subTimer_;
+    boost::asio::io_context& ioc_;
+
+    struct SubscriptionEntry {
+        SubscriptionState                          state;
+        std::unique_ptr<boost::asio::steady_timer> timer;
+    };
+
+    std::unordered_map<std::string, SubscriptionEntry> subscriptions_;
 
 public:
     WsSession(boost::asio::ip::tcp::socket socket,
@@ -29,20 +34,24 @@ public:
     void run();
     void send(const std::string& msg);  // called only from the io_context thread
 
-    // Replaces the current subscription and starts the push timer.
+    // Adds or replaces the subscription identified by state.id and starts its push timer.
     // Called only from the io_context thread.
     void SetSubscription(SubscriptionState state);
 
-    // Stops the push timer and clears the current subscription.
+    // Stops and removes the subscription with the given id.
     // Called only from the io_context thread.
-    void CancelSubscription();
+    void CancelSubscription(const std::string& id);
+
+    // Stops and removes all active subscriptions.
+    // Called only from the io_context thread.
+    void CancelAllSubscriptions();
 
     boost::asio::io_context& ioc() { return ioc_; }
 
 private:
     void doWrite();
     void doRead();
-    void schedulePush();
-    void doPush();
+    void schedulePush(const std::string& id);
+    void doPush(const std::string& id);
 };
 

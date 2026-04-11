@@ -19,13 +19,15 @@ All messages are UTF-8 JSON objects with a required `"type"` field.
 
 ### `subscribe`
 
-Starts (or replaces) a repeating push subscription. The server will send a
-`"data"` message at the requested frequency for as long as the session is open
-or until `"unsubscribe"` is received.
+Starts (or replaces) a push subscription identified by `"id"`. Multiple
+subscriptions with different IDs can coexist on the same connection. The server
+will send a `"data"` message at the requested frequency for as long as the
+session is open or until `"unsubscribe"` is received for that ID.
 
 ```jsonc
 {
   "type": "subscribe",
+  "id": "my-sub",           // unique subscription identifier (required)
   "settings": {
     "frequency": 200,       // push interval in milliseconds (minimum: 50, default: 500)
     "sendOnChange": false   // when true, only send a message if at least one value changed
@@ -39,6 +41,7 @@ or until `"unsubscribe"` is received.
 
 | Field | Required | Default | Description |
 |---|---|---|---|
+| `id` | **yes** | — | Unique identifier for this subscription. Sending `subscribe` with an existing `id` replaces that subscription. |
 | `settings.frequency` | no | `500` | Push interval in ms. Clamped to minimum 50. |
 | `settings.sendOnChange` | no | `false` | Skip the push entirely when no values have changed since the last delivery. |
 | `fields` | no | `{}` | Map of user-defined response key → registry key. Empty map produces no data. |
@@ -47,9 +50,14 @@ or until `"unsubscribe"` is received.
 
 ### `unsubscribe`
 
-Stops the current push subscription. Sending `"subscribe"` again restarts it.
+Stops a specific subscription by ID. If `"id"` is omitted, all active
+subscriptions are cancelled.
 
-```json
+```jsonc
+// Stop a specific subscription:
+{ "type": "unsubscribe", "id": "my-sub" }
+
+// Stop all subscriptions:
 { "type": "unsubscribe" }
 ```
 
@@ -93,13 +101,17 @@ Sent in response to a subscription push or a `"query"` request.
 ```jsonc
 {
   "type": "data",
-  "ts": 1712462400123,   // Unix timestamp in milliseconds
+  "id": "my-sub",          // subscription id; empty string ("") for query responses
+  "ts": 1712462400123,     // Unix timestamp in milliseconds
   "fields": {
-    "<alias>": <float>,  // one entry per successfully resolved field
+    "<alias>": <float>,    // one entry per successfully resolved field
     ...
   }
 }
 ```
+
+For `"query"` responses `"id"` is always `""` because queries are one-shot
+requests that are not associated with any named subscription.
 
 ### `heartbeat`
 
@@ -150,6 +162,7 @@ in the client application.
 ```json
 {
   "type": "subscribe",
+  "id": "vitals",
   "settings": {
     "frequency": 200
   },
@@ -165,6 +178,7 @@ in the client application.
 ```json
 {
   "type": "data",
+  "id": "vitals",
   "ts": 1712462400123,
   "fields": {
     "hp":  320.5,
@@ -185,6 +199,7 @@ should not be wasted when nothing has changed.
 ```json
 {
   "type": "subscribe",
+  "id": "skills",
   "settings": {
     "frequency": 1000,
     "sendOnChange": true
@@ -227,6 +242,7 @@ sheet. It uses `"query"` instead of subscribing to avoid unnecessary traffic.
 ```json
 {
   "type": "data",
+  "id": "",
   "ts": 1712462401000,
   "fields": {
     "fireRes":   25.0,
@@ -268,6 +284,7 @@ current weapon loadout in a single push stream.
 ```json
 {
   "type": "subscribe",
+  "id": "hud",
   "settings": { "frequency": 1000, "sendOnChange": true },
   "fields": {
     "hp":      "ActorValue::kHealth",
@@ -281,6 +298,7 @@ current weapon loadout in a single push stream.
 ```json
 {
   "type": "data",
+  "id": "hud",
   "ts": 1712462400123,
   "fields": {
     "hp": 320.5,
@@ -294,6 +312,47 @@ current weapon loadout in a single push stream.
     ]
   }
 }
+```
+
+---
+
+### Example 6 — Multiple concurrent subscriptions
+
+A client subscribes to two independent streams: fast vitals and slow-changing
+skill values. Both use the same WebSocket connection.
+
+**Client sends (subscription 1):**
+```json
+{
+  "type": "subscribe",
+  "id": "vitals",
+  "settings": { "frequency": 100 },
+  "fields": {
+    "hp":  "ActorValue::kHealth",
+    "mp":  "ActorValue::kMagicka",
+    "sta": "ActorValue::kStamina"
+  }
+}
+```
+
+**Client sends (subscription 2):**
+```json
+{
+  "type": "subscribe",
+  "id": "skills",
+  "settings": { "frequency": 2000, "sendOnChange": true },
+  "fields": {
+    "sneak":    "ActorValue::kSneak",
+    "lockpick": "ActorValue::kLockpicking"
+  }
+}
+```
+
+The server sends `"data"` messages tagged with the respective `"id"` at
+independent intervals. To stop only the skill subscription:
+
+```json
+{ "type": "unsubscribe", "id": "skills" }
 ```
 
 ---
