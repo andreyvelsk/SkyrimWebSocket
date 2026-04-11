@@ -256,6 +256,11 @@ namespace FieldRegistry
         { "Player::CarryWeight",
           { "Maximum carry weight (same value as ActorValue::kCarryWeight)", "float",
             &PlayerReader::ReadCarryWeight } },
+
+        // Game settings
+        { "Game::Language",
+          { "Current game language from sLanguage:General INI setting (e.g. \"english\", \"russian\")", "string",
+            &PlayerReader::ReadLanguage } },
     };
     // clang-format on
 

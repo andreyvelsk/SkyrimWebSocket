@@ -55,4 +55,16 @@ namespace PlayerReader
             return 0.0f;
         return avo->GetActorValue(RE::ActorValue::kCarryWeight);
     }
+
+    nlohmann::json ReadLanguage()
+    {
+        auto* settings = RE::INISettingCollection::GetSingleton();
+        if (!settings)
+            return "english";
+        auto* setting = settings->GetSetting("sLanguage:General");
+        if (!setting)
+            return "english";
+        const char* str = setting->GetString();
+        return str ? std::string(str) : "english";
+    }
 }
