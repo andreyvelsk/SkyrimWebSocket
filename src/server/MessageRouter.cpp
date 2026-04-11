@@ -87,12 +87,17 @@ namespace MessageRouter
             session->send(resp.dump());
 
         } else if (type == "query") {
+            if (!msg.contains("id") || !msg["id"].is_string()) {
+                session->send(R"({"type":"error","message":"Missing or invalid 'id' in query"})");
+                return;
+            }
             if (!msg.contains("fields") || !msg["fields"].is_object()) {
                 session->send(R"({"type":"error","message":"Missing or invalid 'fields' in query"})");
                 return;
             }
 
             SubscriptionState oneShot;
+            oneShot.id           = msg["id"].get<std::string>();
             oneShot.sendOnChange = false;
             if (!ParseFields(msg["fields"], session, oneShot.fields))
                 return;
@@ -104,6 +109,9 @@ namespace MessageRouter
                         session->send(json);
                 });
             });
+
+        } else if (type == "unsubscribe_all") {
+            session->CancelAllSubscriptions();
 
         } else {
             session->send(R"({"type":"error","message":"Unknown message type"})");

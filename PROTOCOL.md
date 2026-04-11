@@ -71,11 +71,27 @@ Performs a **one-shot read** of the requested fields and returns a single
 ```jsonc
 {
   "type": "query",
+  "id": "my-query",   // unique request identifier (required)
   "fields": {
     "<alias>": "<registry key>",
     ...
   }
 }
+```
+
+| Field | Required | Default | Description |
+|---|---|---|---|
+| `id` | **yes** | — | Identifier echoed back in the `"data"` response so the client can match the reply to the request. |
+| `fields` | **yes** | — | Map of user-defined response key → registry key. |
+
+---
+
+### `unsubscribe_all`
+
+Stops **all** active subscriptions at once.
+
+```json
+{ "type": "unsubscribe_all" }
 ```
 
 ---
@@ -101,7 +117,7 @@ Sent in response to a subscription push or a `"query"` request.
 ```jsonc
 {
   "type": "data",
-  "id": "my-sub",          // subscription id; empty string ("") for query responses
+  "id": "my-sub",          // subscription id or query id
   "ts": 1712462400123,     // Unix timestamp in milliseconds
   "fields": {
     "<alias>": <float>,    // one entry per successfully resolved field
@@ -110,8 +126,7 @@ Sent in response to a subscription push or a `"query"` request.
 }
 ```
 
-For `"query"` responses `"id"` is always `""` because queries are one-shot
-requests that are not associated with any named subscription.
+The `"id"` field always mirrors the `"id"` from the originating `"subscribe"` or `"query"` message, allowing the client to route responses correctly.
 
 ### `heartbeat`
 
@@ -228,6 +243,7 @@ sheet. It uses `"query"` instead of subscribing to avoid unnecessary traffic.
 ```json
 {
   "type": "query",
+  "id": "resistances",
   "fields": {
     "fireRes":   "ActorValue::kResistFire",
     "frostRes":  "ActorValue::kResistFrost",
@@ -242,7 +258,7 @@ sheet. It uses `"query"` instead of subscribing to avoid unnecessary traffic.
 ```json
 {
   "type": "data",
-  "id": "",
+  "id": "resistances",
   "ts": 1712462401000,
   "fields": {
     "fireRes":   25.0,
