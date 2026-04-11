@@ -5,6 +5,7 @@
 #include "../game/GameReader.h"
 #include "../Utils.h"
 
+#include <chrono>
 #include <nlohmann/json.hpp>
 
 namespace asio = boost::asio;
@@ -67,8 +68,14 @@ namespace MessageRouter
         } else if (type == "unsubscribe") {
             session->CancelSubscription();
 
-        } else if (type == "describe") {
-            session->send(FieldRegistry::BuildDescribeJson());
+        } else if (type == "heartbeat") {
+            const auto nowMs = std::chrono::duration_cast<std::chrono::milliseconds>(
+                                   std::chrono::system_clock::now().time_since_epoch())
+                                   .count();
+            nlohmann::json resp;
+            resp["type"] = "heartbeat";
+            resp["ts"]   = nowMs;
+            session->send(resp.dump());
 
         } else if (type == "query") {
             if (!msg.contains("fields") || !msg["fields"].is_object()) {

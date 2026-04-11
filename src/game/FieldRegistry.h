@@ -35,5 +35,4 @@ namespace FieldRegistry
     const std::unordered_map<std::string, Entry>& GetAll();
     std::optional<Entry>                           Resolve(const std::string& key);
     std::optional<JsonEntry>                       ResolveJson(const std::string& key);
-    std::string                                    BuildDescribeJson();
 }

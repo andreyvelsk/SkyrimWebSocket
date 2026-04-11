@@ -1,5 +1,6 @@
 #include "FieldRegistry.h"
 #include "InventoryReader.h"
+#include "PlayerReader.h"
 
 #include <nlohmann/json.hpp>
 
@@ -235,6 +236,26 @@ namespace FieldRegistry
         { "Inventory::Items::Favorites",
           { "Favorited items across all categories", "array",
             &InventoryReader::ReadFavorites } },
+
+        // Player stats
+        { "Player::Level",
+          { "Character level", "integer",
+            &PlayerReader::ReadLevel } },
+        { "Player::XP::Current",
+          { "XP earned within the current level (resets to 0 on level-up)", "float",
+            &PlayerReader::ReadXPCurrent } },
+        { "Player::XP::Next",
+          { "XP threshold required to reach the next level", "float",
+            &PlayerReader::ReadXPNext } },
+        { "Player::XP::LevelStart",
+          { "XP value at the start of the current level (always 0; provided for progress-bar math alongside XP::Current and XP::Next)", "float",
+            &PlayerReader::ReadXPLevelStart } },
+        { "Player::InventoryWeight",
+          { "Total weight of all items currently in the player's inventory", "float",
+            &PlayerReader::ReadInventoryWeight } },
+        { "Player::CarryWeight",
+          { "Maximum carry weight (same value as ActorValue::kCarryWeight)", "float",
+            &PlayerReader::ReadCarryWeight } },
     };
     // clang-format on
 
@@ -257,34 +278,5 @@ namespace FieldRegistry
         if (it == s_json_registry.end())
             return std::nullopt;
         return it->second;
-    }
-
-    std::string BuildDescribeJson()
-    {
-        nlohmann::json result;
-        result["type"] = "describe";
-        auto& fields   = result["fields"];
-        for (auto& [key, entry] : s_registry) {
-            std::string valueTypeStr;
-            switch (entry.valueType) {
-                case ValueType::kCurrent:
-                    valueTypeStr = "current";
-                    break;
-                case ValueType::kPermanent:
-                    valueTypeStr = "permanent";
-                    break;
-                case ValueType::kBase:
-                    valueTypeStr = "base";
-                    break;
-                case ValueType::kClamped:
-                    valueTypeStr = "clamped";
-                    break;
-            }
-            fields[key] = { { "valueType", "float" }, { "valueCategory", valueTypeStr }, { "description", entry.description } };
-        }
-        for (auto& [key, entry] : s_json_registry) {
-            fields[key] = { { "valueType", entry.valueTypeName }, { "description", entry.description } };
-        }
-        return result.dump();
     }
 }
