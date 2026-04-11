@@ -3,6 +3,7 @@
 #include "WsSession.h"
 #include "../game/FieldRegistry.h"
 #include "../game/GameReader.h"
+#include "../game/GameWriter.h"
 #include "../Utils.h"
 
 #include <chrono>
@@ -112,6 +113,23 @@ namespace MessageRouter
 
         } else if (type == "unsubscribe_all") {
             session->CancelAllSubscriptions();
+
+        } else if (type == "command") {
+            if (!msg.contains("id") || !msg["id"].is_string()) {
+                session->send(R"({"type":"error","message":"Missing or invalid 'id' in command"})");
+                return;
+            }
+            if (!msg.contains("action") || !msg["action"].is_string()) {
+                session->send(R"({"type":"error","message":"Missing or invalid 'action' in command"})");
+                return;
+            }
+
+            SKSE::GetTaskInterface()->AddTask([session, msg]() mutable {
+                std::string json = GameWriter::ExecuteCommand(msg);
+                asio::post(session->ioc(), [session, json] {
+                    session->send(json);
+                });
+            });
 
         } else {
             session->send(R"({"type":"error","message":"Unknown message type"})");

@@ -96,6 +96,38 @@ Stops **all** active subscriptions at once.
 
 ---
 
+### `command`
+
+Sends an **inventory action** to the game. The server executes it on the game
+thread and replies immediately with a `"commandResult"` message.
+
+```jsonc
+{
+  "type":    "command",
+  "id":      "cmd-1",         // unique request identifier (required)
+  "action":  "<action>",      // see table below (required)
+  "formId":  "0x00012EB7",    // hex string or unsigned integer (required)
+  // action-specific parameters:
+  "hand":     "right",        // equip / unequip: "right" (default) | "left"
+  "count":    1,              // drop: number of items to drop (default 1)
+  "favorite": true            // favorite: true = add, false = remove (default true)
+}
+```
+
+| `action`    | Required extra fields | Description |
+|---|---|---|
+| `equip`     | `hand` (optional, default `"right"`) | Equip the item. For weapons, `hand` selects the hand slot; all other equippable items ignore `hand`. |
+| `unequip`   | `hand` (optional) | Unequip the item. For weapons, `hand` targets a specific hand; omit to unequip from whichever slot it occupies. |
+| `use`       | — | Consume the item (potions and food are consumed; scrolls are cast). Only `AlchemyItem` and `Scroll` form types are supported. |
+| `drop`      | `count` (optional, default `1`) | Drop items from inventory. `count` is clamped to the quantity available. |
+| `favorite`  | `favorite` bool (optional, default `true`) | Add (`true`) or remove (`false`) the item from the player's favorites. |
+
+All actions validate that the item is in the player's inventory before
+executing. Attempting to act on an item not in the inventory returns an error
+`"commandResult"`.
+
+---
+
 ### `heartbeat`
 
 Sent by the client periodically (recommended: every 1 second) to verify that
@@ -148,6 +180,27 @@ Sent when a message cannot be processed. The current subscription (if any) is
 {
   "type": "error",
   "message": "Unknown field key: 'ActorValue::kBanana'"
+}
+```
+
+### `commandResult`
+
+Sent in response to a client `"command"` message.
+
+```jsonc
+// Success:
+{
+  "type":    "commandResult",
+  "id":      "cmd-1",   // echoes the command id
+  "success": true
+}
+
+// Failure:
+{
+  "type":    "commandResult",
+  "id":      "cmd-1",
+  "success": false,
+  "error":   "Item not in player inventory"
 }
 ```
 
