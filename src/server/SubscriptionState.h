@@ -5,6 +5,8 @@
 
 struct SubscriptionState
 {
+    std::string id;
+
     int  frequencyMs  = 500;
     bool sendOnChange = false;
 
