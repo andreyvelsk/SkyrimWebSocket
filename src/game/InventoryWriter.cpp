@@ -209,36 +209,32 @@ namespace InventoryWriter
             if (targetEntry->IsFavorited())
                 return MakeSuccess();
 
-            // We need an ExtraDataList to attach the ExtraHotkey to.
-            RE::ExtraDataList* xList = nullptr;
-            if (targetEntry->extraLists && !targetEntry->extraLists->empty())
-                xList = targetEntry->extraLists->front();
+            // Pass the first existing ExtraDataList to SetFavorite, or nullptr
+            // if there is none — the game will create one internally as needed.
+            RE::ExtraDataList* xList =
+                (targetEntry->extraLists && !targetEntry->extraLists->empty())
+                    ? targetEntry->extraLists->front()
+                    : nullptr;
 
-            if (!xList) {
-                // Create a fresh ExtraDataList and register it with the entry.
-                // Ownership is transferred to targetEntry->extraLists, which is
-                // managed by the game's inventory system for the actor's lifetime.
-                xList = new RE::ExtraDataList();
-                if (!targetEntry->extraLists)
-                    targetEntry->extraLists =
-                        new RE::BSSimpleList<RE::ExtraDataList*>();
-                targetEntry->extraLists->push_front(xList);
-            }
-
-            // Create an ExtraHotkey with no hotkey binding (favourited only).
-            // Ownership is transferred to xList via ExtraDataList::Add, which
-            // manages the lifetime of all attached BSExtraData nodes.
-            auto* xHotkey = new RE::ExtraHotkey(RE::ExtraHotkey::Hotkey::kUnbound);
-            xList->Add(xHotkey);
+            invChanges->SetFavorite(targetEntry, xList);
 
         } else {
-            // Remove any ExtraHotkey entries from every list in this entry.
+            // Find the ExtraDataList that holds the hotkey so we can pass it to
+            // RemoveFavorite; if none is found the item is already not favourited.
+            RE::ExtraDataList* xList = nullptr;
             if (targetEntry->extraLists) {
-                for (auto* xList : *targetEntry->extraLists) {
-                    if (xList && xList->HasType(RE::ExtraDataType::kHotkey))
-                        xList->Remove(RE::ExtraDataType::kHotkey, nullptr);
+                for (auto* list : *targetEntry->extraLists) {
+                    if (list && list->HasType(RE::ExtraDataType::kHotkey)) {
+                        xList = list;
+                        break;
+                    }
                 }
             }
+
+            if (!xList)
+                return MakeSuccess();
+
+            invChanges->RemoveFavorite(targetEntry, xList);
         }
 
         return MakeSuccess();
