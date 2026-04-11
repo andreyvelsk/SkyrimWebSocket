@@ -65,7 +65,8 @@ Every `Inventory::Items::*` category element has these fields:
 ### Weapons
 
 Additional fields:
-- `isEquipped` (bool) — Currently equipped on character
+- `isEquipped` (bool) — Currently equipped on character (true if in either hand)
+- `equippedSlot` (string) — Which hand the weapon is in: `"Right"`, `"Left"`, `"Both"`, or `"None"`
 - `baseDamage` (float) — Weapon base damage before perks
 - `damage` (float) — Effective damage = `baseDamage × kAttackDamageMult`
 - `enchantment` (object or null) — See [Enchantment Object](#enchantment-object)

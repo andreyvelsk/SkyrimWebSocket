@@ -361,7 +361,31 @@ namespace InventoryReader
                 continue;
 
             auto j           = BuildBaseEntry(item, data);
-            j["isEquipped"]  = data.second ? data.second->IsWorn() : false;
+
+            // Determine which hand (if any) the weapon is currently equipped in.
+            // ExtraDataType::kWorn  → right hand  (or the default equip slot).
+            // ExtraDataType::kWornLeft → left hand.
+            bool wornRight = false;
+            bool wornLeft  = false;
+            if (data.second && data.second->extraLists) {
+                for (const auto* xList : *data.second->extraLists) {
+                    if (!xList)
+                        continue;
+                    if (xList->HasType(RE::ExtraDataType::kWorn))
+                        wornRight = true;
+                    if (xList->HasType(RE::ExtraDataType::kWornLeft))
+                        wornLeft = true;
+                }
+            }
+            j["isEquipped"]  = wornRight || wornLeft;
+            if (wornRight && wornLeft)
+                j["equippedSlot"] = "Both";
+            else if (wornRight)
+                j["equippedSlot"] = "Right";
+            else if (wornLeft)
+                j["equippedSlot"] = "Left";
+            else
+                j["equippedSlot"] = "None";
 
             const auto* weap = item->As<RE::TESObjectWEAP>();
             const float base = weap ? weap->GetAttackDamage() : 0.f;
