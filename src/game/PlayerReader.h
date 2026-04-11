@@ -28,4 +28,9 @@ namespace PlayerReader
     // Returns the player's maximum carry weight as a float.
     // Must be called on the game thread.
     nlohmann::json ReadCarryWeight();
+
+    // Returns the current game language as a lowercase string (e.g. "english", "russian").
+    // Reads sLanguage:General from the INI setting collection.
+    // Must be called on the game thread.
+    nlohmann::json ReadLanguage();
 }

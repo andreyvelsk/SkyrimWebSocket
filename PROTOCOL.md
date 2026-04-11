@@ -120,7 +120,7 @@ Sent in response to a subscription push or a `"query"` request.
   "id": "my-sub",          // subscription id or query id
   "ts": 1712462400123,     // Unix timestamp in milliseconds
   "fields": {
-    "<alias>": <float>,    // one entry per successfully resolved field
+    "<alias>": <float | integer | string | array>,    // one entry per successfully resolved field
     ...
   }
 }
@@ -155,13 +155,14 @@ Sent when a message cannot be processed. The current subscription (if any) is
 
 ## Available field keys
 
-Field values are either `float` (all `ActorValue::*` keys) or JSON `array` / `integer` (all `Inventory::*` keys).
+Field values are `float` (all `ActorValue::*` keys), JSON `array` / `integer` (all `Inventory::*` keys), or `string` (all `Game::*` keys).
 Fields of different types can be freely mixed in a single `subscribe` or `query` message.
 
 **For a complete list of available fields, see:**
 - [docs/ActorValue.md](docs/ActorValue.md) — All ActorValue fields and value type modifiers
 - [docs/Inventory.md](docs/Inventory.md) — All Inventory fields with detailed response structures
 - [docs/Player.md](docs/Player.md) — Character level, XP, and inventory weight fields
+- [docs/Game.md](docs/Game.md) — Game-level settings such as the current language
 
 ---
 
