@@ -216,6 +216,8 @@ namespace InventoryWriter
 
             if (!xList) {
                 // Create a fresh ExtraDataList and register it with the entry.
+                // Ownership is transferred to targetEntry->extraLists, which is
+                // managed by the game's inventory system for the actor's lifetime.
                 xList = new RE::ExtraDataList();
                 if (!targetEntry->extraLists)
                     targetEntry->extraLists =
@@ -224,6 +226,8 @@ namespace InventoryWriter
             }
 
             // Create an ExtraHotkey with no hotkey binding (favourited only).
+            // Ownership is transferred to xList via ExtraDataList::Add, which
+            // manages the lifetime of all attached BSExtraData nodes.
             auto* xHotkey = new RE::ExtraHotkey();
             xHotkey->index = RE::ExtraHotkey::Hotkey::kUnbound;
             xList->Add(xHotkey);
