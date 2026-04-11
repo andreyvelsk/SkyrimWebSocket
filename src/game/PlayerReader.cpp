@@ -58,13 +58,14 @@ namespace PlayerReader
 
     nlohmann::json ReadLanguage()
     {
+        static constexpr const char* kDefaultLanguage = "english";
         auto* settings = RE::INISettingCollection::GetSingleton();
         if (!settings)
-            return "english";
+            return kDefaultLanguage;
         auto* setting = settings->GetSetting("sLanguage:General");
         if (!setting)
-            return "english";
+            return kDefaultLanguage;
         const char* str = setting->GetString();
-        return str ? std::string(str) : "english";
+        return str ? std::string(str) : kDefaultLanguage;
     }
 }
