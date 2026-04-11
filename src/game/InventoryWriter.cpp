@@ -228,8 +228,7 @@ namespace InventoryWriter
             // Create an ExtraHotkey with no hotkey binding (favourited only).
             // Ownership is transferred to xList via ExtraDataList::Add, which
             // manages the lifetime of all attached BSExtraData nodes.
-            auto* xHotkey = new RE::ExtraHotkey();
-            xHotkey->index = RE::ExtraHotkey::Hotkey::kUnbound;
+            auto* xHotkey = new RE::ExtraHotkey(RE::ExtraHotkey::Hotkey::kUnbound);
             xList->Add(xHotkey);
 
         } else {
