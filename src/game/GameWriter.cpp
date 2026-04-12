@@ -8,7 +8,7 @@ namespace GameWriter
     // Sentinel value for ExtraHotkey::hotkey indicating "favorited but not
     // assigned to a specific hotkey slot".  The Skyrim engine treats any
     // ExtraHotkey presence as a favourite marker regardless of the value.
-    static constexpr RE::HOTKEY_INDEX kFavoriteNoHotkey = static_cast<RE::HOTKEY_INDEX>(0xFF);
+    static constexpr RE::ExtraHotkey::Hotkey kFavoriteNoHotkey = static_cast<RE::ExtraHotkey::Hotkey>(0xFF);
 
     // ─── Helpers ──────────────────────────────────────────────────────────
 
