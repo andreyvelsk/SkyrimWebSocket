@@ -374,8 +374,12 @@ namespace InventoryReader
 
     // Determines which hand a weapon is currently equipped in by inspecting
     // the ExtraWorn / ExtraWornLeft flags on its extra-data lists.
-    // Returns "right", "left", "both" (dual-wielding same weapon), or nullptr.
-    static nlohmann::json GetWeaponEquippedHand(const RE::InventoryEntryData* entry)
+    // For two-handed weapons the engine only sets kWorn (right-hand flag)
+    // even though the weapon occupies both hands; isTwoHanded corrects this
+    // so the caller always sees "both" when both hand slots are blocked.
+    // Returns "right", "left", "both", or nullptr.
+    static nlohmann::json GetWeaponEquippedHand(const RE::InventoryEntryData* entry,
+                                                bool                          isTwoHanded)
     {
         if (!entry || !entry->extraLists)
             return nullptr;
@@ -391,7 +395,7 @@ namespace InventoryReader
                 left = true;
         }
 
-        if (right && left)
+        if (right && (left || isTwoHanded))
             return "both";
         if (right)
             return "right";
@@ -445,7 +449,7 @@ namespace InventoryReader
                 if (!twoHand)
                     slots.push_back("left");
                 j["equipSlots"]     = std::move(slots);
-                j["equippedHand"]   = GetWeaponEquippedHand(data.second.get());
+                j["equippedHand"]   = GetWeaponEquippedHand(data.second.get(), twoHand);
             } else {
                 j["weaponType"]     = nullptr;
                 j["isTwoHanded"]    = false;

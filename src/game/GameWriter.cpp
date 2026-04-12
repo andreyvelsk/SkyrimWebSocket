@@ -88,6 +88,32 @@ namespace GameWriter
         return inv.begin()->second.first;
     }
 
+    // Returns an ExtraDataList for the item that is NOT already worn in the
+    // opposite hand.  This is required for left-hand equipping: without an
+    // explicit ExtraDataList the engine always defaults to the right hand.
+    static RE::ExtraDataList* FindFreeExtraDataList(RE::InventoryEntryData* entry, bool forLeftHand)
+    {
+        if (!entry || !entry->extraLists)
+            return nullptr;
+
+        // The flag that marks the *opposite* hand — we want an xList that
+        // does NOT carry it, so the engine won't try to re-use an already-
+        // worn stack from the other hand.
+        const auto oppositeFlag = forLeftHand ? RE::ExtraDataType::kWorn
+                                              : RE::ExtraDataType::kWornLeft;
+
+        RE::ExtraDataList* fallback = nullptr;
+        for (auto* xList : *entry->extraLists) {
+            if (!xList)
+                continue;
+            if (!xList->HasType(oppositeFlag))
+                return xList;  // best choice: not worn in opposite hand
+            if (!fallback)
+                fallback = xList;
+        }
+        return fallback;
+    }
+
     // ─── Commands ─────────────────────────────────────────────────────────
 
     CommandResult EquipItem(RE::FormID formId, const std::string& hand)
@@ -111,17 +137,26 @@ namespace GameWriter
         if (!equipMgr)
             return {false, "Equipment manager not available"};
 
-        const RE::BGSEquipSlot* slot = nullptr;
+        const RE::BGSEquipSlot* slot    = nullptr;
+        RE::ExtraDataList*      xData   = nullptr;
 
         if (ft == RE::FormType::Weapon) {
             const auto* weap = form->As<RE::TESObjectWEAP>();
             if (weap && IsWeaponTwoHanded(weap->GetWeaponType()) && hand == "left")
                 return {false, "Two-handed weapon can only be equipped in the right hand"};
             slot = GetHandSlot(hand);
-        }
-        // For armor and ammo: slot = nullptr → engine auto-selects.
 
-        equipMgr->EquipObject(player, form, nullptr, 1, slot);
+            // Without an explicit ExtraDataList the engine ignores the slot
+            // and always equips to the right hand.  Find an xList that is
+            // not already worn in the opposite hand so the engine places the
+            // weapon in the requested hand.
+            auto* liveEntry = FindLiveEntry(player, formId);
+            if (liveEntry)
+                xData = FindFreeExtraDataList(liveEntry, hand == "left");
+        }
+        // For armor and ammo: slot = nullptr, xData = nullptr → engine auto-selects.
+
+        equipMgr->EquipObject(player, form, xData, 1, slot);
 
         PrintConsole("[WS] Equip " + std::string(form->GetName()) + (slot ? " → " + hand : ""));
         return {true, ""};
