@@ -395,7 +395,9 @@ namespace InventoryReader
                 left = true;
         }
 
-        if (right && (left || isTwoHanded))
+        if (isTwoHanded && (right || left))
+            return "both";
+        if (right && left)
             return "both";
         if (right)
             return "right";
