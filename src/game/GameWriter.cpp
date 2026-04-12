@@ -88,30 +88,36 @@ namespace GameWriter
         return inv.begin()->second.first;
     }
 
-    // Returns an ExtraDataList for the item that is NOT already worn in the
-    // opposite hand.  This is required for left-hand equipping: without an
-    // explicit ExtraDataList the engine always defaults to the right hand.
-    static RE::ExtraDataList* FindFreeExtraDataList(RE::InventoryEntryData* entry, bool forLeftHand)
+    // Returns the first ExtraDataList that is NOT worn in either hand.
+    // Used to obtain a "clean" xList to pass to EquipObject.
+    static RE::ExtraDataList* FindUnwornExtraDataList(RE::InventoryEntryData* entry)
     {
         if (!entry || !entry->extraLists)
             return nullptr;
-
-        // The flag that marks the *opposite* hand — we want an xList that
-        // does NOT carry it, so the engine won't try to re-use an already-
-        // worn stack from the other hand.
-        const auto oppositeFlag = forLeftHand ? RE::ExtraDataType::kWorn
-                                              : RE::ExtraDataType::kWornLeft;
-
-        RE::ExtraDataList* fallback = nullptr;
         for (auto* xList : *entry->extraLists) {
             if (!xList)
                 continue;
-            if (!xList->HasType(oppositeFlag))
-                return xList;  // best choice: not worn in opposite hand
-            if (!fallback)
-                fallback = xList;
+            if (!xList->HasType(RE::ExtraDataType::kWorn) &&
+                !xList->HasType(RE::ExtraDataType::kWornLeft))
+                return xList;
         }
-        return fallback;
+        return nullptr;
+    }
+
+    // Unequips a weapon from a specific hand.  Used internally before
+    // equipping to the opposite hand (hand swap).
+    static void DoUnequipWeapon(RE::ActorEquipManager* equipMgr,
+                                RE::PlayerCharacter*   player,
+                                RE::TESBoundObject*    form,
+                                RE::ExtraDataList*     xList,
+                                bool                   fromLeftHand)
+    {
+        const auto* slot = GetHandSlot(fromLeftHand ? "left" : "right");
+        equipMgr->UnequipObject(player, form, xList, 1, slot,
+                                /*a_queueEquip=*/true,
+                                /*a_forceEquip=*/false,
+                                /*a_playSounds=*/true,
+                                /*a_applyNow=*/false);
     }
 
     // ─── Commands ─────────────────────────────────────────────────────────
@@ -126,7 +132,8 @@ namespace GameWriter
         if (!form)
             return {false, "Form not found"};
 
-        if (GetInventoryCount(player, formId) <= 0)
+        const int32_t itemCount = GetInventoryCount(player, formId);
+        if (itemCount <= 0)
             return {false, "Item not in inventory"};
 
         const auto ft = form->GetFormType();
@@ -137,26 +144,57 @@ namespace GameWriter
         if (!equipMgr)
             return {false, "Equipment manager not available"};
 
-        const RE::BGSEquipSlot* slot    = nullptr;
-        RE::ExtraDataList*      xData   = nullptr;
+        const RE::BGSEquipSlot* slot  = nullptr;
+        RE::ExtraDataList*      xData = nullptr;
 
         if (ft == RE::FormType::Weapon) {
             const auto* weap = form->As<RE::TESObjectWEAP>();
             if (weap && IsWeaponTwoHanded(weap->GetWeaponType()) && hand == "left")
                 return {false, "Two-handed weapon can only be equipped in the right hand"};
-            slot = GetHandSlot(hand);
 
-            // Without an explicit ExtraDataList the engine ignores the slot
-            // and always equips to the right hand.  Find an xList that is
-            // not already worn in the opposite hand so the engine places the
-            // weapon in the requested hand.
+            slot = GetHandSlot(hand);
+            const bool leftHand = (hand == "left");
+
+            // --- Analyse current equipped state (mirrors SKSE EquipItemEx) ---
             auto* liveEntry = FindLiveEntry(player, formId);
-            if (liveEntry)
-                xData = FindFreeExtraDataList(liveEntry, hand == "left");
+            if (liveEntry) {
+                RE::ExtraDataList* wornRight = FindWornExtraDataList(liveEntry, false);
+                RE::ExtraDataList* wornLeft  = FindWornExtraDataList(liveEntry, true);
+
+                const bool inTarget = leftHand ? (wornLeft != nullptr)
+                                               : (wornRight != nullptr);
+                const bool inOther  = leftHand ? (wornRight != nullptr)
+                                               : (wornLeft != nullptr);
+
+                // Already in the requested hand — nothing to do.
+                if (inTarget) {
+                    PrintConsole("[WS] " + std::string(form->GetName()) + " already in " + hand + " hand");
+                    return {true, ""};
+                }
+
+                if (inOther) {
+                    if (itemCount < 2) {
+                        // Only one copy → must swap hands: unequip from current
+                        // hand first, then equip to target.
+                        RE::ExtraDataList* otherXList = leftHand ? wornRight : wornLeft;
+                        DoUnequipWeapon(equipMgr, player, form, otherXList, !leftHand);
+                    }
+                    // If 2+ copies, engine will dual-wield automatically;
+                    // just proceed to the EquipObject call below.
+                }
+
+                // Grab a non-worn xList for EquipObject so the engine
+                // creates a fresh wear record in the correct hand.
+                xData = FindUnwornExtraDataList(liveEntry);
+            }
         }
         // For armor and ammo: slot = nullptr, xData = nullptr → engine auto-selects.
 
-        equipMgr->EquipObject(player, form, xData, 1, slot);
+        equipMgr->EquipObject(player, form, xData, 1, slot,
+                              /*a_queueEquip=*/true,
+                              /*a_forceEquip=*/false,
+                              /*a_playSounds=*/true,
+                              /*a_applyNow=*/false);
 
         PrintConsole("[WS] Equip " + std::string(form->GetName()) + (slot ? " → " + hand : ""));
         return {true, ""};
@@ -186,17 +224,31 @@ namespace GameWriter
         const auto ft = form->GetFormType();
 
         if (ft == RE::FormType::Weapon) {
-            // For weapons, find the ExtraDataList for the target hand.
-            bool              leftHand = (hand == "left");
-            RE::ExtraDataList* xList    = FindWornExtraDataList(liveEntry, leftHand);
-            if (!xList) {
-                // Weapon may be in the other hand — try the opposite.
-                xList = FindWornExtraDataList(liveEntry, !leftHand);
-                if (!xList)
-                    return {false, "Weapon not found in any hand"};
+            // Following SKSE UnequipItemEx: find xList for requested hand,
+            // and always pass the matching slot.
+            const bool leftHand = (hand == "left");
+
+            RE::ExtraDataList* wornRight = FindWornExtraDataList(liveEntry, false);
+            RE::ExtraDataList* wornLeft  = FindWornExtraDataList(liveEntry, true);
+
+            // Determine which hand(s) to unequip based on user request.
+            bool doRight = !leftHand && wornRight;
+            bool doLeft  = leftHand && wornLeft;
+
+            // If weapon is not in the requested hand, try the other hand
+            // (e.g. user said "left" but weapon is only in right).
+            if (!doRight && !doLeft) {
+                doRight = wornRight != nullptr;
+                doLeft  = wornLeft != nullptr;
             }
-            const RE::BGSEquipSlot* slot = GetHandSlot(leftHand ? "left" : "right");
-            equipMgr->UnequipObject(player, form, xList, 1, slot);
+
+            if (!doRight && !doLeft)
+                return {false, "Weapon not found in any hand"};
+
+            if (doRight && wornRight)
+                DoUnequipWeapon(equipMgr, player, form, wornRight, false);
+            if (doLeft && wornLeft)
+                DoUnequipWeapon(equipMgr, player, form, wornLeft, true);
         } else {
             // Armor / ammo — no hand concept.
             equipMgr->UnequipObject(player, form);
