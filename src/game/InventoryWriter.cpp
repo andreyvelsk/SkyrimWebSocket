@@ -40,7 +40,9 @@ namespace InventoryWriter
         return RE::TESForm::LookupByID<RE::BGSEquipSlot>(id);
     }
 
-    // Returns how many instances of `item` are currently worn in either hand slot.
+    // Returns how many instances of `item` are currently worn in a hand slot
+    // (kWorn = right hand, kWornLeft = left hand).
+    // Weapons can only ever appear in these two slots, so this count is exact.
     static int CountWornInstances(RE::PlayerCharacter* player, RE::TESBoundObject* item)
     {
         auto* invChanges = player->GetInventoryChanges();
