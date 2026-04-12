@@ -153,12 +153,12 @@ namespace InventoryWriter
             xList = FindXListNotInHand(player, item, targetIsLeft);
         }
 
-        // forceEquip=true is the NORMAL equip mode.
-        // The naming is inverted relative to Papyrus: this parameter corresponds to
-        // !abPreventRemoval in Actor.EquipItem, so true = "allow normal removal through UI".
-        // Using false here would lock the item and show "You cannot remove this item".
+        // forceEquip=false is the NORMAL equip mode.
+        // forceEquip=true locks the item (abPreventRemoval), causing the engine to show
+        // "You cannot remove this item" and re-equip it automatically when something
+        // else displaces it.  We never want that behaviour here.
         equipManager->EquipObject(player, item, xList, 1, slot,
-                                  /*queueEquip*/ false, /*forceEquip*/ true,
+                                  /*queueEquip*/ false, /*forceEquip*/ false,
                                   /*playSounds*/ true,  /*applyNow*/   true);
         return MakeSuccess();
     }
