@@ -70,7 +70,8 @@ namespace InventoryWriter
         // moving an already-equipped copy from the other hand (fixes dual-wielding the same
         // weapon type when the player has two of them in their inventory).
         equipManager->EquipObject(player, item, nullptr, 1, slot,
-                                  false, false, true, true);
+                                  /*queueEquip*/ false, /*forceEquip*/ false,
+                                  /*playSounds*/ true,  /*applyNow*/   true);
         return MakeSuccess();
     }
 
@@ -112,7 +113,9 @@ namespace InventoryWriter
         }
 
         equipManager->UnequipObject(player, item, nullptr, 1, slot,
-                                    false, true, true, true, nullptr);
+                                    /*queueEquip*/ false, /*forceEquip*/ true,
+                                    /*playSounds*/ true,  /*applyNow*/   true,
+                                    /*otherItem*/  nullptr);
         return MakeSuccess();
     }
 
@@ -145,7 +148,8 @@ namespace InventoryWriter
         // Equipping a potion/food item triggers consumption; scrolls are cast.
         // Pass nullptr for the slot so the game uses the item's default behaviour.
         equipManager->EquipObject(player, item, nullptr, 1, nullptr,
-                                  false, true, true, true);
+                                  /*queueEquip*/ false, /*forceEquip*/ true,
+                                  /*playSounds*/ true,  /*applyNow*/   true);
         return MakeSuccess();
     }
 
