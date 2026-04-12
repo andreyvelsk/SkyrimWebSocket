@@ -114,10 +114,10 @@ namespace InventoryWriter
         const bool isWeapon = (item->GetFormType() == RE::FormType::Weapon);
         const bool targetIsLeft = (hand == "left");
 
-        // For weapons, snapshot what is currently in the OTHER hand before the
-        // equip call.  The engine sometimes unequips the other hand as a side
-        // effect of its internal one-handed weapon slot logic; we detect and
-        // correct that below.
+        // For one-handed weapons, snapshot what is currently in the OTHER hand before the
+        // equip call.  The engine sometimes unequips the other hand as a side effect of
+        // its internal weapon-slot assignment logic; we detect and correct that below.
+        // (Two-handed weapons naturally occupy both slots, so no restore is needed for them.)
         RE::FormID otherHandFormId = 0;
         if (isWeapon) {
             slot          = GetHandSlot(hand);
