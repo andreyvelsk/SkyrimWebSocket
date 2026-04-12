@@ -395,6 +395,8 @@ namespace InventoryReader
                 left = true;
         }
 
+        // Two-handed weapons always occupy both hands regardless of which
+        // worn flag the engine happens to set (normally kWorn only).
         if (isTwoHanded && (right || left))
             return "both";
         if (right && left)
