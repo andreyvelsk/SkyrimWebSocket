@@ -255,6 +255,25 @@ namespace InventoryReader
     };
     // clang-format on
 
+    // Returns the equip-slot category for a weapon based on its animation type:
+    // "both"  — two-handed weapons and bows/crossbows (occupy both hand slots)
+    // "right" — one-handed weapons and staves (default right-hand slot; can also be
+    //           equipped in the left hand by specifying hand="left" in the command)
+    static std::string GetWeaponEquipSlot(const RE::TESObjectWEAP* weap)
+    {
+        if (!weap)
+            return "right";
+        switch (weap->weaponData.animationType.get()) {
+            case RE::WEAPON_TYPE::kTwoHandSword:
+            case RE::WEAPON_TYPE::kTwoHandAxe:
+            case RE::WEAPON_TYPE::kBow:
+            case RE::WEAPON_TYPE::kCrossbow:
+                return "both";
+            default:
+                return "right";
+        }
+    }
+
     // ─── ReadCategories ───────────────────────────────────────────────────
 
     nlohmann::json ReadCategories()
@@ -379,15 +398,16 @@ namespace InventoryReader
             }
             j["isEquipped"]  = wornRight || wornLeft;
             if (wornRight && wornLeft)
-                j["equippedSlot"] = "Both";
+                j["equippedSlot"] = "both";
             else if (wornRight)
-                j["equippedSlot"] = "Right";
+                j["equippedSlot"] = "right";
             else if (wornLeft)
-                j["equippedSlot"] = "Left";
+                j["equippedSlot"] = "left";
             else
-                j["equippedSlot"] = "None";
+                j["equippedSlot"] = "none";
 
             const auto* weap = item->As<RE::TESObjectWEAP>();
+            j["equipSlot"]   = GetWeaponEquipSlot(weap);
             const float base = weap ? weap->GetAttackDamage() : 0.f;
             j["baseDamage"]  = base;
             j["damage"]      = base * atkMult;

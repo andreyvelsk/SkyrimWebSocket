@@ -48,22 +48,34 @@ namespace GameWriter
         nlohmann::json opResult;
 
         if (action == "equip") {
-            const std::string hand = msg.value("hand", "right");
+            const auto& payload    = msg.contains("payload") && msg["payload"].is_object()
+                                         ? msg["payload"]
+                                         : nlohmann::json::object();
+            const std::string hand = payload.value("hand", "right");
             opResult = InventoryWriter::Equip(formId, hand);
 
         } else if (action == "unequip") {
-            const std::string hand = msg.value("hand", "");
+            const auto& payload    = msg.contains("payload") && msg["payload"].is_object()
+                                         ? msg["payload"]
+                                         : nlohmann::json::object();
+            const std::string hand = payload.value("hand", "");
             opResult = InventoryWriter::Unequip(formId, hand);
 
         } else if (action == "use") {
             opResult = InventoryWriter::Use(formId);
 
         } else if (action == "drop") {
-            const int count = msg.value("count", 1);
+            const auto& payload = msg.contains("payload") && msg["payload"].is_object()
+                                      ? msg["payload"]
+                                      : nlohmann::json::object();
+            const int count     = payload.value("count", 1);
             opResult = InventoryWriter::Drop(formId, count);
 
         } else if (action == "favorite") {
-            const bool add = msg.value("favorite", true);
+            const auto& payload = msg.contains("payload") && msg["payload"].is_object()
+                                      ? msg["payload"]
+                                      : nlohmann::json::object();
+            const bool add      = payload.value("favorite", true);
             opResult = InventoryWriter::Favorite(formId, add);
 
         } else {

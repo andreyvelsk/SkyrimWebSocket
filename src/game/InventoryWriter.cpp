@@ -30,11 +30,12 @@ namespace InventoryWriter
         return true;
     }
 
-    // Returns the BGSEquipSlot for the requested hand (right = 0x13F43, left = 0x13F44).
+    // Returns the BGSEquipSlot for the requested hand.
+    // Empirically verified: 0x13F44 is the right-hand slot, 0x13F43 is the left-hand slot.
     static const RE::BGSEquipSlot* GetHandSlot(const std::string& hand)
     {
-        constexpr RE::FormID kRightHandSlot = 0x00013F43;
-        constexpr RE::FormID kLeftHandSlot  = 0x00013F44;
+        constexpr RE::FormID kRightHandSlot = 0x00013F44;
+        constexpr RE::FormID kLeftHandSlot  = 0x00013F43;
         const RE::FormID id = (hand == "left") ? kLeftHandSlot : kRightHandSlot;
         return RE::TESForm::LookupByID<RE::BGSEquipSlot>(id);
     }
@@ -65,8 +66,11 @@ namespace InventoryWriter
         if (item->GetFormType() == RE::FormType::Weapon)
             slot = GetHandSlot(hand);
 
+        // forceEquip=false ensures the game equips a fresh unequipped instance rather than
+        // moving an already-equipped copy from the other hand (fixes dual-wielding the same
+        // weapon type when the player has two of them in their inventory).
         equipManager->EquipObject(player, item, nullptr, 1, slot,
-                                  false, true, true, true);
+                                  false, false, true, true);
         return MakeSuccess();
     }
 

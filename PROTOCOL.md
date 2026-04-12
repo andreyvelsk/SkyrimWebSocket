@@ -107,17 +107,16 @@ thread and replies immediately with a `"commandResult"` message.
   "id":      "cmd-1",         // unique request identifier (required)
   "action":  "<action>",      // see table below (required)
   "formId":  "0x00012EB7",    // hex string or unsigned integer (required)
-  // action-specific parameters:
-  "hand":     "right",        // equip / unequip: "right" (default) | "left"
-  "count":    1,              // drop: number of items to drop (default 1)
-  "favorite": true            // favorite: true = add, false = remove (default true)
+  "payload": { ... }          // action-specific parameters (optional, see table below)
 }
 ```
 
-| `action`    | Required extra fields | Description |
+Action-specific `payload` fields:
+
+| `action`    | `payload` fields | Description |
 |---|---|---|
-| `equip`     | `hand` (optional, default `"right"`) | Equip the item. For weapons, `hand` selects the hand slot; all other equippable items ignore `hand`. |
-| `unequip`   | `hand` (optional) | Unequip the item. For weapons, `hand` targets a specific hand; omit to unequip from whichever slot it occupies. |
+| `equip`     | `hand` (optional, default `"right"`) | Equip the item. For weapons, `hand` selects the hand slot (`"right"` or `"left"`); all other equippable items ignore `hand`. |
+| `unequip`   | `hand` (optional) | Unequip the item. For weapons, `hand` targets a specific hand (`"right"` or `"left"`); omit to unequip from whichever slot it occupies. |
 | `use`       | — | Consume the item (potions and food are consumed; scrolls are cast). Only `AlchemyItem` and `Scroll` form types are supported. |
 | `drop`      | `count` (optional, default `1`) | Drop items from inventory. `count` is clamped to the quantity available. |
 | `favorite`  | `favorite` bool (optional, default `true`) | Add (`true`) or remove (`false`) the item from the player's favorites. |
@@ -125,6 +124,31 @@ thread and replies immediately with a `"commandResult"` message.
 All actions validate that the item is in the player's inventory before
 executing. Attempting to act on an item not in the inventory returns an error
 `"commandResult"`.
+
+**Examples:**
+
+```jsonc
+// Equip a weapon in the left hand:
+{
+  "type": "command", "id": "cmd-1", "action": "equip",
+  "formId": "0x00013988",
+  "payload": { "hand": "left" }
+}
+
+// Drop 3 copies of an item:
+{
+  "type": "command", "id": "cmd-2", "action": "drop",
+  "formId": "0x00013CE6",
+  "payload": { "count": 3 }
+}
+
+// Add an item to favorites:
+{
+  "type": "command", "id": "cmd-3", "action": "favorite",
+  "formId": "0x00013CE6",
+  "payload": { "favorite": true }
+}
+```
 
 ---
 
