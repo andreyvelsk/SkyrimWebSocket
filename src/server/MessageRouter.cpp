@@ -3,6 +3,7 @@
 #include "WsSession.h"
 #include "../game/FieldRegistry.h"
 #include "../game/GameReader.h"
+#include "../game/GameWriter.h"
 #include "../Utils.h"
 
 #include <chrono>
@@ -35,6 +36,82 @@ namespace MessageRouter
             out[alias] = registryKey;
         }
         return true;
+    }
+
+    // Parse a hex formId string (e.g. "0x00012EB7" or "12EB7") to a FormID.
+    static RE::FormID ParseFormId(const std::string& str)
+    {
+        try {
+            return static_cast<RE::FormID>(std::stoul(str, nullptr, 16));
+        } catch (...) {
+            return 0;
+        }
+    }
+
+    // Build the JSON response for a command result.
+    static std::string BuildCommandResultJson(const std::string& id, const GameWriter::CommandResult& result)
+    {
+        nlohmann::json resp;
+        resp["type"]    = "commandResult";
+        resp["id"]      = id;
+        resp["success"] = result.success;
+        if (!result.success)
+            resp["error"] = result.error;
+        return resp.dump();
+    }
+
+    // Dispatch a "command" message to the game thread.
+    static void DispatchCommand(std::shared_ptr<WsSession> session, const nlohmann::json& msg)
+    {
+        if (!msg.contains("id") || !msg["id"].is_string()) {
+            session->send(R"({"type":"error","message":"Missing or invalid 'id' in command"})");
+            return;
+        }
+        if (!msg.contains("command") || !msg["command"].is_string()) {
+            session->send(R"({"type":"error","message":"Missing 'command' field"})");
+            return;
+        }
+        if (!msg.contains("formId") || !msg["formId"].is_string()) {
+            session->send(R"({"type":"error","message":"Missing 'formId' field"})");
+            return;
+        }
+
+        const std::string cmdId      = msg["id"].get<std::string>();
+        const std::string command    = msg["command"].get<std::string>();
+        const std::string formIdStr  = msg["formId"].get<std::string>();
+        const std::string hand       = msg.value("hand", "right");
+        const int         count      = msg.value("count", 1);
+
+        const RE::FormID formId = ParseFormId(formIdStr);
+        if (formId == 0) {
+            nlohmann::json err;
+            err["type"]    = "commandResult";
+            err["id"]      = cmdId;
+            err["success"] = false;
+            err["error"]   = "Invalid formId: '" + formIdStr + "'";
+            session->send(err.dump());
+            return;
+        }
+
+        SKSE::GetTaskInterface()->AddTask([session, cmdId, command, formId, hand, count]() {
+            GameWriter::CommandResult result;
+
+            if (command == "equip")
+                result = GameWriter::EquipItem(formId, hand);
+            else if (command == "unequip")
+                result = GameWriter::UnequipItem(formId, hand);
+            else if (command == "use")
+                result = GameWriter::UseItem(formId);
+            else if (command == "drop")
+                result = GameWriter::DropItem(formId, count);
+            else if (command == "favorite")
+                result = GameWriter::FavoriteItem(formId);
+            else
+                result = {false, "Unknown command: '" + command + "'"};
+
+            std::string json = BuildCommandResultJson(cmdId, result);
+            asio::post(session->ioc(), [session, json] { session->send(json); });
+        });
     }
 
     void Dispatch(std::shared_ptr<WsSession> session, const std::string& raw)
@@ -112,6 +189,9 @@ namespace MessageRouter
 
         } else if (type == "unsubscribe_all") {
             session->CancelAllSubscriptions();
+
+        } else if (type == "command") {
+            DispatchCommand(session, msg);
 
         } else {
             session->send(R"({"type":"error","message":"Unknown message type"})");
