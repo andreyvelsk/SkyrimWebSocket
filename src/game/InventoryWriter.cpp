@@ -40,31 +40,6 @@ namespace InventoryWriter
         return RE::TESForm::LookupByID<RE::BGSEquipSlot>(id);
     }
 
-    // Returns the item (by FormID) currently worn in the given hand slot, or 0 if empty.
-    // wantLeft=true  → checks kWornLeft  (left hand)
-    // wantLeft=false → checks kWorn      (right hand / default slot)
-    static RE::FormID GetWornInHand(RE::PlayerCharacter* player, bool wantLeft)
-    {
-        auto* invChanges = player->GetInventoryChanges();
-        if (!invChanges || !invChanges->entryList)
-            return 0;
-
-        for (auto* entry : *invChanges->entryList) {
-            if (!entry || !entry->object || !entry->extraLists)
-                continue;
-            for (auto* xList : *entry->extraLists) {
-                if (!xList)
-                    continue;
-                const bool match = wantLeft
-                                       ? xList->HasType(RE::ExtraDataType::kWornLeft)
-                                       : xList->HasType(RE::ExtraDataType::kWorn);
-                if (match)
-                    return entry->object->GetFormID();
-            }
-        }
-        return 0;
-    }
-
     // Returns how many instances of `item` are currently worn in either hand slot.
     static int CountWornInstances(RE::PlayerCharacter* player, RE::TESBoundObject* item)
     {
@@ -112,46 +87,27 @@ namespace InventoryWriter
         // use their own default slot (nullptr = let the game decide).
         const RE::BGSEquipSlot* slot = nullptr;
         const bool isWeapon = (item->GetFormType() == RE::FormType::Weapon);
-        const bool targetIsLeft = (hand == "left");
+        if (isWeapon)
+            slot = GetHandSlot(hand);
 
-        // For one-handed weapons, snapshot what is currently in the OTHER hand before the
-        // equip call.  The engine sometimes unequips the other hand as a side effect of
-        // its internal weapon-slot assignment logic; we detect and correct that below.
-        // (Two-handed weapons naturally occupy both slots, so no restore is needed for them.)
-        RE::FormID otherHandFormId = 0;
-        if (isWeapon) {
-            slot          = GetHandSlot(hand);
-            otherHandFormId = GetWornInHand(player, !targetIsLeft);
-        }
+        // Choose forceEquip dynamically to prevent the engine from stealing an
+        // already-equipped instance from the OTHER hand:
+        //
+        //   forceEquip=false  →  engine equips only a FREE (unworn) instance;
+        //                        it never touches a copy already in the other hand.
+        //                        Used when at least one free copy exists.
+        //
+        //   forceEquip=true   →  engine equips even if every copy is already worn
+        //                        (i.e. the item must be MOVED from the other slot).
+        //                        Used only when count <= wornCount, meaning the
+        //                        player has exactly one copy that is in the other hand
+        //                        — so moving it is the correct and only option.
+        const int  wornCount  = isWeapon ? CountWornInstances(player, item) : 0;
+        const bool forceEquip = (count <= wornCount);
 
         equipManager->EquipObject(player, item, nullptr, 1, slot,
-                                  /*queueEquip*/ false, /*forceEquip*/ true,
+                                  /*queueEquip*/ false, /*forceEquip*/ forceEquip,
                                   /*playSounds*/ true,  /*applyNow*/   true);
-
-        // ── Protect the other hand ────────────────────────────────────────
-        // If the engine unequipped the other hand as a collateral effect,
-        // silently restore it — but only when a free (non-worn) instance of
-        // that item is still available in the inventory.
-        if (isWeapon && otherHandFormId != 0) {
-            const RE::FormID nowOther = GetWornInHand(player, !targetIsLeft);
-            if (nowOther != otherHandFormId) {
-                auto* otherItem = RE::TESForm::LookupByID<RE::TESBoundObject>(otherHandFormId);
-                if (otherItem) {
-                    int totalCount = 0;
-                    FindInInventory(player, otherItem, totalCount);
-                    const int wornCount = CountWornInstances(player, otherItem);
-                    // Only re-equip when there is at least one unequipped instance.
-                    if (totalCount > wornCount) {
-                        const RE::BGSEquipSlot* otherSlot =
-                            GetHandSlot(targetIsLeft ? "right" : "left");
-                        equipManager->EquipObject(player, otherItem, nullptr, 1, otherSlot,
-                                                  /*queueEquip*/ false, /*forceEquip*/ true,
-                                                  /*playSounds*/ false, /*applyNow*/   true);
-                    }
-                }
-            }
-        }
-
         return MakeSuccess();
     }
 
