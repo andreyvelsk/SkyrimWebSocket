@@ -86,7 +86,8 @@ namespace InventoryWriter
             if (!entry || entry->object != item)
                 continue;
             if (!entry->extraLists)
-                return nullptr;  // entry exists but has no xLists — nullptr is the right answer
+                return nullptr;  // item has no per-instance data at all; passing nullptr lets
+                                 // the engine create a fresh ExtraDataList for this equip
 
             for (auto* xList : *entry->extraLists) {
                 if (!xList)
@@ -152,9 +153,10 @@ namespace InventoryWriter
             xList = FindXListNotInHand(player, item, targetIsLeft);
         }
 
-        // forceEquip=true is the NORMAL equip mode (corresponds to abPreventRemoval=false
-        // in Papyrus Actor.EquipItem).  Using false instead would lock the item and show
-        // "You cannot remove this item" in the game UI.
+        // forceEquip=true is the NORMAL equip mode.
+        // The naming is inverted relative to Papyrus: this parameter corresponds to
+        // !abPreventRemoval in Actor.EquipItem, so true = "allow normal removal through UI".
+        // Using false here would lock the item and show "You cannot remove this item".
         equipManager->EquipObject(player, item, xList, 1, slot,
                                   /*queueEquip*/ false, /*forceEquip*/ true,
                                   /*playSounds*/ true,  /*applyNow*/   true);
