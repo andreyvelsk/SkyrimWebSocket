@@ -437,8 +437,14 @@ namespace InventoryReader
                 const bool twoHand  = IsWeaponTwoHanded(wtype);
                 j["weaponType"]     = WeaponTypeToString(wtype);
                 j["isTwoHanded"]    = twoHand;
-                j["equipSlots"]     = twoHand ? nlohmann::json::array({"right"})
-                                              : nlohmann::json::array({"right", "left"});
+
+                // One-handed weapons (including staves) can go in either hand;
+                // two-handed weapons occupy the right hand and block the left.
+                nlohmann::json slots = nlohmann::json::array();
+                slots.push_back("right");
+                if (!twoHand)
+                    slots.push_back("left");
+                j["equipSlots"]     = std::move(slots);
                 j["equippedHand"]   = GetWeaponEquippedHand(data.second.get());
             } else {
                 j["weaponType"]     = nullptr;

@@ -3,6 +3,13 @@
 
 namespace GameWriter
 {
+    // ─── Constants ────────────────────────────────────────────────────────
+
+    // Sentinel value for ExtraHotkey::hotkey indicating "favorited but not
+    // assigned to a specific hotkey slot".  The Skyrim engine treats any
+    // ExtraHotkey presence as a favourite marker regardless of the value.
+    static constexpr RE::HOTKEY_INDEX kFavoriteNoHotkey = static_cast<RE::HOTKEY_INDEX>(0xFF);
+
     // ─── Helpers ──────────────────────────────────────────────────────────
 
     // Returns true for consumable form types that the "use" command accepts.
@@ -256,8 +263,10 @@ namespace GameWriter
             if (!targetXList)
                 return {false, "Cannot favorite: item has no extra data list"};
 
+            // ExtraHotkey is a game-engine-managed object; ownership transfers
+            // to the ExtraDataList on Add().
             auto* hotkey    = new RE::ExtraHotkey();
-            hotkey->hotkey  = static_cast<RE::HOTKEY_INDEX>(0xFF);
+            hotkey->hotkey  = kFavoriteNoHotkey;
             targetXList->Add(hotkey);
             PrintConsole("[WS] Favorite " + std::string(liveEntry->object->GetName()));
         }
