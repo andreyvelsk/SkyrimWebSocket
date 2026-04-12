@@ -40,29 +40,65 @@ namespace InventoryWriter
         return RE::TESForm::LookupByID<RE::BGSEquipSlot>(id);
     }
 
-    // Returns how many instances of `item` are currently worn in a hand slot
-    // (kWorn = right hand, kWornLeft = left hand).
-    // Weapons can only ever appear in these two slots, so this count is exact.
-    static int CountWornInstances(RE::PlayerCharacter* player, RE::TESBoundObject* item)
+    // Returns true when the item is currently equipped in the specified hand.
+    // isLeft=true  → checks kWornLeft  (left hand)
+    // isLeft=false → checks kWorn      (right hand)
+    static bool IsWornInHand(RE::PlayerCharacter* player,
+                              RE::TESBoundObject*  item,
+                              bool                 isLeft)
     {
         auto* invChanges = player->GetInventoryChanges();
         if (!invChanges || !invChanges->entryList)
-            return 0;
+            return false;
 
         for (auto* entry : *invChanges->entryList) {
             if (!entry || entry->object != item || !entry->extraLists)
                 continue;
-            int worn = 0;
             for (auto* xList : *entry->extraLists) {
                 if (!xList)
                     continue;
-                if (xList->HasType(RE::ExtraDataType::kWorn) ||
-                    xList->HasType(RE::ExtraDataType::kWornLeft))
-                    ++worn;
+                const bool worn = isLeft ? xList->HasType(RE::ExtraDataType::kWornLeft)
+                                         : xList->HasType(RE::ExtraDataType::kWorn);
+                if (worn)
+                    return true;
             }
-            return worn;
+            break;  // only one entry per form
         }
-        return 0;
+        return false;
+    }
+
+    // Returns the first ExtraDataList that is NOT worn in the target hand, or nullptr
+    // if the item has no ExtraDataLists at all.  Passing this xList to EquipObject
+    // tells the engine which specific instance to equip, preventing it from grabbing
+    // a copy that is already equipped in the other hand.
+    //
+    // isLeft=true  → target hand is left  → skip xLists that have kWornLeft
+    // isLeft=false → target hand is right → skip xLists that have kWorn
+    static RE::ExtraDataList* FindXListNotInHand(RE::PlayerCharacter* player,
+                                                 RE::TESBoundObject*  item,
+                                                 bool                 isLeft)
+    {
+        auto* invChanges = player->GetInventoryChanges();
+        if (!invChanges || !invChanges->entryList)
+            return nullptr;
+
+        for (auto* entry : *invChanges->entryList) {
+            if (!entry || entry->object != item)
+                continue;
+            if (!entry->extraLists)
+                return nullptr;  // entry exists but has no xLists — nullptr is the right answer
+
+            for (auto* xList : *entry->extraLists) {
+                if (!xList)
+                    continue;
+                const bool inTargetHand = isLeft ? xList->HasType(RE::ExtraDataType::kWornLeft)
+                                                 : xList->HasType(RE::ExtraDataType::kWorn);
+                if (!inTargetHand)
+                    return xList;  // found a usable xList
+            }
+            return nullptr;  // all xLists are in the target hand (already equipped there)
+        }
+        return nullptr;
     }
 
     // ─── Equip ────────────────────────────────────────────────────────────
@@ -85,30 +121,42 @@ namespace InventoryWriter
         if (!equipManager)
             return MakeError("Equip manager not available");
 
-        // Only pass a hand-specific slot for weapons; all other equippable items
-        // use their own default slot (nullptr = let the game decide).
-        const RE::BGSEquipSlot* slot = nullptr;
-        const bool isWeapon = (item->GetFormType() == RE::FormType::Weapon);
-        if (isWeapon)
+        // Only weapons need hand-specific slot and xList logic.
+        // All other equippable items use their own default slot.
+        const RE::BGSEquipSlot* slot   = nullptr;
+        RE::ExtraDataList*      xList  = nullptr;
+        const bool              isWeapon     = (item->GetFormType() == RE::FormType::Weapon);
+        const bool              targetIsLeft = (hand == "left");
+
+        if (isWeapon) {
             slot = GetHandSlot(hand);
 
-        // Choose forceEquip dynamically to prevent the engine from stealing an
-        // already-equipped instance from the OTHER hand:
-        //
-        //   forceEquip=false  →  engine equips only a FREE (unworn) instance;
-        //                        it never touches a copy already in the other hand.
-        //                        Used when at least one free copy exists.
-        //
-        //   forceEquip=true   →  engine equips even if every copy is already worn
-        //                        (i.e. the item must be MOVED from the other slot).
-        //                        Used only when count <= wornCount, meaning the
-        //                        player has exactly one copy that is in the other hand
-        //                        — so moving it is the correct and only option.
-        const int  wornCount  = isWeapon ? CountWornInstances(player, item) : 0;
-        const bool forceEquip = (count <= wornCount);
+            // Short-circuit: item is already equipped in the requested hand.
+            if (IsWornInHand(player, item, targetIsLeft))
+                return MakeSuccess();
 
-        equipManager->EquipObject(player, item, nullptr, 1, slot,
-                                  /*queueEquip*/ false, /*forceEquip*/ forceEquip,
+            // Mirror SKSE's EquipItemEx approach: pass the first ExtraDataList that is
+            // NOT already in the target hand.  This tells the engine which specific
+            // instance to use, so it does NOT grab the copy worn in the other hand.
+            //
+            // Engine behaviour when it receives a specific xList:
+            //   • xList is free (unworn)         → equips it to the target slot.
+            //   • xList is worn in the OTHER hand AND count > worn → creates a new
+            //     xList for the target slot, leaving the other-hand copy untouched
+            //     (this is the dual-wield same-item case).
+            //   • xList is worn in the OTHER hand AND count == worn (single copy) →
+            //     moves it from the other slot to the target slot.
+            //
+            // If the item has no ExtraDataLists at all (fresh/base copy), nullptr is
+            // returned and the engine creates a new xList automatically.
+            xList = FindXListNotInHand(player, item, targetIsLeft);
+        }
+
+        // forceEquip=true is the NORMAL equip mode (corresponds to abPreventRemoval=false
+        // in Papyrus Actor.EquipItem).  Using false instead would lock the item and show
+        // "You cannot remove this item" in the game UI.
+        equipManager->EquipObject(player, item, xList, 1, slot,
+                                  /*queueEquip*/ false, /*forceEquip*/ true,
                                   /*playSounds*/ true,  /*applyNow*/   true);
         return MakeSuccess();
     }
