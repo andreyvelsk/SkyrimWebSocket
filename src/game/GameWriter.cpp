@@ -40,16 +40,30 @@ namespace GameWriter
         }
     }
 
+    // Well-known Skyrim equip-slot FormIDs used as a fallback when
+    // BGSDefaultObjectManager fails to resolve them.
+    static constexpr RE::FormID kRightHandSlotID = 0x00013F42;
+    static constexpr RE::FormID kLeftHandSlotID  = 0x00013F43;
+
     // Look up the BGSEquipSlot for a given hand name ("right" or "left").
-    // Returns nullptr for non-weapon items where the engine should auto-select.
+    // Tries BGSDefaultObjectManager first, falls back to direct FormID lookup.
+    // Returns nullptr only when everything fails.
     static const RE::BGSEquipSlot* GetHandSlot(const std::string& hand)
     {
+        const bool left = (hand == "left");
+        const auto defObj = left ? RE::DEFAULT_OBJECT::kLeftHandEquip
+                                 : RE::DEFAULT_OBJECT::kRightHandEquip;
+
         auto* dom = RE::BGSDefaultObjectManager::GetSingleton();
-        if (!dom)
-            return nullptr;
-        if (hand == "left")
-            return dom->GetObject<RE::BGSEquipSlot>(RE::DEFAULT_OBJECT::kLeftHandEquip);
-        return dom->GetObject<RE::BGSEquipSlot>(RE::DEFAULT_OBJECT::kRightHandEquip);
+        if (dom) {
+            auto* slot = dom->GetObject<RE::BGSEquipSlot>(defObj);
+            if (slot)
+                return slot;
+        }
+
+        // Fallback: look up by well-known FormID.
+        const RE::FormID id = left ? kLeftHandSlotID : kRightHandSlotID;
+        return RE::TESForm::LookupByID<RE::BGSEquipSlot>(id);
     }
 
     // Finds the live InventoryEntryData for a given formId from the player's
