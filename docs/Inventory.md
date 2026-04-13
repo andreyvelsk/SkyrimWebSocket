@@ -66,6 +66,10 @@ Every `Inventory::Items::*` category element has these fields:
 
 Additional fields:
 - `isEquipped` (bool) — Currently equipped on character
+- `weaponType` (string) — Weapon category: `"OneHandSword"`, `"OneHandDagger"`, `"OneHandAxe"`, `"OneHandMace"`, `"TwoHandSword"`, `"TwoHandAxe"`, `"Bow"`, `"Staff"`, `"Crossbow"`, `"HandToHand"`, or `null`
+- `isTwoHanded` (bool) — `true` for two-handed melee weapons, bows, and crossbows (occupies both hand slots)
+- `equipSlots` (array of strings) — Valid equip targets: `["right", "left"]` for one-handed, `["right"]` for two-handed
+- `equippedHand` (string or null) — Current equip hand: `"right"`, `"left"`, `"both"` (same weapon dual-wielded), or `null` if not equipped
 - `baseDamage` (float) — Weapon base damage before perks
 - `damage` (float) — Effective damage = `baseDamage × kAttackDamageMult`
 - `enchantment` (object or null) — See [Enchantment Object](#enchantment-object)

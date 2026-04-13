@@ -108,6 +108,43 @@ the server is alive and reachable. The server replies immediately with a
 
 ---
 
+### `command`
+
+Sends a game command (e.g. equip, unequip, use, drop, favorite). The server
+validates the request and executes it on the game thread, then replies with a
+`"commandResult"` message.
+
+```jsonc
+{
+  "type": "command",
+  "id": "cmd-1",            // unique request identifier (required)
+  "command": "equip",       // command name (required): equip | unequip | use | drop | favorite
+  "formId": "0x00012EB7",  // item form ID as hex string (required)
+  "hand": "right",          // equip/unequip hand: "right" or "left" (optional, weapons only, default: "right")
+  "count": 1                // drop count (optional, default: 1, only used by "drop")
+}
+```
+
+| Field | Required | Default | Description |
+|---|---|---|---|
+| `id` | **yes** | — | Unique identifier echoed back in the `"commandResult"` response. |
+| `command` | **yes** | — | One of: `equip`, `unequip`, `use`, `drop`, `favorite`. |
+| `formId` | **yes** | — | Hex form ID of the target item (e.g. `"0x00012EB7"`). |
+| `hand` | no | `"right"` | Target hand for weapons: `"right"` or `"left"`. Ignored for non-weapon items. Two-handed weapons only accept `"right"`. |
+| `count` | no | `1` | Number of items to drop. Only used by the `drop` command. |
+
+#### Command details
+
+| Command | Applies to | Behaviour |
+|---|---|---|
+| `equip` | Weapons, Apparel, Ammo | Equips the item. Weapons use the `hand` parameter to select left/right hand. Apparel and ammo auto-select the correct slot. |
+| `unequip` | Weapons, Apparel, Ammo | Removes the equipped item. For weapons, `hand` specifies which hand to unequip from. |
+| `use` | Potions, Food, Ingredients, Scrolls | Consumes the item (applies effect). Scrolls are equipped for casting. |
+| `drop` | Any item | Drops `count` items from inventory onto the ground. |
+| `favorite` | Any item | Toggles the item's favorite status on/off. |
+
+---
+
 ## Server → Client messages
 
 ### `data`
@@ -127,6 +164,34 @@ Sent in response to a subscription push or a `"query"` request.
 ```
 
 The `"id"` field always mirrors the `"id"` from the originating `"subscribe"` or `"query"` message, allowing the client to route responses correctly.
+
+### `commandResult`
+
+Sent in response to a `"command"` request. Reports whether the command
+succeeded or failed.
+
+```jsonc
+// Success:
+{
+  "type": "commandResult",
+  "id": "cmd-1",
+  "success": true
+}
+
+// Failure:
+{
+  "type": "commandResult",
+  "id": "cmd-1",
+  "success": false,
+  "error": "Item not in inventory"
+}
+```
+
+| Field | Type | Description |
+|---|---|---|
+| `id` | string | Mirrors the `"id"` from the originating `"command"` message. |
+| `success` | bool | `true` if the command executed without error. |
+| `error` | string | Present only when `success` is `false`. Human-readable error description. |
 
 ### `heartbeat`
 
@@ -370,6 +435,124 @@ independent intervals. To stop only the skill subscription:
 
 ```json
 { "type": "unsubscribe", "id": "skills" }
+```
+
+---
+
+### Example 7 — Equip a one-handed weapon to the left hand
+
+**Client sends:**
+```json
+{
+  "type": "command",
+  "id": "equip-sword",
+  "command": "equip",
+  "formId": "0x00012EB7",
+  "hand": "left"
+}
+```
+
+**Server replies:**
+```json
+{
+  "type": "commandResult",
+  "id": "equip-sword",
+  "success": true
+}
+```
+
+---
+
+### Example 8 — Use a potion
+
+**Client sends:**
+```json
+{
+  "type": "command",
+  "id": "use-potion",
+  "command": "use",
+  "formId": "0x00039BE5"
+}
+```
+
+**Server replies:**
+```json
+{
+  "type": "commandResult",
+  "id": "use-potion",
+  "success": true
+}
+```
+
+---
+
+### Example 9 — Drop multiple items
+
+**Client sends:**
+```json
+{
+  "type": "command",
+  "id": "drop-arrows",
+  "command": "drop",
+  "formId": "0x0003BE11",
+  "count": 10
+}
+```
+
+**Server replies:**
+```json
+{
+  "type": "commandResult",
+  "id": "drop-arrows",
+  "success": true
+}
+```
+
+---
+
+### Example 10 — Toggle favorite on an item
+
+**Client sends:**
+```json
+{
+  "type": "command",
+  "id": "fav-sword",
+  "command": "favorite",
+  "formId": "0x00012EB7"
+}
+```
+
+**Server replies:**
+```json
+{
+  "type": "commandResult",
+  "id": "fav-sword",
+  "success": true
+}
+```
+
+---
+
+### Example 11 — Command validation error
+
+**Client sends (item not in inventory):**
+```json
+{
+  "type": "command",
+  "id": "bad-equip",
+  "command": "equip",
+  "formId": "0xDEADBEEF"
+}
+```
+
+**Server replies:**
+```json
+{
+  "type": "commandResult",
+  "id": "bad-equip",
+  "success": false,
+  "error": "Item not in inventory"
+}
 ```
 
 ---

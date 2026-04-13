@@ -337,6 +337,77 @@ namespace InventoryReader
         return it != inv.end() ? it->second.first : 0;
     }
 
+    // ─── Weapon helpers ───────────────────────────────────────────────────
+
+    // Maps RE::WEAPON_TYPE to a stable string identifier for the API.
+    static const char* WeaponTypeToString(RE::WEAPON_TYPE type)
+    {
+        switch (type) {
+            case RE::WEAPON_TYPE::kHandToHandMelee: return "HandToHand";
+            case RE::WEAPON_TYPE::kOneHandSword:    return "OneHandSword";
+            case RE::WEAPON_TYPE::kOneHandDagger:   return "OneHandDagger";
+            case RE::WEAPON_TYPE::kOneHandAxe:      return "OneHandAxe";
+            case RE::WEAPON_TYPE::kOneHandMace:     return "OneHandMace";
+            case RE::WEAPON_TYPE::kTwoHandSword:    return "TwoHandSword";
+            case RE::WEAPON_TYPE::kTwoHandAxe:      return "TwoHandAxe";
+            case RE::WEAPON_TYPE::kBow:             return "Bow";
+            case RE::WEAPON_TYPE::kStaff:           return "Staff";
+            case RE::WEAPON_TYPE::kCrossbow:        return "Crossbow";
+            default:                                return "Unknown";
+        }
+    }
+
+    // Returns true for weapon types that occupy both hands (two-handed melee,
+    // bows, crossbows).  Staves are one-handed.
+    static bool IsWeaponTwoHanded(RE::WEAPON_TYPE type)
+    {
+        switch (type) {
+            case RE::WEAPON_TYPE::kTwoHandSword:
+            case RE::WEAPON_TYPE::kTwoHandAxe:
+            case RE::WEAPON_TYPE::kBow:
+            case RE::WEAPON_TYPE::kCrossbow:
+                return true;
+            default:
+                return false;
+        }
+    }
+
+    // Determines which hand a weapon is currently equipped in by inspecting
+    // the ExtraWorn / ExtraWornLeft flags on its extra-data lists.
+    // For two-handed weapons the engine only sets kWorn (right-hand flag)
+    // even though the weapon occupies both hands; isTwoHanded corrects this
+    // so the caller always sees "both" when both hand slots are blocked.
+    // Returns "right", "left", "both", or nullptr.
+    static nlohmann::json GetWeaponEquippedHand(const RE::InventoryEntryData* entry,
+                                                bool                          isTwoHanded)
+    {
+        if (!entry || !entry->extraLists)
+            return nullptr;
+
+        bool right = false;
+        bool left  = false;
+        for (const auto* xList : *entry->extraLists) {
+            if (!xList)
+                continue;
+            if (xList->HasType(RE::ExtraDataType::kWorn))
+                right = true;
+            if (xList->HasType(RE::ExtraDataType::kWornLeft))
+                left = true;
+        }
+
+        // Two-handed weapons always occupy both hands regardless of which
+        // worn flag the engine happens to set (normally kWorn only).
+        if (isTwoHanded && (right || left))
+            return "both";
+        if (right && left)
+            return "both";
+        if (right)
+            return "right";
+        if (left)
+            return "left";
+        return nullptr;
+    }
+
     // ─── Per-type item readers ────────────────────────────────────────────
 
     nlohmann::json ReadWeapons()
@@ -367,6 +438,28 @@ namespace InventoryReader
             const float base = weap ? weap->GetAttackDamage() : 0.f;
             j["baseDamage"]  = base;
             j["damage"]      = base * atkMult;
+
+            // Weapon type and equip-slot metadata
+            if (weap) {
+                const auto wtype    = weap->GetWeaponType();
+                const bool twoHand  = IsWeaponTwoHanded(wtype);
+                j["weaponType"]     = WeaponTypeToString(wtype);
+                j["isTwoHanded"]    = twoHand;
+
+                // One-handed weapons (including staves) can go in either hand;
+                // two-handed weapons occupy the right hand and block the left.
+                nlohmann::json slots = nlohmann::json::array();
+                slots.push_back("right");
+                if (!twoHand)
+                    slots.push_back("left");
+                j["equipSlots"]     = std::move(slots);
+                j["equippedHand"]   = GetWeaponEquippedHand(data.second.get(), twoHand);
+            } else {
+                j["weaponType"]     = nullptr;
+                j["isTwoHanded"]    = false;
+                j["equipSlots"]     = nlohmann::json::array({"right", "left"});
+                j["equippedHand"]   = nullptr;
+            }
 
             j["enchantment"] = GetEnchantmentDetails(item, data.second.get());
 
