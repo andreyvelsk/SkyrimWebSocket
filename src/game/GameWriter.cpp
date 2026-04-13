@@ -1,6 +1,8 @@
 #include "GameWriter.h"
 #include "../Utils.h"
 
+#include <cstdio>
+
 namespace GameWriter
 {
     // ─── Constants ────────────────────────────────────────────────────────
@@ -120,10 +122,22 @@ namespace GameWriter
                                 /*a_applyNow=*/false);
     }
 
+    // ─── Debug helpers ────────────────────────────────────────────────────
+
+    // Formats a FormID as a hex string for debug output.
+    static std::string FmtFormId(RE::FormID id)
+    {
+        char buf[16];
+        std::snprintf(buf, sizeof(buf), "0x%08X", id);
+        return buf;
+    }
+
     // ─── Commands ─────────────────────────────────────────────────────────
 
     CommandResult EquipItem(RE::FormID formId, const std::string& hand)
     {
+        PrintConsole("[WS-DBG] EquipItem called: formId=" + FmtFormId(formId) + " hand=" + hand);
+
         auto* player = RE::PlayerCharacter::GetSingleton();
         if (!player)
             return {false, "Player not available"};
@@ -132,9 +146,14 @@ namespace GameWriter
         if (!form)
             return {false, "Form not found"};
 
+        PrintConsole("[WS-DBG] Item: " + std::string(form->GetName()) +
+                     " type=" + std::to_string(static_cast<int>(form->GetFormType())));
+
         const int32_t itemCount = GetInventoryCount(player, formId);
         if (itemCount <= 0)
             return {false, "Item not in inventory"};
+
+        PrintConsole("[WS-DBG] Inventory count: " + std::to_string(itemCount));
 
         const auto ft = form->GetFormType();
         if (!IsEquippable(ft))
@@ -152,14 +171,43 @@ namespace GameWriter
             if (weap && IsWeaponTwoHanded(weap->GetWeaponType()) && hand == "left")
                 return {false, "Two-handed weapon can only be equipped in the right hand"};
 
+            // --- Resolve target equip slot ---
             slot = GetHandSlot(hand);
+            PrintConsole("[WS-DBG] GetHandSlot(\"" + hand + "\") = " +
+                         (slot ? FmtFormId(slot->GetFormID()) : "nullptr"));
+
+            // Also log the right hand slot for comparison.
+            const auto* rightSlot = GetHandSlot("right");
+            const auto* leftSlot  = GetHandSlot("left");
+            PrintConsole("[WS-DBG] LeftSlot="  + (leftSlot  ? FmtFormId(leftSlot->GetFormID())  : "nullptr") +
+                         " RightSlot=" + (rightSlot ? FmtFormId(rightSlot->GetFormID()) : "nullptr"));
+
+            // Log the weapon's own equip slot (from BGSEquipType).
+            if (const auto* et = form->As<RE::BGSEquipType>()) {
+                const auto* ws = et->GetEquipSlot();
+                PrintConsole("[WS-DBG] Weapon equip slot: " +
+                             (ws ? FmtFormId(ws->GetFormID()) : "nullptr"));
+            }
+
             const bool leftHand = (hand == "left");
 
-            // --- Analyse current equipped state (mirrors SKSE EquipItemEx) ---
+            // --- Analyse current equipped state ---
             auto* liveEntry = FindLiveEntry(player, formId);
+            PrintConsole("[WS-DBG] liveEntry=" + std::string(liveEntry ? "found" : "nullptr"));
+
             if (liveEntry) {
+                // Count extra-data lists.
+                int xListCount = 0;
+                if (liveEntry->extraLists) {
+                    for (auto* xl : *liveEntry->extraLists)
+                        if (xl) ++xListCount;
+                }
+                PrintConsole("[WS-DBG] extraLists count: " + std::to_string(xListCount));
+
                 RE::ExtraDataList* wornRight = FindWornExtraDataList(liveEntry, false);
                 RE::ExtraDataList* wornLeft  = FindWornExtraDataList(liveEntry, true);
+                PrintConsole("[WS-DBG] wornRight=" + std::string(wornRight ? "yes" : "no") +
+                             " wornLeft=" + std::string(wornLeft ? "yes" : "no"));
 
                 const bool inTarget = leftHand ? (wornLeft != nullptr)
                                                : (wornRight != nullptr);
@@ -168,33 +216,51 @@ namespace GameWriter
 
                 // Already in the requested hand — nothing to do.
                 if (inTarget) {
-                    PrintConsole("[WS] " + std::string(form->GetName()) + " already in " + hand + " hand");
+                    PrintConsole("[WS-DBG] Already in target hand, skipping");
                     return {true, ""};
                 }
 
                 if (inOther) {
+                    PrintConsole("[WS-DBG] Weapon in OTHER hand, itemCount=" + std::to_string(itemCount));
                     if (itemCount < 2) {
-                        // Only one copy → must swap hands: unequip from current
-                        // hand first, then equip to target.
+                        // Only one copy → unequip from other hand first.
                         RE::ExtraDataList* otherXList = leftHand ? wornRight : wornLeft;
+                        PrintConsole("[WS-DBG] Unequipping from " + std::string(!leftHand ? "left" : "right") + " hand first");
                         DoUnequipWeapon(equipMgr, player, form, otherXList, !leftHand);
                     }
-                    // If 2+ copies, engine will dual-wield automatically;
-                    // just proceed to the EquipObject call below.
                 }
 
-                // Grab a non-worn xList for EquipObject so the engine
-                // creates a fresh wear record in the correct hand.
+                // Grab a non-worn xList for EquipObject.
                 xData = FindUnwornExtraDataList(liveEntry);
+                PrintConsole("[WS-DBG] FindUnwornExtraDataList = " +
+                             std::string(xData ? "found" : "nullptr"));
             }
         }
         // For armor and ammo: slot = nullptr, xData = nullptr → engine auto-selects.
 
+        PrintConsole("[WS-DBG] Calling EquipObject: slot=" +
+                     (slot ? FmtFormId(slot->GetFormID()) : "nullptr") +
+                     " xData=" + std::string(xData ? "present" : "nullptr"));
+
         equipMgr->EquipObject(player, form, xData, 1, slot,
                               /*a_queueEquip=*/true,
-                              /*a_forceEquip=*/false,
+                              /*a_forceEquip=*/true,
                               /*a_playSounds=*/true,
                               /*a_applyNow=*/false);
+
+        // Post-equip check: verify which hand the weapon ended up in.
+        if (ft == RE::FormType::Weapon) {
+            auto* postEntry = FindLiveEntry(player, formId);
+            if (postEntry) {
+                bool postRight = FindWornExtraDataList(postEntry, false) != nullptr;
+                bool postLeft  = FindWornExtraDataList(postEntry, true) != nullptr;
+                PrintConsole("[WS-DBG] Post-equip state: right=" +
+                             std::string(postRight ? "yes" : "no") +
+                             " left=" + std::string(postLeft ? "yes" : "no"));
+            } else {
+                PrintConsole("[WS-DBG] Post-equip: liveEntry not found");
+            }
+        }
 
         PrintConsole("[WS] Equip " + std::string(form->GetName()) + (slot ? " → " + hand : ""));
         return {true, ""};
@@ -202,6 +268,8 @@ namespace GameWriter
 
     CommandResult UnequipItem(RE::FormID formId, const std::string& hand)
     {
+        PrintConsole("[WS-DBG] UnequipItem called: formId=" + FmtFormId(formId) + " hand=" + hand);
+
         auto* player = RE::PlayerCharacter::GetSingleton();
         if (!player)
             return {false, "Player not available"};
@@ -224,33 +292,37 @@ namespace GameWriter
         const auto ft = form->GetFormType();
 
         if (ft == RE::FormType::Weapon) {
-            // Following SKSE UnequipItemEx: find xList for requested hand,
-            // and always pass the matching slot.
             const bool leftHand = (hand == "left");
 
             RE::ExtraDataList* wornRight = FindWornExtraDataList(liveEntry, false);
             RE::ExtraDataList* wornLeft  = FindWornExtraDataList(liveEntry, true);
 
-            // Determine which hand(s) to unequip based on user request.
+            PrintConsole("[WS-DBG] Unequip: wornRight=" + std::string(wornRight ? "yes" : "no") +
+                         " wornLeft=" + std::string(wornLeft ? "yes" : "no") +
+                         " targetLeft=" + std::string(leftHand ? "yes" : "no"));
+
             bool doRight = !leftHand && wornRight;
             bool doLeft  = leftHand && wornLeft;
 
-            // If weapon is not in the requested hand, try the other hand
-            // (e.g. user said "left" but weapon is only in right).
             if (!doRight && !doLeft) {
                 doRight = wornRight != nullptr;
                 doLeft  = wornLeft != nullptr;
+                PrintConsole("[WS-DBG] Fallback: doRight=" + std::string(doRight ? "yes" : "no") +
+                             " doLeft=" + std::string(doLeft ? "yes" : "no"));
             }
 
             if (!doRight && !doLeft)
                 return {false, "Weapon not found in any hand"};
 
-            if (doRight && wornRight)
+            if (doRight && wornRight) {
+                PrintConsole("[WS-DBG] Unequipping from RIGHT hand");
                 DoUnequipWeapon(equipMgr, player, form, wornRight, false);
-            if (doLeft && wornLeft)
+            }
+            if (doLeft && wornLeft) {
+                PrintConsole("[WS-DBG] Unequipping from LEFT hand");
                 DoUnequipWeapon(equipMgr, player, form, wornLeft, true);
+            }
         } else {
-            // Armor / ammo — no hand concept.
             equipMgr->UnequipObject(player, form);
         }
 
