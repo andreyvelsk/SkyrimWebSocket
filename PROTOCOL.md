@@ -192,7 +192,6 @@ succeeded or failed.
 | `id` | string | Mirrors the `"id"` from the originating `"command"` message. |
 | `success` | bool | `true` if the command executed without error. |
 | `error` | string | Present only when `success` is `false`. Human-readable error description. |
-| `debugLog` | string[] | *(Optional)* Array of diagnostic messages for debugging equip/unequip logic. Present only when the command produces debug output. |
 
 ### `heartbeat`
 

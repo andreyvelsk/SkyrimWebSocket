@@ -1,15 +1,13 @@
 #pragma once
 
 #include <string>
-#include <vector>
 
 namespace GameWriter
 {
     struct CommandResult
     {
-        bool                     success;
-        std::string              error;     // empty on success
-        std::vector<std::string> debugLog;  // debug messages sent back via WebSocket
+        bool        success;
+        std::string error;     // empty on success
     };
 
     // Equip an item.

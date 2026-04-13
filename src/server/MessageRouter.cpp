@@ -57,8 +57,6 @@ namespace MessageRouter
         resp["success"] = result.success;
         if (!result.success)
             resp["error"] = result.error;
-        if (!result.debugLog.empty())
-            resp["debugLog"] = result.debugLog;
         return resp.dump();
     }
 
