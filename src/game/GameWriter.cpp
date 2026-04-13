@@ -244,7 +244,7 @@ namespace GameWriter
 
         equipMgr->EquipObject(player, form, xData, 1, slot,
                               /*a_queueEquip=*/true,
-                              /*a_forceEquip=*/false,
+                              /*a_forceEquip=*/false,   // Must stay false — true breaks equip logic
                               /*a_playSounds=*/true,
                               /*a_applyNow=*/false);
 
