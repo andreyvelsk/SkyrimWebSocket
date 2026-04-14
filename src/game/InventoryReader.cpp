@@ -232,12 +232,11 @@ namespace InventoryReader
         return j;
     }
 
-    // Maps stable categoryId strings to the GMST key that holds the in-game
-    // localized display name for that category.  Vanilla Skyrim does not expose
-    // dedicated GMST strings for inventory category tab labels, so all entries
-    // use an empty string and name falls back to categoryId.  The map exists to
-    // make it easy to add GMST keys in future if they become available (e.g. via
-    // a UI mod that registers them).
+    // Maps stable categoryId strings to an optional GMST key that holds the
+    // in-game localized display name for that category.  Vanilla Skyrim does not
+    // expose dedicated GMST strings for inventory category tab labels, so all
+    // entries use an empty string.  A UI mod may register GMST strings for these
+    // in future; if it does, they will be picked up automatically.
     // clang-format off
     static const std::unordered_map<std::string, const char*> s_categoryGMSTKeys = {
         { "Weapons",     "" },
@@ -253,7 +252,273 @@ namespace InventoryReader
         { "Scrolls",     "" },
         { "Favorites",   "" },
     };
+
+    // Hardcoded localized category display names for all Skyrim-supported
+    // languages.  Used when no GMST override is available (vanilla game).
+    // The outer key is the language string from sLanguage:General INI setting;
+    // the inner key is the stable categoryId.
+    // English is intentionally omitted — the categoryId itself serves as
+    // the English display name.
+    static const std::unordered_map<std::string,
+                                    std::unordered_map<std::string, const char*>> s_categoryTranslations = {
+        { "russian", {
+            { "Weapons",     u8"Оружие"       },
+            { "Apparel",     u8"Одежда"        },
+            { "Books",       u8"Книги"         },
+            { "Potions",     u8"Зелья"         },
+            { "Food",        u8"Еда"           },
+            { "Ingredients", u8"Ингредиенты"   },
+            { "Misc",        u8"Разное"        },
+            { "Ammo",        u8"Стрелы"        },
+            { "Keys",        u8"Ключи"         },
+            { "SoulGems",    u8"Камни душ"     },
+            { "Scrolls",     u8"Свитки"        },
+            { "Favorites",   u8"Избранное"     },
+        }},
+        { "german", {
+            { "Weapons",     u8"Waffen"         },
+            { "Apparel",     u8"Kleidung"       },
+            { "Books",       u8"Bücher"         },
+            { "Potions",     u8"Tränke"         },
+            { "Food",        u8"Nahrung"        },
+            { "Ingredients", u8"Zutaten"        },
+            { "Misc",        u8"Verschiedenes"  },
+            { "Ammo",        u8"Munition"       },
+            { "Keys",        u8"Schlüssel"      },
+            { "SoulGems",    u8"Seelensteine"   },
+            { "Scrolls",     u8"Schriftrollen"  },
+            { "Favorites",   u8"Favoriten"      },
+        }},
+        { "french", {
+            { "Weapons",     u8"Armes"              },
+            { "Apparel",     u8"Vêtements"          },
+            { "Books",       u8"Livres"             },
+            { "Potions",     u8"Potions"            },
+            { "Food",        u8"Nourriture"         },
+            { "Ingredients", u8"Ingrédients"        },
+            { "Misc",        u8"Divers"             },
+            { "Ammo",        u8"Munitions"          },
+            { "Keys",        u8"Clés"               },
+            { "SoulGems",    u8"Pierres d'âme"      },
+            { "Scrolls",     u8"Parchemins"         },
+            { "Favorites",   u8"Favoris"            },
+        }},
+        { "italian", {
+            { "Weapons",     u8"Armi"               },
+            { "Apparel",     u8"Abbigliamento"      },
+            { "Books",       u8"Libri"              },
+            { "Potions",     u8"Pozioni"            },
+            { "Food",        u8"Cibo"               },
+            { "Ingredients", u8"Ingredienti"        },
+            { "Misc",        u8"Varie"              },
+            { "Ammo",        u8"Munizioni"          },
+            { "Keys",        u8"Chiavi"             },
+            { "SoulGems",    u8"Gemme dell'anima"   },
+            { "Scrolls",     u8"Pergamene"          },
+            { "Favorites",   u8"Preferiti"          },
+        }},
+        { "spanish", {
+            { "Weapons",     u8"Armas"              },
+            { "Apparel",     u8"Vestimenta"         },
+            { "Books",       u8"Libros"             },
+            { "Potions",     u8"Pociones"           },
+            { "Food",        u8"Comida"             },
+            { "Ingredients", u8"Ingredientes"       },
+            { "Misc",        u8"Varios"             },
+            { "Ammo",        u8"Munición"           },
+            { "Keys",        u8"Llaves"             },
+            { "SoulGems",    u8"Gemas del alma"     },
+            { "Scrolls",     u8"Pergaminos"         },
+            { "Favorites",   u8"Favoritos"          },
+        }},
+        { "spanish_mexico", {
+            { "Weapons",     u8"Armas"              },
+            { "Apparel",     u8"Vestimenta"         },
+            { "Books",       u8"Libros"             },
+            { "Potions",     u8"Pociones"           },
+            { "Food",        u8"Comida"             },
+            { "Ingredients", u8"Ingredientes"       },
+            { "Misc",        u8"Varios"             },
+            { "Ammo",        u8"Munición"           },
+            { "Keys",        u8"Llaves"             },
+            { "SoulGems",    u8"Gemas del alma"     },
+            { "Scrolls",     u8"Pergaminos"         },
+            { "Favorites",   u8"Favoritos"          },
+        }},
+        { "polish", {
+            { "Weapons",     u8"Broń"               },
+            { "Apparel",     u8"Ubrania"            },
+            { "Books",       u8"Książki"            },
+            { "Potions",     u8"Mikstury"           },
+            { "Food",        u8"Jedzenie"           },
+            { "Ingredients", u8"Składniki"          },
+            { "Misc",        u8"Różne"              },
+            { "Ammo",        u8"Amunicja"           },
+            { "Keys",        u8"Klucze"             },
+            { "SoulGems",    u8"Kamienie dusz"      },
+            { "Scrolls",     u8"Zwoje"              },
+            { "Favorites",   u8"Ulubione"           },
+        }},
+        { "portuguese", {
+            { "Weapons",     u8"Armas"              },
+            { "Apparel",     u8"Vestuário"          },
+            { "Books",       u8"Livros"             },
+            { "Potions",     u8"Poções"             },
+            { "Food",        u8"Comida"             },
+            { "Ingredients", u8"Ingredientes"       },
+            { "Misc",        u8"Diversos"           },
+            { "Ammo",        u8"Munição"            },
+            { "Keys",        u8"Chaves"             },
+            { "SoulGems",    u8"Gemas da alma"      },
+            { "Scrolls",     u8"Pergaminhos"        },
+            { "Favorites",   u8"Favoritos"          },
+        }},
+        { "japanese", {
+            { "Weapons",     u8"武器"               },
+            { "Apparel",     u8"防具"               },
+            { "Books",       u8"書物"               },
+            { "Potions",     u8"薬"                 },
+            { "Food",        u8"食料"               },
+            { "Ingredients", u8"素材"               },
+            { "Misc",        u8"その他"             },
+            { "Ammo",        u8"矢弾"               },
+            { "Keys",        u8"鍵"                 },
+            { "SoulGems",    u8"魂石"               },
+            { "Scrolls",     u8"巻物"               },
+            { "Favorites",   u8"お気に入り"         },
+        }},
+        { "korean", {
+            { "Weapons",     u8"무기"               },
+            { "Apparel",     u8"의복"               },
+            { "Books",       u8"책"                 },
+            { "Potions",     u8"물약"               },
+            { "Food",        u8"음식"               },
+            { "Ingredients", u8"재료"               },
+            { "Misc",        u8"기타"               },
+            { "Ammo",        u8"탄약"               },
+            { "Keys",        u8"열쇠"               },
+            { "SoulGems",    u8"영혼석"             },
+            { "Scrolls",     u8"두루마리"           },
+            { "Favorites",   u8"즐겨찾기"           },
+        }},
+        { "chinese", {
+            { "Weapons",     u8"武器"               },
+            { "Apparel",     u8"护甲"               },
+            { "Books",       u8"书籍"               },
+            { "Potions",     u8"药水"               },
+            { "Food",        u8"食物"               },
+            { "Ingredients", u8"炼金材料"           },
+            { "Misc",        u8"杂项"               },
+            { "Ammo",        u8"弹药"               },
+            { "Keys",        u8"钥匙"               },
+            { "SoulGems",    u8"灵魂石"             },
+            { "Scrolls",     u8"卷轴"               },
+            { "Favorites",   u8"收藏"               },
+        }},
+        { "tchinese", {
+            { "Weapons",     u8"武器"               },
+            { "Apparel",     u8"護甲"               },
+            { "Books",       u8"書籍"               },
+            { "Potions",     u8"藥水"               },
+            { "Food",        u8"食物"               },
+            { "Ingredients", u8"煉金材料"           },
+            { "Misc",        u8"雜項"               },
+            { "Ammo",        u8"彈藥"               },
+            { "Keys",        u8"鑰匙"               },
+            { "SoulGems",    u8"靈魂石"             },
+            { "Scrolls",     u8"卷軸"               },
+            { "Favorites",   u8"收藏"               },
+        }},
+        { "czech", {
+            { "Weapons",     u8"Zbraně"             },
+            { "Apparel",     u8"Oblečení"           },
+            { "Books",       u8"Knihy"              },
+            { "Potions",     u8"Lektvary"           },
+            { "Food",        u8"Jídlo"              },
+            { "Ingredients", u8"Přísady"            },
+            { "Misc",        u8"Ostatní"            },
+            { "Ammo",        u8"Munice"             },
+            { "Keys",        u8"Klíče"              },
+            { "SoulGems",    u8"Kameny duší"        },
+            { "Scrolls",     u8"Svitky"             },
+            { "Favorites",   u8"Oblíbené"           },
+        }},
+        { "hungarian", {
+            { "Weapons",     u8"Fegyverek"          },
+            { "Apparel",     u8"Ruházat"            },
+            { "Books",       u8"Könyvek"            },
+            { "Potions",     u8"Bájitalok"          },
+            { "Food",        u8"Étel"               },
+            { "Ingredients", u8"Hozzávalók"         },
+            { "Misc",        u8"Egyéb"              },
+            { "Ammo",        u8"Lőszer"             },
+            { "Keys",        u8"Kulcsok"            },
+            { "SoulGems",    u8"Lélekdrágakövek"    },
+            { "Scrolls",     u8"Tekercsek"          },
+            { "Favorites",   u8"Kedvencek"          },
+        }},
+        { "romanian", {
+            { "Weapons",     u8"Arme"               },
+            { "Apparel",     u8"Îmbrăcăminte"       },
+            { "Books",       u8"Cărți"              },
+            { "Potions",     u8"Poțiuni"            },
+            { "Food",        u8"Mâncare"            },
+            { "Ingredients", u8"Ingrediente"        },
+            { "Misc",        u8"Diverse"            },
+            { "Ammo",        u8"Muniție"            },
+            { "Keys",        u8"Chei"               },
+            { "SoulGems",    u8"Pietre sufletești"  },
+            { "Scrolls",     u8"Suluri"             },
+            { "Favorites",   u8"Favorite"           },
+        }},
+        { "turkish", {
+            { "Weapons",     u8"Silahlar"           },
+            { "Apparel",     u8"Giyim"              },
+            { "Books",       u8"Kitaplar"           },
+            { "Potions",     u8"İksirler"           },
+            { "Food",        u8"Yiyecek"            },
+            { "Ingredients", u8"Malzemeler"         },
+            { "Misc",        u8"Çeşitli"            },
+            { "Ammo",        u8"Mühimmat"           },
+            { "Keys",        u8"Anahtarlar"         },
+            { "SoulGems",    u8"Ruh Taşları"        },
+            { "Scrolls",     u8"Tomarlar"           },
+            { "Favorites",   u8"Favoriler"          },
+        }},
+    };
     // clang-format on
+
+    // Returns the current game language string (e.g. "english", "russian").
+    // The value is cached because it does not change at runtime.
+    static const std::string& GetGameLanguage()
+    {
+        static const std::string cached = [] {
+            auto* settings = RE::INISettingCollection::GetSingleton();
+            if (!settings)
+                return std::string("english");
+            auto* setting = settings->GetSetting("sLanguage:General");
+            if (!setting)
+                return std::string("english");
+            const char* str = setting->GetString();
+            return str ? std::string(str) : std::string("english");
+        }();
+        return cached;
+    }
+
+    // Returns the localized display name for a category.  Checks the hardcoded
+    // translation table first; falls back to the categoryId (English) when the
+    // current language has no entry.
+    static std::string GetLocalizedCategoryName(const std::string& categoryId)
+    {
+        const auto& lang = GetGameLanguage();
+        auto langIt = s_categoryTranslations.find(lang);
+        if (langIt != s_categoryTranslations.end()) {
+            auto catIt = langIt->second.find(categoryId);
+            if (catIt != langIt->second.end())
+                return catIt->second;
+        }
+        return categoryId;
+    }
 
     // ─── ReadCategories ───────────────────────────────────────────────────
 
@@ -293,14 +558,14 @@ namespace InventoryReader
 
         nlohmann::json result = nlohmann::json::array();
         for (auto& [catId, count] : categoryCounts) {
-            // Attempt a GMST lookup for the localized display name.  Falls back to
-            // categoryId when no GMST key is configured or the key is not found.
+            // Resolve the localized display name for this category.
+            // Priority: GMST override (for mods) → hardcoded translation → categoryId.
             std::string displayName;
             auto gmstIt = s_categoryGMSTKeys.find(catId);
             if (gmstIt != s_categoryGMSTKeys.end() && gmstIt->second[0] != '\0')
                 displayName = GetGMSTString(gmstIt->second);
             if (displayName.empty())
-                displayName = catId;
+                displayName = GetLocalizedCategoryName(catId);
 
             result.push_back({
                 { "categoryId", catId       },
@@ -308,12 +573,20 @@ namespace InventoryReader
                 { "count",      count       },
             });
         }
-        if (favCount > 0)
+        if (favCount > 0) {
+            std::string favName;
+            auto gmstIt = s_categoryGMSTKeys.find("Favorites");
+            if (gmstIt != s_categoryGMSTKeys.end() && gmstIt->second[0] != '\0')
+                favName = GetGMSTString(gmstIt->second);
+            if (favName.empty())
+                favName = GetLocalizedCategoryName("Favorites");
+
             result.push_back({
                 { "categoryId", "Favorites" },
-                { "name",       "Favorites" },
+                { "name",       favName     },
                 { "count",      favCount    },
             });
+        }
         return result;
     }
 
@@ -432,6 +705,7 @@ namespace InventoryReader
                 continue;
 
             auto j           = BuildBaseEntry(item, data);
+            j["categoryId"]  = "Weapons";
             j["isEquipped"]  = data.second ? data.second->IsWorn() : false;
 
             const auto* weap = item->As<RE::TESObjectWEAP>();
@@ -507,6 +781,7 @@ namespace InventoryReader
                 continue;
 
             auto j          = BuildBaseEntry(item, data);
+            j["categoryId"] = "Apparel";
             j["isEquipped"] = data.second ? data.second->IsWorn() : false;
 
             auto* armor = item->As<RE::TESObjectARMO>();
@@ -571,6 +846,7 @@ namespace InventoryReader
                 continue;
 
             auto j           = BuildBaseEntry(item, data);
+            j["categoryId"]  = "Potions";
             const auto* alch = item->As<RE::AlchemyItem>();
             j["effects"]     = BuildMagicEffectsArray(alch);
             result.push_back(std::move(j));
@@ -594,6 +870,7 @@ namespace InventoryReader
                 continue;
 
             auto j = BuildBaseEntry(item, data);
+            j["categoryId"] = "Ingredients";
 
             const auto*    ingr    = item->As<RE::IngredientItem>();
             nlohmann::json effects = nlohmann::json::array();
@@ -632,7 +909,9 @@ namespace InventoryReader
         for (auto& [item, data] : inv) {
             if (!item || data.first <= 0)
                 continue;
-            result.push_back(BuildBaseEntry(item, data));
+            auto j = BuildBaseEntry(item, data);
+            j["categoryId"] = "Misc";
+            result.push_back(std::move(j));
         }
         return result;
     }
@@ -652,6 +931,7 @@ namespace InventoryReader
             if (!item || data.first <= 0)
                 continue;
             auto        j     = BuildBaseEntry(item, data);
+            j["categoryId"]   = "Scrolls";
             // Scrolls are MagicItems — build effects from game data (no hardcoded strings).
             const auto* magic = item->As<RE::MagicItem>();
             j["effects"]      = BuildMagicEffectsArray(magic);
@@ -679,6 +959,7 @@ namespace InventoryReader
                 continue;
 
             auto j           = BuildBaseEntry(item, data);
+            j["categoryId"]  = "Food";
             const auto* alch = item->As<RE::AlchemyItem>();
             j["effects"]     = BuildMagicEffectsArray(alch);
             result.push_back(std::move(j));
@@ -701,6 +982,7 @@ namespace InventoryReader
             if (!item || data.first <= 0)
                 continue;
             auto j = BuildBaseEntry(item, data);
+            j["categoryId"] = "SoulGems";
 
             const auto* gem = item->As<RE::TESSoulGem>();
             if (gem) {
@@ -734,8 +1016,9 @@ namespace InventoryReader
             auto j          = BuildBaseEntry(item, data);
             j["isEquipped"] = data.second->IsWorn();
 
-            auto it   = s_formTypeNames.find(item->GetFormType());
-            j["type"] = (it != s_formTypeNames.end()) ? it->second : "Unknown";
+            auto it        = s_formTypeNames.find(item->GetFormType());
+            j["type"]      = (it != s_formTypeNames.end()) ? it->second : "Unknown";
+            j["categoryId"] = j["type"];
 
             result.push_back(std::move(j));
         }
@@ -759,6 +1042,7 @@ namespace InventoryReader
             if (!item || data.first <= 0)
                 continue;
             auto j           = BuildBaseEntry(item, data);
+            j["categoryId"]  = "Books";
             j["description"] = GetFormDescription(item);
             result.push_back(std::move(j));
         }
@@ -781,7 +1065,10 @@ namespace InventoryReader
         for (auto& [item, data] : inv) {
             if (!item || data.first <= 0)
                 continue;
-            result.push_back(BuildBaseEntry(item, data));
+            auto j = BuildBaseEntry(item, data);
+            auto it = s_formTypeNames.find(item->GetFormType());
+            j["categoryId"] = (it != s_formTypeNames.end()) ? it->second : "Unknown";
+            result.push_back(std::move(j));
         }
         return result;
     }
