@@ -3,13 +3,6 @@
 
 namespace GameWriter
 {
-    // ─── Constants ────────────────────────────────────────────────────────
-
-    // Sentinel value for ExtraHotkey::hotkey indicating "favorited but not
-    // assigned to a specific hotkey slot".  The Skyrim engine treats any
-    // ExtraHotkey presence as a favourite marker regardless of the value.
-    static constexpr RE::ExtraHotkey::Hotkey kFavoriteNoHotkey = static_cast<RE::ExtraHotkey::Hotkey>(0xFF);
-
     // ─── Helpers ──────────────────────────────────────────────────────────
 
     // Returns true for consumable form types that the "use" command accepts.
@@ -321,37 +314,26 @@ namespace GameWriter
         if (!liveEntry)
             return {false, "Item not found in inventory changes"};
 
-        if (liveEntry->IsFavorited()) {
-            // Remove favorite — strip ExtraHotkey from all extra-data lists.
-            if (liveEntry->extraLists) {
-                for (auto* xList : *liveEntry->extraLists) {
-                    if (!xList)
-                        continue;
-                    auto* hotkey = xList->GetByType<RE::ExtraHotkey>();
-                    if (hotkey)
-                        xList->Remove(hotkey);
+        auto* invChanges = player->GetInventoryChanges();
+        if (!invChanges)
+            return {false, "Inventory changes not available"};
+
+        // Get the first available ExtraDataList (may be nullptr for basic items).
+        RE::ExtraDataList* xList = nullptr;
+        if (liveEntry->extraLists) {
+            for (auto* xl : *liveEntry->extraLists) {
+                if (xl) {
+                    xList = xl;
+                    break;
                 }
             }
+        }
+
+        if (liveEntry->IsFavorited()) {
+            invChanges->RemoveFavorite(liveEntry, xList);
             PrintConsole("[WS] Unfavorite " + std::string(liveEntry->object->GetName()));
         } else {
-            // Add favorite — attach ExtraHotkey to the first available extra-data list.
-            RE::ExtraDataList* targetXList = nullptr;
-            if (liveEntry->extraLists) {
-                for (auto* xList : *liveEntry->extraLists) {
-                    if (xList) {
-                        targetXList = xList;
-                        break;
-                    }
-                }
-            }
-            if (!targetXList)
-                return {false, "Cannot favorite: item has no extra data list"};
-
-            // ExtraHotkey is a game-engine-managed object; ownership transfers
-            // to the ExtraDataList on Add().
-            auto* hotkey    = new RE::ExtraHotkey();
-            hotkey->hotkey  = kFavoriteNoHotkey;
-            targetXList->Add(hotkey);
+            invChanges->SetFavorite(liveEntry, xList);
             PrintConsole("[WS] Favorite " + std::string(liveEntry->object->GetName()));
         }
         return {true, ""};
