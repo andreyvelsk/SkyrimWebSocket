@@ -27,16 +27,32 @@ Inventory fields return complex JSON arrays or objects.
 
 ```jsonc
 { "categoryId": "Weapons", "name": "Weapons", "count": 5 }
-```
 
 - `categoryId` — stable internal identifier, always English (e.g. `"Weapons"`, `"Potions"`)
 - `name` — in-game localized display name when available via GMST, otherwise equals `categoryId`
 
+```
+
 ---
 
-## Base Item Fields (All Categories)
+### Possible `categoryId` values
 
-Every `Inventory::Items::*` category element has these fields:
+Below are all possible values for the `categoryId` field that `Inventory::Categories` may return (stable internal keys):
+
+- `Weapons` — Weapons (RE::FormType::Weapon)
+- `Apparel` — Armor and clothing (RE::FormType::Armor)
+- `Books` — Books (RE::FormType::Book)
+- `Potions` — Alchemy items (RE::FormType::AlchemyItem). Excludes food.
+- `Food` — Food (alchemy items flagged as IsFood)
+- `Ingredients` — Ingredients (RE::FormType::Ingredient)
+- `Misc` — Miscellaneous items (RE::FormType::Misc). Gold is excluded.
+- `Ammo` — Ammunition (RE::FormType::Ammo)
+- `Keys` — Keys (RE::FormType::KeyMaster)
+- `SoulGems` — Soul gems (RE::FormType::SoulGem)
+- `Scrolls` — Scrolls (RE::FormType::Scroll)
+- `Favorites` — Special category added only when the player has favorited items
+
+- Note: only non-empty categories are returned; order is not guaranteed. The localized `name` is looked up via GMST and falls back to `categoryId` when absent.
 
 ```jsonc
 { 
@@ -85,22 +101,6 @@ Additional fields:
 - `armorRating` (float) — Effective value as shown in inventory = `baseArmorRating × (1 + kArmorPerks/100)`
 - `bodySlots` (array of strings) — e.g. `["Body", "Forearms"]`
 - `enchantment` (object or null) — See [Enchantment Object](#enchantment-object)
- - `bodySlots` (array of strings) — e.g. `["Body", "Forearms"]`. Possible values (derived from the item's BGSBipedObjectForm slot mask; biped bits 30–43):
-  - `Head` — Head slot (helmets, circlets may use this)
-  - `Hair` — Hair/hairstyle slot
-  - `Body` — Torso/upper body
-  - `Hands` — Hands/gloves
-  - `Forearms` — Forearms/bracers
-  - `Amulet` — Amulet/necklace
-  - `Ring` — Ring slot
-  - `Feet` — Boots/footwear
-  - `Calves` — Calf armor (greaves)
-  - `Shield` — Shield/off-hand equipment
-  - `Tail` — Tail attachment (creature races)
-  - `LongHair` — Long hair slot
-  - `Circlet` — Circlet/headpiece
-  - `Ears` — Earring/ear slot
- - `enchantment` (object or null) — See [Enchantment Object](#enchantment-object)
 
 ### Potions
 
