@@ -334,7 +334,9 @@ namespace GameWriter
             }
             PrintConsole("[WS] Unfavorite " + std::string(liveEntry->object->GetName()));
         } else {
-            // Add favorite — attach ExtraHotkey to the first available extra-data list.
+            // Add favorite — attach ExtraHotkey to an extra-data list.
+            // Some items (e.g. basic unmodified gear) have no extra-data lists,
+            // so we create one when needed.
             RE::ExtraDataList* targetXList = nullptr;
             if (liveEntry->extraLists) {
                 for (auto* xList : *liveEntry->extraLists) {
@@ -344,14 +346,19 @@ namespace GameWriter
                     }
                 }
             }
-            if (!targetXList)
-                return {false, "Cannot favorite: item has no extra data list"};
 
             // ExtraHotkey is a game-engine-managed object; ownership transfers
             // to the ExtraDataList on Add().
-            auto* hotkey    = new RE::ExtraHotkey();
-            hotkey->hotkey  = kFavoriteNoHotkey;
-            targetXList->Add(hotkey);
+            auto* hotkey   = new RE::ExtraHotkey();
+            hotkey->hotkey = kFavoriteNoHotkey;
+
+            if (targetXList) {
+                targetXList->Add(hotkey);
+            } else {
+                auto* newXList = new RE::ExtraDataList();
+                newXList->Add(hotkey);
+                liveEntry->AddExtraList(newXList);
+            }
             PrintConsole("[WS] Favorite " + std::string(liveEntry->object->GetName()));
         }
         return {true, ""};
