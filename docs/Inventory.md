@@ -27,16 +27,32 @@ Inventory fields return complex JSON arrays or objects.
 
 ```jsonc
 { "categoryId": "Weapons", "name": "Weapons", "count": 5 }
-```
 
 - `categoryId` — stable internal identifier, always English (e.g. `"Weapons"`, `"Potions"`)
 - `name` — in-game localized display name when available via GMST, otherwise equals `categoryId`
 
+```
+
 ---
 
-## Base Item Fields (All Categories)
+### Possible `categoryId` values
 
-Every `Inventory::Items::*` category element has these fields:
+Below are all possible values for the `categoryId` field that `Inventory::Categories` may return (stable internal keys):
+
+- `Weapons` — Weapons (RE::FormType::Weapon)
+- `Apparel` — Armor and clothing (RE::FormType::Armor)
+- `Books` — Books (RE::FormType::Book)
+- `Potions` — Alchemy items (RE::FormType::AlchemyItem). Excludes food.
+- `Food` — Food (alchemy items flagged as IsFood)
+- `Ingredients` — Ingredients (RE::FormType::Ingredient)
+- `Misc` — Miscellaneous items (RE::FormType::Misc). Gold is excluded.
+- `Ammo` — Ammunition (RE::FormType::Ammo)
+- `Keys` — Keys (RE::FormType::KeyMaster)
+- `SoulGems` — Soul gems (RE::FormType::SoulGem)
+- `Scrolls` — Scrolls (RE::FormType::Scroll)
+- `Favorites` — Special category added only when the player has favorited items
+
+- Note: only non-empty categories are returned; order is not guaranteed. The localized `name` is looked up via GMST and falls back to `categoryId` when absent.
 
 ```jsonc
 { 
