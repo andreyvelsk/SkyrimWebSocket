@@ -389,8 +389,8 @@ current weapon loadout in a single push stream.
       { "categoryId": "Apparel", "name": "Apparel", "count": 7 }
     ],
     "weapons": [
-      { "name": "Iron Sword",    "formId": "0x00012EB7", "count": 1, "weight": 9.0,  "value": 25  },
-      { "name": "Steel Dagger",  "formId": "0x00013CE6", "count": 1, "weight": 2.5,  "value": 22  }
+      { "name": "Iron Sword",    "formId": "0x00012EB7", "categoryId": "Weapons", "count": 1, "weight": 9.0,  "value": 25  },
+      { "name": "Steel Dagger",  "formId": "0x00013CE6", "categoryId": "Weapons", "count": 1, "weight": 2.5,  "value": 22  }
     ]
   }
 }

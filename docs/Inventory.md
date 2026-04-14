@@ -26,11 +26,11 @@ Inventory fields return complex JSON arrays or objects.
 ## `Inventory::Categories` Element Shape
 
 ```jsonc
-{ "categoryId": "Weapons", "name": "Weapons", "count": 5 }
+{ "categoryId": "Weapons", "name": "Оружие", "count": 5 }
 ```
 
 - `categoryId` — stable internal identifier, always English (e.g. `"Weapons"`, `"Potions"`)
-- `name` — in-game localized display name when available via GMST, otherwise equals `categoryId`
+- `name` — localized display name in the current game language. Uses a built-in translation table covering all Skyrim-supported languages. A GMST override (if registered by a UI mod) takes priority. Falls back to `categoryId` for unrecognized languages.
 
 ---
 
@@ -42,6 +42,7 @@ Every `Inventory::Items::*` category element has these fields:
 { 
   "name": "Iron Sword", 
   "formId": "0x00012EB7", 
+  "categoryId": "Weapons",
   "count": 1, 
   "weight": 9.0, 
   "value": 25, 
@@ -52,6 +53,7 @@ Every `Inventory::Items::*` category element has these fields:
 
 - `name` — Item display name
 - `formId` — Unique form identifier (hex string)
+- `categoryId` — Stable category identifier matching the `Inventory::Items::*` suffix (e.g. `"Weapons"`, `"Books"`, `"Scrolls"`)
 - `count` — Quantity in inventory
 - `weight` — Weight per item
 - `value` — Gold value per item
@@ -122,6 +124,7 @@ Additional fields:
 Additional fields:
 - `isEquipped` (bool) — Currently equipped on character
 - `type` (string) — Original category ID (e.g. `"Weapons"`, `"Apparel"`)
+- `categoryId` (string) — Same as `type` — the original category the item belongs to
 
 ---
 
