@@ -85,6 +85,22 @@ Additional fields:
 - `armorRating` (float) — Effective value as shown in inventory = `baseArmorRating × (1 + kArmorPerks/100)`
 - `bodySlots` (array of strings) — e.g. `["Body", "Forearms"]`
 - `enchantment` (object or null) — See [Enchantment Object](#enchantment-object)
+ - `bodySlots` (array of strings) — e.g. `["Body", "Forearms"]`. Possible values (derived from the item's BGSBipedObjectForm slot mask; biped bits 30–43):
+  - `Head` — Head slot (helmets, circlets may use this)
+  - `Hair` — Hair/hairstyle slot
+  - `Body` — Torso/upper body
+  - `Hands` — Hands/gloves
+  - `Forearms` — Forearms/bracers
+  - `Amulet` — Amulet/necklace
+  - `Ring` — Ring slot
+  - `Feet` — Boots/footwear
+  - `Calves` — Calf armor (greaves)
+  - `Shield` — Shield/off-hand equipment
+  - `Tail` — Tail attachment (creature races)
+  - `LongHair` — Long hair slot
+  - `Circlet` — Circlet/headpiece
+  - `Ears` — Earring/ear slot
+ - `enchantment` (object or null) — See [Enchantment Object](#enchantment-object)
 
 ### Potions
 
