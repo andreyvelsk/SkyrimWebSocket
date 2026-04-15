@@ -765,6 +765,29 @@ namespace InventoryReader
         return result;
     }
 
+    // Attempts to extract a base-damage value from various form types.
+    // Different CommonLibSSE/RE versions expose damage under different
+    // members/methods (GetAttackDamage, GetDamage, gamedata/data.damage, etc.).
+    template <typename T>
+    static float ExtractBaseDamage(const T* obj)
+    {
+        if (!obj)
+            return 0.0f;
+        if constexpr (requires(const T* x) { x->GetAttackDamage(); }) {
+            return obj->GetAttackDamage();
+        } else if constexpr (requires(const T* x) { x->GetDamage(); }) {
+            return obj->GetDamage();
+        } else if constexpr (requires(const T* x) { x->gamedata.damage; }) {
+            return obj->gamedata.damage;
+        } else if constexpr (requires(const T* x) { x->data.damage; }) {
+            return obj->data.damage;
+        } else if constexpr (requires(const T* x) { x->damage; }) {
+            return obj->damage;
+        } else {
+            return 0.0f;
+        }
+    }
+
     // ─── Generic resolver (Ammo, Keys) ───────────────────────────────────
 
     static nlohmann::json ReadItemsByType(RE::FormType formType)
