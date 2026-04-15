@@ -432,6 +432,7 @@ namespace InventoryReader
                 continue;
 
             auto j           = BuildBaseEntry(item, data);
+            j["categoryType"] = "Weapon";
             j["isEquipped"]  = data.second ? data.second->IsWorn() : false;
 
             const auto* weap = item->As<RE::TESObjectWEAP>();
@@ -507,6 +508,7 @@ namespace InventoryReader
                 continue;
 
             auto j          = BuildBaseEntry(item, data);
+            j["categoryType"] = "Apparel";
             j["isEquipped"] = data.second ? data.second->IsWorn() : false;
 
             auto* armor = item->As<RE::TESObjectARMO>();
@@ -571,6 +573,7 @@ namespace InventoryReader
                 continue;
 
             auto j           = BuildBaseEntry(item, data);
+            j["categoryType"] = "Potion";
             const auto* alch = item->As<RE::AlchemyItem>();
             j["effects"]     = BuildMagicEffectsArray(alch);
             result.push_back(std::move(j));
@@ -594,6 +597,7 @@ namespace InventoryReader
                 continue;
 
             auto j = BuildBaseEntry(item, data);
+            j["categoryType"] = "Ingredient";
 
             const auto*    ingr    = item->As<RE::IngredientItem>();
             nlohmann::json effects = nlohmann::json::array();
@@ -632,7 +636,9 @@ namespace InventoryReader
         for (auto& [item, data] : inv) {
             if (!item || data.first <= 0)
                 continue;
-            result.push_back(BuildBaseEntry(item, data));
+            auto j = BuildBaseEntry(item, data);
+            j["categoryType"] = "Misc";
+            result.push_back(std::move(j));
         }
         return result;
     }
@@ -652,6 +658,7 @@ namespace InventoryReader
             if (!item || data.first <= 0)
                 continue;
             auto        j     = BuildBaseEntry(item, data);
+            j["categoryType"] = "Scroll";
             // Scrolls are MagicItems — build effects from game data (no hardcoded strings).
             const auto* magic = item->As<RE::MagicItem>();
             j["effects"]      = BuildMagicEffectsArray(magic);
@@ -679,6 +686,7 @@ namespace InventoryReader
                 continue;
 
             auto j           = BuildBaseEntry(item, data);
+            j["categoryType"] = "Food";
             const auto* alch = item->As<RE::AlchemyItem>();
             j["effects"]     = BuildMagicEffectsArray(alch);
             result.push_back(std::move(j));
@@ -701,6 +709,7 @@ namespace InventoryReader
             if (!item || data.first <= 0)
                 continue;
             auto j = BuildBaseEntry(item, data);
+            j["categoryType"] = "SoulGem";
 
             const auto* gem = item->As<RE::TESSoulGem>();
             if (gem) {
@@ -736,6 +745,32 @@ namespace InventoryReader
 
             auto it   = s_formTypeNames.find(item->GetFormType());
             j["type"] = (it != s_formTypeNames.end()) ? it->second : "Unknown";
+            
+            // Set categoryType based on FormType
+            std::string categoryType = "Unknown";
+            if (item->GetFormType() == RE::FormType::Weapon) {
+                categoryType = "Weapon";
+            } else if (item->GetFormType() == RE::FormType::Armor) {
+                categoryType = "Apparel";
+            } else if (item->GetFormType() == RE::FormType::Book) {
+                categoryType = "Book";
+            } else if (item->GetFormType() == RE::FormType::AlchemyItem) {
+                const auto* alch = item->As<RE::AlchemyItem>();
+                categoryType = (alch && alch->IsFood()) ? "Food" : "Potion";
+            } else if (item->GetFormType() == RE::FormType::Ingredient) {
+                categoryType = "Ingredient";
+            } else if (item->GetFormType() == RE::FormType::Misc) {
+                categoryType = "Misc";
+            } else if (item->GetFormType() == RE::FormType::Ammo) {
+                categoryType = "Ammo";
+            } else if (item->GetFormType() == RE::FormType::KeyMaster) {
+                categoryType = "Key";
+            } else if (item->GetFormType() == RE::FormType::SoulGem) {
+                categoryType = "SoulGem";
+            } else if (item->GetFormType() == RE::FormType::Scroll) {
+                categoryType = "Scroll";
+            }
+            j["categoryType"] = categoryType;
 
             result.push_back(std::move(j));
         }
@@ -759,6 +794,7 @@ namespace InventoryReader
             if (!item || data.first <= 0)
                 continue;
             auto j           = BuildBaseEntry(item, data);
+            j["categoryType"] = "Book";
             j["description"] = GetFormDescription(item);
             result.push_back(std::move(j));
         }
@@ -809,6 +845,16 @@ namespace InventoryReader
             if (!item || data.first <= 0)
                 continue;
             auto j = BuildBaseEntry(item, data);
+            
+            // Set categoryType based on FormType
+            if (formType == RE::FormType::Ammo) {
+                j["categoryType"] = "Ammo";
+            } else if (formType == RE::FormType::KeyMaster) {
+                j["categoryType"] = "Key";
+            } else {
+                j["categoryType"] = "Unknown";
+            }
+            
             j["isEquipped"] = data.second ? data.second->IsWorn() : false;
 
             // For Ammo entries include an effective damage field.
