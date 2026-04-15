@@ -815,9 +815,9 @@ namespace InventoryReader
             if (formType == RE::FormType::Ammo) {
                 float base = 0.0f;
                 if (const auto* ammo = item->As<RE::TESAmmo>())
-                    base = ammo->GetDamage();
+                    base = ExtractBaseDamage(ammo);
                 else if (const auto* weap = item->As<RE::TESObjectWEAP>())
-                    base = weap->GetAttackDamage();
+                    base = ExtractBaseDamage(weap);
                 j["baseDamage"] = base;
                 j["damage"] = base * atkMult;
             }
