@@ -129,7 +129,9 @@ Additional fields:
 - `armorType` (string) — Localized in-game display name via GMST
 - `baseArmorRating` (float) — Raw form value before perks
 - `armorRating` (float) — Effective value as shown in inventory = `baseArmorRating × (1 + kArmorPerks/100)`
-- `bodySlots` (array of strings) — e.g. `["Body", "Forearms"]`
+- `bodySlots` (array of strings) — Body-slot identifiers. Possible values:
+  `Head`, `Hair`, `Body`, `Hands`, `Forearms`, `Amulet`, `Ring`, `Feet`,
+  `Calves`, `Shield`, `Tail`, `LongHair`, `Circlet`, `Ears`.
 - `enchantment` (object or null) — See [Enchantment Object](#enchantment-object)
 
 ### Ammo
