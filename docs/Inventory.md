@@ -102,6 +102,13 @@ Additional fields:
 - `bodySlots` (array of strings) — e.g. `["Body", "Forearms"]`
 - `enchantment` (object or null) — See [Enchantment Object](#enchantment-object)
 
+### Ammo
+
+Additional fields:
+- `isEquipped` (bool) — Currently equipped on character
+- `baseDamage` (float) — Base damage before multipliers
+- `damage` (float) — Effective damage = `baseDamage × kAttackDamageMult`
+
 ### Potions
 
 Additional fields:

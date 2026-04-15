@@ -773,6 +773,10 @@ namespace InventoryReader
         if (!player)
             return nlohmann::json::array();
 
+        // Compute attack multiplier once (matches ReadWeapons behaviour).
+        const float atkMult = player->AsActorValueOwner()
+                                  ->GetActorValue(RE::ActorValue::kAttackDamageMult);
+
         auto inv = player->GetInventory([formType](RE::TESBoundObject& obj) {
             return obj.GetFormType() == formType;
         });
@@ -781,7 +785,21 @@ namespace InventoryReader
         for (auto& [item, data] : inv) {
             if (!item || data.first <= 0)
                 continue;
-            result.push_back(BuildBaseEntry(item, data));
+            auto j = BuildBaseEntry(item, data);
+            j["isEquipped"] = data.second ? data.second->IsWorn() : false;
+
+            // For Ammo entries include an effective damage field.
+            if (formType == RE::FormType::Ammo) {
+                float base = 0.0f;
+                if (const auto* ammo = item->As<RE::TESAmmo>())
+                    base = ammo->GetDamage();
+                else if (const auto* weap = item->As<RE::TESObjectWEAP>())
+                    base = weap->GetAttackDamage();
+                j["baseDamage"] = base;
+                j["damage"] = base * atkMult;
+            }
+
+            result.push_back(std::move(j));
         }
         return result;
     }
