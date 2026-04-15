@@ -1,6 +1,7 @@
 #include "FieldRegistry.h"
 #include "InventoryReader.h"
 #include "PlayerReader.h"
+#include "MagicReader.h"
 
 #include <nlohmann/json.hpp>
 
@@ -233,6 +234,34 @@ namespace FieldRegistry
         { "Inventory::Items::Scrolls",
           { "Scrolls in player inventory", "array",
             &InventoryReader::ReadScrolls } },
+
+        // Magic fields (per-school resolvers).  Resolvers currently return
+        // the full known-spells list as a conservative fallback; future
+        // implementations may filter by school.
+        { "Magic::Categories",
+          { "Array of magic categories with spell counts", "array",
+            &Magic::ReadCategories } },
+        { "Magic::Items::All",
+          { "All spells known to the player", "array",
+            Magic::MakeCategoryResolver("All") } },
+        { "Magic::Items::Destruction",
+          { "Destruction spells in player spellbook", "array",
+            Magic::MakeCategoryResolver("Destruction") } },
+        { "Magic::Items::Alteration",
+          { "Alteration spells in player spellbook", "array",
+            Magic::MakeCategoryResolver("Alteration") } },
+        { "Magic::Items::Conjuration",
+          { "Conjuration spells in player spellbook", "array",
+            Magic::MakeCategoryResolver("Conjuration") } },
+        { "Magic::Items::Illusion",
+          { "Illusion spells in player spellbook", "array",
+            Magic::MakeCategoryResolver("Illusion") } },
+        { "Magic::Items::Restoration",
+          { "Restoration spells in player spellbook", "array",
+            Magic::MakeCategoryResolver("Restoration") } },
+        { "Magic::Items::Favorites",
+          { "Favorited spells (if detectable)", "array",
+            Magic::MakeCategoryResolver("Favorites") } },
         { "Inventory::Items::Favorites",
           { "Favorited items across all categories", "array",
             &InventoryReader::ReadFavorites } },

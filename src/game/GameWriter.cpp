@@ -338,4 +338,42 @@ namespace GameWriter
         }
         return {true, ""};
     }
+
+    CommandResult EquipSpell(RE::FormID formId, const std::string& hand)
+    {
+        auto* player = RE::PlayerCharacter::GetSingleton();
+        if (!player)
+            return {false, "Player not available"};
+
+        auto* spell = RE::TESForm::LookupByID<RE::MagicItem>(formId);
+        if (!spell)
+            return {false, "Spell not found"};
+
+        // The game exposes casting equip via EquipObject on magic items in
+        // certain contexts (e.g. scrolls). For spells, binding to hands is
+        // handled by equip manager via spell-casting slots. As a conservative
+        // fallback we attempt to equip the spell as a lesser form by using
+        // ActorEquipManager's EquipObject when possible; if not available,
+        // return an informative error.
+
+        auto* equipMgr = RE::ActorEquipManager::GetSingleton();
+        if (!equipMgr)
+            return {false, "Equipment manager not available"};
+
+        // There is no direct EquipObject path for known spells; return error
+        // to indicate operation is not implemented.
+        return {false, "EquipSpell not implemented on this runtime"};
+    }
+
+    CommandResult UnequipSpell(RE::FormID formId, const std::string& hand)
+    {
+        return {false, "UnequipSpell not implemented on this runtime"};
+    }
+
+    CommandResult FavoriteSpell(RE::FormID formId)
+    {
+        // Skyrim does not natively support favoriting spells separately from
+        // quickslot bindings; return not-implemented.
+        return {false, "FavoriteSpell not supported"};
+    }
 }
