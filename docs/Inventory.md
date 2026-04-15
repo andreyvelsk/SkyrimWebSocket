@@ -54,6 +54,12 @@ Below are all possible values for the `categoryId` field that `Inventory::Catego
 
 - Note: only non-empty categories are returned; order is not guaranteed. The localized `name` is looked up via GMST and falls back to `categoryId` when absent.
 
+---
+
+## Base Item Fields
+
+All inventory items include these common fields:
+
 ```jsonc
 { 
   "name": "Iron Sword", 
@@ -62,7 +68,8 @@ Below are all possible values for the `categoryId` field that `Inventory::Catego
   "weight": 9.0, 
   "value": 25, 
   "isFavorite": false, 
-  "isStolen": false 
+  "isStolen": false,
+  "categoryType": "Weapon"
 }
 ```
 
@@ -73,12 +80,33 @@ Below are all possible values for the `categoryId` field that `Inventory::Catego
 - `value` — Gold value per item
 - `isFavorite` — Is this item in favorites
 - `isStolen` — `true` when the item stack carries a stolen (red-hand) flag
+- `categoryType` — Item category type (see [Category Types](#category-types) below)
+
+---
+
+## Category Types
+
+Every item includes a `categoryType` field that identifies its category. The possible values are:
+
+- `Weapon` — Weapons (RE::FormType::Weapon)
+- `Apparel` — Armor and clothing (RE::FormType::Armor)
+- `Book` — Books (RE::FormType::Book)
+- `Potion` — Alchemy items (RE::FormType::AlchemyItem). Excludes food.
+- `Food` — Food (alchemy items flagged as IsFood)
+- `Ingredient` — Ingredients (RE::FormType::Ingredient)
+- `Misc` — Miscellaneous items (RE::FormType::Misc). Excludes gold.
+- `Ammo` — Ammunition (RE::FormType::Ammo)
+- `Key` — Keys (RE::FormType::KeyMaster)
+- `SoulGem` — Soul gems (RE::FormType::SoulGem)
+- `Scroll` — Scrolls (RE::FormType::Scroll)
 
 ---
 
 ## Category-Specific Extended Fields
 
 ### Weapons
+
+`categoryType: "Weapon"`
 
 Additional fields:
 - `isEquipped` (bool) — Currently equipped on character
@@ -93,51 +121,91 @@ Additional fields:
 
 ### Apparel
 
+`categoryType: "Apparel"`
+
 Additional fields:
 - `isEquipped` (bool) — Currently equipped on character
 - `armorTypeId` (string) — Stable key: `"Heavy"`, `"Light"`, or `"Clothing"`
 - `armorType` (string) — Localized in-game display name via GMST
 - `baseArmorRating` (float) — Raw form value before perks
 - `armorRating` (float) — Effective value as shown in inventory = `baseArmorRating × (1 + kArmorPerks/100)`
-- `bodySlots` (array of strings) — e.g. `["Body", "Forearms"]`
+- `bodySlots` (array of strings) — Body-slot identifiers. Possible values:
+  `Head`, `Hair`, `Body`, `Hands`, `Forearms`, `Amulet`, `Ring`, `Feet`,
+  `Calves`, `Shield`, `Tail`, `LongHair`, `Circlet`, `Ears`.
 - `enchantment` (object or null) — See [Enchantment Object](#enchantment-object)
 
+### Ammo
+
+`categoryType: "Ammo"`
+
+Additional fields:
+- `isEquipped` (bool) — Currently equipped on character
+- `baseDamage` (float) — Base damage before multipliers
+- `damage` (float) — Effective damage = `baseDamage × kAttackDamageMult`
+
 ### Potions
+
+`categoryType: "Potion"`
 
 Additional fields:
 - `effects` (array) — See [Effects Array](#effects-array-element)
 
 ### Food
 
+`categoryType: "Food"`
+
 Additional fields:
 - `effects` (array) — See [Effects Array](#effects-array-element)
 
 ### Ingredients
+
+`categoryType: "Ingredient"`
 
 Additional fields:
 - `effects` (array of objects) — Each has `{ "name": string, "known": bool }` (up to 4 entries)
 
 ### Books
 
+`categoryType: "Book"`
+
 Additional fields:
 - `description` (string) — From game's TESDescription
 
 ### Scrolls
+
+`categoryType: "Scroll"`
 
 Additional fields:
 - `effects` (array) — See [Effects Array](#effects-array-element)
 
 ### Soul Gems
 
+`categoryType: "SoulGem"`
+
 Additional fields:
 - `capacity` (string) — Max soul level: `"Petty"`, `"Lesser"`, `"Common"`, `"Greater"`, `"Grand"`, or `"None"`
 - `containedSoul` (string) — Current fill level, same values as capacity
 
+### Misc
+
+`categoryType: "Misc"`
+
+Additional fields: none (uses only base fields)
+
+### Keys
+
+`categoryType: "Key"`
+
+Additional fields: none (uses only base fields)
+
 ### Favorites
+
+Favorites includes items from all categories. Each item carries all category-specific fields for its type, plus:
 
 Additional fields:
 - `isEquipped` (bool) — Currently equipped on character
 - `type` (string) — Original category ID (e.g. `"Weapons"`, `"Apparel"`)
+- `categoryType` (string) — Item category type (`"Weapon"`, `"Apparel"`, `"Book"`, `"Potion"`, `"Food"`, `"Ingredient"`, `"Misc"`, `"Ammo"`, `"Key"`, `"SoulGem"`, or `"Scroll"`)
 
 ---
 
