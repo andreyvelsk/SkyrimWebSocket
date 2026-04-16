@@ -109,27 +109,20 @@ namespace MagicReader
         if (!player || !spell)
             return false;
 
-        // Try to find the spell in player's spell list
-        // Note: This iterates through all known spells to check
-        auto* dataHandler = RE::TESDataHandler::GetSingleton();
-        if (!dataHandler)
+        // Access the actor's magic data to check for known spells
+        // Use GetActorRuntimeData which is the standard way in CommonLibSSE-NG
+        auto& actorData = player->GetActorRuntimeData();
+        if (!actorData.addedSpells)
             return false;
 
-        // For now, assume if we can lookup the spell and player has magic, they might know it
-        // This is a simplified check - in production you'd want to verify against actor's spell list
-        // A spell the player can cast would be in their effects or spell book
-        
-        // Try using visitor pattern if available, otherwise we'll need runtime data access
-        bool found = false;
-        player->VisitSpells([&](RE::SpellItem* knownSpell) {
+        // Check if spell is in the added spells list
+        for (auto* knownSpell : *actorData.addedSpells) {
             if (knownSpell && knownSpell->GetFormID() == spell->GetFormID()) {
-                found = true;
-                return RE::BSContainer::ForEachResult::kStop;
+                return true;
             }
-            return RE::BSContainer::ForEachResult::kContinue;
-        });
+        }
         
-        return found;
+        return false;
     }
 
     // Determines which hand a spell is currently equipped in
@@ -138,22 +131,14 @@ namespace MagicReader
         if (!spell || !player)
             return nullptr;
 
-        // Access equipped items through inventory
-        auto* leftEquipped = player->GetEquippedEntryData(true);   // true = left hand
-        auto* rightEquipped = player->GetEquippedEntryData(false); // false = right hand
+        // Access selected spells through runtime data
+        auto& actorData = player->GetActorRuntimeData();
+        
+        auto* leftSpell = actorData.selectedSpells[RE::Actor::SlotTypes::kLeftHand];
+        auto* rightSpell = actorData.selectedSpells[RE::Actor::SlotTypes::kRightHand];
 
-        bool isLeft = false;
-        bool isRight = false;
-
-        if (leftEquipped && leftEquipped->object) {
-            auto* leftSpell = leftEquipped->object->As<RE::SpellItem>();
-            isLeft = (leftSpell && leftSpell->GetFormID() == spell->GetFormID());
-        }
-
-        if (rightEquipped && rightEquipped->object) {
-            auto* rightSpell = rightEquipped->object->As<RE::SpellItem>();
-            isRight = (rightSpell && rightSpell->GetFormID() == spell->GetFormID());
-        }
+        bool isLeft = (leftSpell && leftSpell->GetFormID() == spell->GetFormID());
+        bool isRight = (rightSpell && rightSpell->GetFormID() == spell->GetFormID());
 
         if (isLeft && isRight)
             return "both";
