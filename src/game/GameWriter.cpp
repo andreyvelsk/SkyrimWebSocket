@@ -354,28 +354,20 @@ namespace GameWriter
             return {false, "Form is not a spell"};
 
         // Check if player knows the spell
-        bool knowsSpell = false;
-        auto* actorEffects = player->addedSpells;
-        if (actorEffects) {
-            for (auto* knownSpell : *actorEffects) {
-                if (knownSpell && knownSpell->GetFormID() == formId) {
-                    knowsSpell = true;
-                    break;
-                }
-            }
-        }
-
-        if (!knowsSpell)
+        if (!player->HasSpell(spell))
             return {false, "Spell not known by player"};
 
-        // Determine which hand to equip to
-        const bool leftHand = (hand == "left");
-        const auto slotIndex = leftHand 
-            ? RE::PlayerCharacter::SelectedSpells::kLeftHand 
-            : RE::PlayerCharacter::SelectedSpells::kRightHand;
+        auto* equipMgr = RE::ActorEquipManager::GetSingleton();
+        if (!equipMgr)
+            return {false, "Equipment manager not available"};
 
-        // Equip the spell
-        player->selectedSpells[slotIndex] = spell;
+        // Get the appropriate hand slot
+        const auto* slot = GetHandSlot(hand);
+        if (!slot)
+            return {false, "Invalid hand slot"};
+
+        // Equip the spell using ActorEquipManager
+        equipMgr->EquipSpell(player, spell, slot);
 
         PrintConsole("[WS] Equip spell " + std::string(spell->GetName()) + " to " + hand + " hand");
         return {true, ""};
@@ -395,19 +387,17 @@ namespace GameWriter
         if (!spell)
             return {false, "Form is not a spell"};
 
-        // Determine which hand to unequip from
-        const bool leftHand = (hand == "left");
-        const auto slotIndex = leftHand 
-            ? RE::PlayerCharacter::SelectedSpells::kLeftHand 
-            : RE::PlayerCharacter::SelectedSpells::kRightHand;
+        auto* equipMgr = RE::ActorEquipManager::GetSingleton();
+        if (!equipMgr)
+            return {false, "Equipment manager not available"};
 
-        // Check if the spell is currently equipped in the specified hand
-        auto* equippedSpell = player->selectedSpells[slotIndex];
-        if (equippedSpell != spell)
-            return {false, "Spell is not equipped in " + hand + " hand"};
+        // Get the appropriate hand slot
+        const auto* slot = GetHandSlot(hand);
+        if (!slot)
+            return {false, "Invalid hand slot"};
 
-        // Unequip by setting to nullptr
-        player->selectedSpells[slotIndex] = nullptr;
+        // Unequip the spell using ActorEquipManager
+        equipMgr->UnequipSpell(player, spell, slot);
 
         PrintConsole("[WS] Unequip spell " + std::string(spell->GetName()) + " from " + hand + " hand");
         return {true, ""};

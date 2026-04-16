@@ -109,11 +109,12 @@ namespace MagicReader
         if (!spell || !player)
             return nullptr;
 
-        auto* leftSpell  = player->selectedSpells[RE::PlayerCharacter::SelectedSpells::kLeftHand];
-        auto* rightSpell = player->selectedSpells[RE::PlayerCharacter::SelectedSpells::kRightHand];
+        // Get equipped objects in each hand
+        auto* leftEquipped = player->GetEquippedObject(true);   // true = left hand
+        auto* rightEquipped = player->GetEquippedObject(false); // false = right hand
 
-        bool isLeft  = (leftSpell == spell);
-        bool isRight = (rightSpell == spell);
+        bool isLeft = (leftEquipped && leftEquipped->As<RE::SpellItem>() == spell);
+        bool isRight = (rightEquipped && rightEquipped->As<RE::SpellItem>() == spell);
 
         if (isLeft && isRight)
             return "both";
@@ -186,18 +187,19 @@ namespace MagicReader
 
         nlohmann::json result = nlohmann::json::array();
 
-        // Iterate through all known spells
+        // Get all spells from the data handler
         auto* dataHandler = RE::TESDataHandler::GetSingleton();
         if (!dataHandler)
             return result;
 
-        // Access player's spell list
-        auto* actorEffects = player->addedSpells;
-        if (!actorEffects)
-            return result;
-
-        for (auto* spell : *actorEffects) {
+        // Iterate through all spells and check if player knows them
+        auto& spells = dataHandler->GetFormArray<RE::SpellItem>();
+        for (auto* spell : spells) {
             if (!spell)
+                continue;
+
+            // Check if player knows this spell
+            if (!player->HasSpell(spell))
                 continue;
 
             // Skip if not the right type
@@ -223,15 +225,21 @@ namespace MagicReader
         if (!player)
             return nlohmann::json::array();
 
-        auto* actorEffects = player->addedSpells;
-        if (!actorEffects)
+        auto* dataHandler = RE::TESDataHandler::GetSingleton();
+        if (!dataHandler)
             return nlohmann::json::array();
 
         // Count spells by category
         std::unordered_map<std::string, int32_t> categoryCounts;
 
-        for (auto* spell : *actorEffects) {
+        // Iterate through all spells and check if player knows them
+        auto& spells = dataHandler->GetFormArray<RE::SpellItem>();
+        for (auto* spell : spells) {
             if (!spell)
+                continue;
+
+            // Check if player knows this spell
+            if (!player->HasSpell(spell))
                 continue;
 
             // Skip powers and abilities
