@@ -128,9 +128,9 @@ validates the request and executes it on the game thread, then replies with a
 | Field | Required | Default | Description |
 |---|---|---|---|
 | `id` | **yes** | — | Unique identifier echoed back in the `"commandResult"` response. |
-| `command` | **yes** | — | One of: `equip`, `unequip`, `use`, `drop`, `favorite`. |
-| `formId` | **yes** | — | Hex form ID of the target item (e.g. `"0x00012EB7"`). |
-| `hand` | no | `"right"` | Target hand for weapons: `"right"` or `"left"`. Ignored for non-weapon items. Two-handed weapons only accept `"right"`. |
+| `command` | **yes** | — | One of: `equip`, `unequip`, `equipSpell`, `unequipSpell`, `use`, `drop`, `favorite`. |
+| `formId` | **yes** | — | Hex form ID of the target item or spell (e.g. `"0x00012EB7"`). |
+| `hand` | no | `"right"` | Target hand for weapons and spells: `"right"` or `"left"`. Ignored for non-weapon items. Two-handed weapons only accept `"right"`. |
 | `count` | no | `1` | Number of items to drop. Only used by the `drop` command. |
 
 #### Command details
@@ -139,6 +139,8 @@ validates the request and executes it on the game thread, then replies with a
 |---|---|---|
 | `equip` | Weapons, Apparel, Ammo | Equips the item. Weapons use the `hand` parameter to select left/right hand. Apparel and ammo auto-select the correct slot. |
 | `unequip` | Weapons, Apparel, Ammo | Removes the equipped item. For weapons, `hand` specifies which hand to unequip from. |
+| `equipSpell` | Spells | Equips a spell to the specified hand. The `hand` parameter selects left/right hand (default: "right"). |
+| `unequipSpell` | Spells | Unequips a spell from the specified hand. The `hand` parameter specifies which hand to unequip from. |
 | `use` | Potions, Food, Ingredients, Scrolls | Consumes the item (applies effect). Scrolls are equipped for casting. |
 | `drop` | Any item | Drops `count` items from inventory onto the ground. |
 | `favorite` | Any item | Toggles the item's favorite status on/off. |
