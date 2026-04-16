@@ -109,8 +109,8 @@ namespace MagicReader
         if (!spell || !player)
             return nullptr;
 
-        auto* leftSpell  = player->GetActorRuntimeData().selectedSpells[RE::PlayerCharacter::SelectedSpells::kLeftHand];
-        auto* rightSpell = player->GetActorRuntimeData().selectedSpells[RE::PlayerCharacter::SelectedSpells::kRightHand];
+        auto* leftSpell  = player->selectedSpells[RE::PlayerCharacter::SelectedSpells::kLeftHand];
+        auto* rightSpell = player->selectedSpells[RE::PlayerCharacter::SelectedSpells::kRightHand];
 
         bool isLeft  = (leftSpell == spell);
         bool isRight = (rightSpell == spell);
@@ -192,7 +192,7 @@ namespace MagicReader
             return result;
 
         // Access player's spell list
-        auto* actorEffects = player->GetActorRuntimeData().addedSpells;
+        auto* actorEffects = player->addedSpells;
         if (!actorEffects)
             return result;
 
@@ -223,7 +223,7 @@ namespace MagicReader
         if (!player)
             return nlohmann::json::array();
 
-        auto* actorEffects = player->GetActorRuntimeData().addedSpells;
+        auto* actorEffects = player->addedSpells;
         if (!actorEffects)
             return nlohmann::json::array();
 

@@ -355,7 +355,7 @@ namespace GameWriter
 
         // Check if player knows the spell
         bool knowsSpell = false;
-        auto* actorEffects = player->GetActorRuntimeData().addedSpells;
+        auto* actorEffects = player->addedSpells;
         if (actorEffects) {
             for (auto* knownSpell : *actorEffects) {
                 if (knownSpell && knownSpell->GetFormID() == formId) {
@@ -375,7 +375,7 @@ namespace GameWriter
             : RE::PlayerCharacter::SelectedSpells::kRightHand;
 
         // Equip the spell
-        player->GetActorRuntimeData().selectedSpells[slotIndex] = spell;
+        player->selectedSpells[slotIndex] = spell;
 
         PrintConsole("[WS] Equip spell " + std::string(spell->GetName()) + " to " + hand + " hand");
         return {true, ""};
@@ -402,12 +402,12 @@ namespace GameWriter
             : RE::PlayerCharacter::SelectedSpells::kRightHand;
 
         // Check if the spell is currently equipped in the specified hand
-        auto* equippedSpell = player->GetActorRuntimeData().selectedSpells[slotIndex];
+        auto* equippedSpell = player->selectedSpells[slotIndex];
         if (equippedSpell != spell)
             return {false, "Spell is not equipped in " + hand + " hand"};
 
         // Unequip by setting to nullptr
-        player->GetActorRuntimeData().selectedSpells[slotIndex] = nullptr;
+        player->selectedSpells[slotIndex] = nullptr;
 
         PrintConsole("[WS] Unequip spell " + std::string(spell->GetName()) + " from " + hand + " hand");
         return {true, ""};
