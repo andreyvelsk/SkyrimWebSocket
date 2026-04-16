@@ -28,6 +28,15 @@ SkyrimWebSocket runs a WebSocket server that allows external clients to:
 
 See [PROTOCOL.md](PROTOCOL.md) for detailed message specifications and examples.
 
+## Documentation
+
+- [PROTOCOL.md](PROTOCOL.md) — Full WebSocket protocol specification
+- [docs/Inventory.md](docs/Inventory.md) — Reference for all inventory-related fields
+- [docs/Magic.md](docs/Magic.md) — Reference for all magic/spell-related fields
+- [docs/ActorValue.md](docs/ActorValue.md) — Comprehensive list of available ActorValue fields
+- [docs/Player.md](docs/Player.md) — Player-specific stat fields
+- [docs/Game.md](docs/Game.md) — Game-wide settings and information
+
 ## Requirements
 
 - [Visual Studio 2022](https://visualstudio.microsoft.com/) (Community edition is fine)

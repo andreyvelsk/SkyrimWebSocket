@@ -100,6 +100,10 @@ namespace MessageRouter
                 result = GameWriter::EquipItem(formId, hand);
             else if (command == "unequip")
                 result = GameWriter::UnequipItem(formId, hand);
+            else if (command == "equipSpell")
+                result = GameWriter::EquipSpell(formId, hand);
+            else if (command == "unequipSpell")
+                result = GameWriter::UnequipSpell(formId, hand);
             else if (command == "use")
                 result = GameWriter::UseItem(formId);
             else if (command == "drop")
