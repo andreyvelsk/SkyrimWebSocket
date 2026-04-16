@@ -125,21 +125,14 @@ namespace MagicReader
     }
 
     // Check if spell is two-handed
+    // Note: In vanilla Skyrim, most spells are one-handed.
+    // Two-handed spells are very rare and would require special detection.
     static bool IsSpellTwoHanded(const RE::SpellItem* spell)
     {
         if (!spell)
             return false;
         
-        // Check the spell's equip type flags
-        auto equipType = spell->GetEquipSlot();
-        if (equipType) {
-            // Two-handed spells typically use the "Either Hand" flag
-            // In Skyrim, this is indicated by specific flags in the spell data
-            // Most spells are one-handed unless specifically marked
-        }
-        
-        // By default, most spells are one-handed in Skyrim
-        // Two-handed spells are rare and would need special checking
+        // By default, spells are one-handed in Skyrim
         return false;
     }
 
