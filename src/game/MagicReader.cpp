@@ -110,8 +110,12 @@ namespace MagicReader
             return false;
 
         // Access the actor's magic data to check for known spells
-        // Use GetActorRuntimeData which is the standard way in CommonLibSSE-NG
-        auto& actorData = player->GetActorRuntimeData();
+        // Cast to Actor to access runtime data
+        auto* actor = static_cast<RE::Actor*>(player);
+        if (!actor)
+            return false;
+
+        auto& actorData = actor->GetActorRuntimeData();
         if (!actorData.addedSpells)
             return false;
 
@@ -132,10 +136,14 @@ namespace MagicReader
             return nullptr;
 
         // Access selected spells through runtime data
-        auto& actorData = player->GetActorRuntimeData();
+        auto* actor = static_cast<RE::Actor*>(player);
+        if (!actor)
+            return nullptr;
+
+        auto& actorData = actor->GetActorRuntimeData();
         
-        auto* leftSpell = actorData.selectedSpells[RE::Actor::SlotTypes::kLeftHand];
-        auto* rightSpell = actorData.selectedSpells[RE::Actor::SlotTypes::kRightHand];
+        auto* leftSpell = actorData.selectedSpells[RE::PlayerCharacter::SelectedSpells::kLeftHand];
+        auto* rightSpell = actorData.selectedSpells[RE::PlayerCharacter::SelectedSpells::kRightHand];
 
         bool isLeft = (leftSpell && leftSpell->GetFormID() == spell->GetFormID());
         bool isRight = (rightSpell && rightSpell->GetFormID() == spell->GetFormID());

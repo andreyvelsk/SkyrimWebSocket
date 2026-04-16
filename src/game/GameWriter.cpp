@@ -354,7 +354,11 @@ namespace GameWriter
             return {false, "Form is not a spell"};
 
         // Check if player knows the spell using runtime data
-        auto& actorData = player->GetActorRuntimeData();
+        auto* actor = static_cast<RE::Actor*>(player);
+        if (!actor)
+            return {false, "Unable to access actor data"};
+
+        auto& actorData = actor->GetActorRuntimeData();
         if (!actorData.addedSpells) {
             return {false, "Unable to access spell list"};
         }
@@ -372,8 +376,8 @@ namespace GameWriter
 
         // Determine which hand slot to use
         const bool leftHand = (hand == "left");
-        const auto slotIndex = leftHand ? RE::Actor::SlotTypes::kLeftHand 
-                                        : RE::Actor::SlotTypes::kRightHand;
+        const auto slotIndex = leftHand ? RE::PlayerCharacter::SelectedSpells::kLeftHand 
+                                        : RE::PlayerCharacter::SelectedSpells::kRightHand;
 
         // Equip the spell directly to the selected spell slot
         actorData.selectedSpells[slotIndex] = spell;
@@ -398,11 +402,15 @@ namespace GameWriter
 
         // Determine which hand slot to unequip from
         const bool leftHand = (hand == "left");
-        const auto slotIndex = leftHand ? RE::Actor::SlotTypes::kLeftHand 
-                                        : RE::Actor::SlotTypes::kRightHand;
+        const auto slotIndex = leftHand ? RE::PlayerCharacter::SelectedSpells::kLeftHand 
+                                        : RE::PlayerCharacter::SelectedSpells::kRightHand;
 
         // Access runtime data to check and clear the spell
-        auto& actorData = player->GetActorRuntimeData();
+        auto* actor = static_cast<RE::Actor*>(player);
+        if (!actor)
+            return {false, "Unable to access actor data"};
+
+        auto& actorData = actor->GetActorRuntimeData();
         
         // Check if the spell is currently equipped in the specified hand
         auto* equippedSpell = actorData.selectedSpells[slotIndex];
