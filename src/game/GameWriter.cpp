@@ -338,4 +338,66 @@ namespace GameWriter
         }
         return {true, ""};
     }
+
+    CommandResult EquipSpell(RE::FormID formId, const std::string& hand)
+    {
+        auto* player = RE::PlayerCharacter::GetSingleton();
+        if (!player)
+            return {false, "Player not available"};
+
+        auto* spell = RE::TESForm::LookupByID<RE::SpellItem>(formId);
+        if (!spell)
+            return {false, "Spell not found"};
+
+        // Check if player actually knows this spell
+        if (!player->GetSpells().contains(spell) &&
+            !player->GetPowers().contains(spell)) {
+            return {false, "Spell not in player's known spells"};
+        }
+
+        auto* magicCaster = player->GetMagicCaster(RE::MagicSystem::CastingSource::kRightHand);
+        if (!magicCaster)
+            return {false, "Magic caster not available"};
+
+        // Determine casting source based on hand preference
+        const bool leftHand = (hand == "left");
+        RE::MagicSystem::CastingSource source = leftHand ?
+            RE::MagicSystem::CastingSource::kLeftHand :
+            RE::MagicSystem::CastingSource::kRightHand;
+
+        magicCaster->SetEquippedSpell(spell, source);
+
+        PrintConsole("[WS] Equip spell " + std::string(spell->GetName()) + " → " + hand);
+        return {true, ""};
+    }
+
+    CommandResult UnequipSpell(RE::FormID formId, const std::string& hand)
+    {
+        auto* player = RE::PlayerCharacter::GetSingleton();
+        if (!player)
+            return {false, "Player not available"};
+
+        auto* spell = RE::TESForm::LookupByID<RE::SpellItem>(formId);
+        if (!spell)
+            return {false, "Spell not found"};
+
+        auto* magicCaster = player->GetMagicCaster(RE::MagicSystem::CastingSource::kRightHand);
+        if (!magicCaster)
+            return {false, "Magic caster not available"};
+
+        // Handle both/all hands
+        if (hand == "both" || hand == "all") {
+            magicCaster->RemoveSpellFromSlots(spell);
+        } else {
+            const bool leftHand = (hand == "left");
+            RE::MagicSystem::CastingSource source = leftHand ?
+                RE::MagicSystem::CastingSource::kLeftHand :
+                RE::MagicSystem::CastingSource::kRightHand;
+
+            magicCaster->RemoveSpellFromSlot(spell, source);
+        }
+
+        PrintConsole("[WS] Unequip spell " + std::string(spell->GetName()));
+        return {true, ""};
+    }
 }

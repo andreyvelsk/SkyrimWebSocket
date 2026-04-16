@@ -33,4 +33,16 @@ namespace GameWriter
     // Toggle favorite status on an item.
     // Must be called on the game thread.
     CommandResult FavoriteItem(RE::FormID formId);
+
+    // Equip a spell/ability/power/shout.
+    // For spells: hand = "right" or "left" (default "right").
+    // Casting source determines which hand the spell is equipped in
+    // (though spells typically occupy both hands conceptually).
+    // Must be called on the game thread.
+    CommandResult EquipSpell(RE::FormID formId, const std::string& hand);
+
+    // Unequip a spell/ability/power/shout.
+    // For spells: hand = "right", "left", or "both" to specify which hand(s).
+    // Must be called on the game thread.
+    CommandResult UnequipSpell(RE::FormID formId, const std::string& hand);
 }

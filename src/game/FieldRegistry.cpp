@@ -1,6 +1,7 @@
 #include "FieldRegistry.h"
 #include "InventoryReader.h"
 #include "PlayerReader.h"
+#include "MagicReader.h"
 
 #include <nlohmann/json.hpp>
 
@@ -261,6 +262,28 @@ namespace FieldRegistry
         { "Game::Language",
           { "Current game language from sLanguage:General INI setting (e.g. \"english\", \"russian\")", "string",
             &PlayerReader::ReadLanguage } },
+
+        // Magic categories and spells
+        { "Magic::Categories",
+          { "Array of magic schools with spell counts", "array",
+            &MagicReader::ReadCategories } },
+
+        // Magic spells by category
+        { "Magic::Items::PlayerSpells",
+          { "Player spells (most common type)", "array",
+            &MagicReader::ReadPlayerSpells } },
+        { "Magic::Items::LesserPowers",
+          { "Lesser powers (1 use per day)", "array",
+            &MagicReader::ReadLesserPowers } },
+        { "Magic::Items::Powers",
+          { "Powers and abilities (passive, unlimited uses)", "array",
+            &MagicReader::ReadPowers } },
+        { "Magic::Items::Shouts",
+          { "Shouts and dragon powers", "array",
+            &MagicReader::ReadShouts } },
+        { "Magic::Items::Diseases",
+          { "Disease and poison effects", "array",
+            &MagicReader::ReadDiseases } },
     };
     // clang-format on
 
