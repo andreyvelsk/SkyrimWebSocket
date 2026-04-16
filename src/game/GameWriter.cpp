@@ -338,4 +338,78 @@ namespace GameWriter
         }
         return {true, ""};
     }
+
+    CommandResult EquipSpell(RE::FormID formId, const std::string& hand)
+    {
+        auto* player = RE::PlayerCharacter::GetSingleton();
+        if (!player)
+            return {false, "Player not available"};
+
+        auto* form = RE::TESForm::LookupByID(formId);
+        if (!form)
+            return {false, "Form not found"};
+
+        auto* spell = form->As<RE::SpellItem>();
+        if (!spell)
+            return {false, "Form is not a spell"};
+
+        // Check if player knows the spell
+        bool knowsSpell = false;
+        auto* actorEffects = player->GetActorRuntimeData().addedSpells;
+        if (actorEffects) {
+            for (auto* knownSpell : *actorEffects) {
+                if (knownSpell && knownSpell->GetFormID() == formId) {
+                    knowsSpell = true;
+                    break;
+                }
+            }
+        }
+
+        if (!knowsSpell)
+            return {false, "Spell not known by player"};
+
+        // Determine which hand to equip to
+        const bool leftHand = (hand == "left");
+        const auto slotIndex = leftHand 
+            ? RE::PlayerCharacter::SelectedSpells::kLeftHand 
+            : RE::PlayerCharacter::SelectedSpells::kRightHand;
+
+        // Equip the spell
+        player->GetActorRuntimeData().selectedSpells[slotIndex] = spell;
+
+        PrintConsole("[WS] Equip spell " + std::string(spell->GetName()) + " to " + hand + " hand");
+        return {true, ""};
+    }
+
+    CommandResult UnequipSpell(RE::FormID formId, const std::string& hand)
+    {
+        auto* player = RE::PlayerCharacter::GetSingleton();
+        if (!player)
+            return {false, "Player not available"};
+
+        auto* form = RE::TESForm::LookupByID(formId);
+        if (!form)
+            return {false, "Form not found"};
+
+        auto* spell = form->As<RE::SpellItem>();
+        if (!spell)
+            return {false, "Form is not a spell"};
+
+        // Determine which hand to unequip from
+        const bool leftHand = (hand == "left");
+        const auto slotIndex = leftHand 
+            ? RE::PlayerCharacter::SelectedSpells::kLeftHand 
+            : RE::PlayerCharacter::SelectedSpells::kRightHand;
+
+        // Check if the spell is currently equipped in the specified hand
+        auto* equippedSpell = player->GetActorRuntimeData().selectedSpells[slotIndex];
+        if (equippedSpell != spell)
+            return {false, "Spell is not equipped in " + hand + " hand"};
+
+        // Unequip by setting to nullptr
+        player->GetActorRuntimeData().selectedSpells[slotIndex] = nullptr;
+
+        PrintConsole("[WS] Unequip spell " + std::string(spell->GetName()) + " from " + hand + " hand");
+        return {true, ""};
+    }
 }
