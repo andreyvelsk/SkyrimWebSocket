@@ -354,11 +354,8 @@ namespace GameWriter
             return {false, "Form is not a spell"};
 
         // Check if player knows the spell using runtime data
-        auto* actor = static_cast<RE::Actor*>(player);
-        if (!actor)
-            return {false, "Unable to access actor data"};
 
-        auto& actorData = actor->GetActorRuntimeData();
+        auto& actorData = player->GetActorRuntimeData();
         if (!actorData.addedSpells) {
             return {false, "Unable to access spell list"};
         }
@@ -406,11 +403,8 @@ namespace GameWriter
                                         : RE::PlayerCharacter::SelectedSpells::kRightHand;
 
         // Access runtime data to check and clear the spell
-        auto* actor = static_cast<RE::Actor*>(player);
-        if (!actor)
-            return {false, "Unable to access actor data"};
 
-        auto& actorData = actor->GetActorRuntimeData();
+        auto& actorData = player->GetActorRuntimeData();
         
         // Check if the spell is currently equipped in the specified hand
         auto* equippedSpell = actorData.selectedSpells[slotIndex];

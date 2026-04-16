@@ -111,11 +111,8 @@ namespace MagicReader
 
         // Access the actor's magic data to check for known spells
         // Cast to Actor to access runtime data
-        auto* actor = static_cast<RE::Actor*>(player);
-        if (!actor)
-            return false;
 
-        auto& actorData = actor->GetActorRuntimeData();
+        auto& actorData = player->GetActorRuntimeData();
         if (!actorData.addedSpells)
             return false;
 
@@ -136,11 +133,8 @@ namespace MagicReader
             return nullptr;
 
         // Access selected spells through runtime data
-        auto* actor = static_cast<RE::Actor*>(player);
-        if (!actor)
-            return nullptr;
 
-        auto& actorData = actor->GetActorRuntimeData();
+        auto& actorData = player->GetActorRuntimeData();
         
         auto* leftSpell = actorData.selectedSpells[RE::PlayerCharacter::SelectedSpells::kLeftHand];
         auto* rightSpell = actorData.selectedSpells[RE::PlayerCharacter::SelectedSpells::kRightHand];
