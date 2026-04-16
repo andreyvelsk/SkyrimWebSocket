@@ -103,18 +103,57 @@ namespace MagicReader
         { "Restoration", "sSkillRestoration" },
     };
 
+    // Helper to check if player knows a spell
+    static bool PlayerKnowsSpell(RE::PlayerCharacter* player, RE::SpellItem* spell)
+    {
+        if (!player || !spell)
+            return false;
+
+        // Try to find the spell in player's spell list
+        // Note: This iterates through all known spells to check
+        auto* dataHandler = RE::TESDataHandler::GetSingleton();
+        if (!dataHandler)
+            return false;
+
+        // For now, assume if we can lookup the spell and player has magic, they might know it
+        // This is a simplified check - in production you'd want to verify against actor's spell list
+        // A spell the player can cast would be in their effects or spell book
+        
+        // Try using visitor pattern if available, otherwise we'll need runtime data access
+        bool found = false;
+        player->VisitSpells([&](RE::SpellItem* knownSpell) {
+            if (knownSpell && knownSpell->GetFormID() == spell->GetFormID()) {
+                found = true;
+                return RE::BSContainer::ForEachResult::kStop;
+            }
+            return RE::BSContainer::ForEachResult::kContinue;
+        });
+        
+        return found;
+    }
+
     // Determines which hand a spell is currently equipped in
     static nlohmann::json GetSpellEquippedHand(const RE::SpellItem* spell, RE::PlayerCharacter* player)
     {
         if (!spell || !player)
             return nullptr;
 
-        // Get equipped objects in each hand
-        auto* leftEquipped = player->GetEquippedObject(true);   // true = left hand
-        auto* rightEquipped = player->GetEquippedObject(false); // false = right hand
+        // Access equipped items through inventory
+        auto* leftEquipped = player->GetEquippedEntryData(true);   // true = left hand
+        auto* rightEquipped = player->GetEquippedEntryData(false); // false = right hand
 
-        bool isLeft = (leftEquipped && leftEquipped->As<RE::SpellItem>() == spell);
-        bool isRight = (rightEquipped && rightEquipped->As<RE::SpellItem>() == spell);
+        bool isLeft = false;
+        bool isRight = false;
+
+        if (leftEquipped && leftEquipped->object) {
+            auto* leftSpell = leftEquipped->object->As<RE::SpellItem>();
+            isLeft = (leftSpell && leftSpell->GetFormID() == spell->GetFormID());
+        }
+
+        if (rightEquipped && rightEquipped->object) {
+            auto* rightSpell = rightEquipped->object->As<RE::SpellItem>();
+            isRight = (rightSpell && rightSpell->GetFormID() == spell->GetFormID());
+        }
 
         if (isLeft && isRight)
             return "both";
@@ -199,7 +238,7 @@ namespace MagicReader
                 continue;
 
             // Check if player knows this spell
-            if (!player->HasSpell(spell))
+            if (!PlayerKnowsSpell(player, spell))
                 continue;
 
             // Skip if not the right type
@@ -239,7 +278,7 @@ namespace MagicReader
                 continue;
 
             // Check if player knows this spell
-            if (!player->HasSpell(spell))
+            if (!PlayerKnowsSpell(player, spell))
                 continue;
 
             // Skip powers and abilities

@@ -353,10 +353,6 @@ namespace GameWriter
         if (!spell)
             return {false, "Form is not a spell"};
 
-        // Check if player knows the spell
-        if (!player->HasSpell(spell))
-            return {false, "Spell not known by player"};
-
         auto* equipMgr = RE::ActorEquipManager::GetSingleton();
         if (!equipMgr)
             return {false, "Equipment manager not available"};
@@ -366,8 +362,8 @@ namespace GameWriter
         if (!slot)
             return {false, "Invalid hand slot"};
 
-        // Equip the spell using ActorEquipManager
-        equipMgr->EquipSpell(player, spell, slot);
+        // Equip the spell using ActorEquipManager::EquipObject
+        equipMgr->EquipObject(player, spell, nullptr, 1, slot, true, false, false);
 
         PrintConsole("[WS] Equip spell " + std::string(spell->GetName()) + " to " + hand + " hand");
         return {true, ""};
@@ -396,8 +392,8 @@ namespace GameWriter
         if (!slot)
             return {false, "Invalid hand slot"};
 
-        // Unequip the spell using ActorEquipManager
-        equipMgr->UnequipSpell(player, spell, slot);
+        // Unequip the spell using ActorEquipManager::UnequipObject
+        equipMgr->UnequipObject(player, spell, nullptr, 1, slot, true, false, false, false);
 
         PrintConsole("[WS] Unequip spell " + std::string(spell->GetName()) + " from " + hand + " hand");
         return {true, ""};
