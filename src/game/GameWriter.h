@@ -33,4 +33,9 @@ namespace GameWriter
     // Toggle favorite status on an item.
     // Must be called on the game thread.
     CommandResult FavoriteItem(RE::FormID formId);
+
+    // Equip a known spell to a hand slot.
+    // hand = "right" or "left" (default "right").
+    // Must be called on the game thread.
+    CommandResult EquipSpell(RE::FormID formId, const std::string& hand);
 }

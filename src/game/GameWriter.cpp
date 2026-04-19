@@ -338,4 +338,41 @@ namespace GameWriter
         }
         return {true, ""};
     }
+
+    CommandResult EquipSpell(RE::FormID formId, const std::string& hand)
+    {
+        auto* player = RE::PlayerCharacter::GetSingleton();
+        if (!player)
+            return {false, "Player not available"};
+
+        auto* spell = RE::TESForm::LookupByID<RE::SpellItem>(formId);
+        if (!spell)
+            return {false, "Spell not found"};
+
+        // Verify the player knows this spell.
+        auto* npc       = player->GetActorBase();
+        auto* spellData = npc ? npc->GetSpellList() : nullptr;
+        if (!spellData)
+            return {false, "Spell list not available"};
+
+        bool known = false;
+        for (std::uint32_t i = 0; i < spellData->numSpells; ++i) {
+            if (spellData->spells[i] && spellData->spells[i]->GetFormID() == formId) {
+                known = true;
+                break;
+            }
+        }
+        if (!known)
+            return {false, "Spell not known by player"};
+
+        auto* equipMgr = RE::ActorEquipManager::GetSingleton();
+        if (!equipMgr)
+            return {false, "Equipment manager not available"};
+
+        const auto* slot = GetHandSlot(hand);
+        equipMgr->EquipSpell(player, spell, slot);
+
+        PrintConsole("[WS] Equip spell " + std::string(spell->GetName()) + " \xe2\x86\x92 " + hand);
+        return {true, ""};
+    }
 }
