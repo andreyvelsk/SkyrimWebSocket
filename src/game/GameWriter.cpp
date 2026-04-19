@@ -375,4 +375,34 @@ namespace GameWriter
         PrintConsole("[WS] Equip spell " + std::string(spell->GetName()) + " \xe2\x86\x92 " + hand);
         return {true, ""};
     }
+
+    CommandResult UnequipSpell(RE::FormID formId, const std::string& hand)
+    {
+        auto* player = RE::PlayerCharacter::GetSingleton();
+        if (!player)
+            return {false, "Player not available"};
+
+        auto* spell = RE::TESForm::LookupByID<RE::SpellItem>(formId);
+        if (!spell)
+            return {false, "Spell not found"};
+
+        auto* equipMgr = RE::ActorEquipManager::GetSingleton();
+        if (!equipMgr)
+            return {false, "Equipment manager not available"};
+
+        // Verify the spell is equipped in the requested hand.
+        const auto source = (hand == "left")
+            ? RE::MagicSystem::CastingSource::kLeftHand
+            : RE::MagicSystem::CastingSource::kRightHand;
+        auto* caster = player->GetMagicCaster(source);
+        if (!caster || caster->currentSpell != spell)
+            return {false, "Spell is not equipped in " + hand + " hand"};
+
+        // Equipping nullptr clears the slot.
+        const auto* slot = GetHandSlot(hand);
+        equipMgr->EquipSpell(player, nullptr, slot);
+
+        PrintConsole("[WS] Unequip spell " + std::string(spell->GetName()) + " \xe2\x86\x90 " + hand);
+        return {true, ""};
+    }
 }

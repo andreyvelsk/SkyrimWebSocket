@@ -151,11 +151,23 @@ namespace MagicReader
         j["formId"]       = std::format("0x{:08X}", spell->GetFormID());
         j["categoryType"] = categoryType;
 
-        // Magicka cost: use costOverride when non-negative, otherwise calculate.
-        const int32_t cost = (spell->data.costOverride >= 0)
-                                 ? spell->data.costOverride
-                                 : static_cast<int32_t>(spell->CalculateMagickaCost(nullptr));
-        j["cost"] = cost;
+        // cost: real in-game magicka cost with player skill/perk modifiers applied.
+        j["cost"] = static_cast<int32_t>(spell->CalculateMagickaCost(player));
+
+        // costValue: raw base cost — costOverride when explicitly set, otherwise
+        // unmodified (no-actor) calculation.
+        const int32_t costBase = (spell->data.costOverride >= 0)
+                                     ? spell->data.costOverride
+                                     : static_cast<int32_t>(spell->CalculateMagickaCost(nullptr));
+        j["costValue"] = costBase;
+
+        // level: minimum school skill required (0=Novice, 25=Apprentice, 50=Adept,
+        // 75=Expert, 100=Master).  Taken from the costliest effect's base setting.
+        int32_t level = 0;
+        const auto* costliestEff = spell->GetCostliestEffectItem();
+        if (costliestEff && costliestEff->baseEffect)
+            level = costliestEff->baseEffect->GetMinimumSkillLevel();
+        j["level"] = level;
 
         j["castingType"] = CastingTypeToString(spell->data.castingType);
         j["delivery"]    = DeliveryToString(spell->data.delivery);

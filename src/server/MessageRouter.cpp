@@ -108,6 +108,8 @@ namespace MessageRouter
                 result = GameWriter::FavoriteItem(formId);
             else if (command == "equip_spell")
                 result = GameWriter::EquipSpell(formId, hand);
+            else if (command == "unequip_spell")
+                result = GameWriter::UnequipSpell(formId, hand);
             else
                 result = {false, "Unknown command: '" + command + "'"};
 
