@@ -399,9 +399,23 @@ namespace GameWriter
 
         // Equipping nullptr clears the slot.
         const auto* slot = GetHandSlot(hand);
+
+        // ── Debug snapshot ──
+        auto spellNameOf = [](RE::MagicItem* m) -> std::string {
+            return m ? std::string(m->GetName()) : "null";
+        };
+        std::string dbg;
+        dbg += "slot_ptr=" + (slot ? std::format("0x{:X}", reinterpret_cast<std::uintptr_t>(slot)) : "null");
+        dbg += " before[" + std::to_string(slotIdx) + "]="
+             + spellNameOf(player->GetActorRuntimeData().selectedSpells[slotIdx]);
+
         equipMgr->EquipSpell(player, nullptr, slot);
 
+        dbg += " after[" + std::to_string(slotIdx) + "]="
+             + spellNameOf(player->GetActorRuntimeData().selectedSpells[slotIdx]);
+        // ── End debug ──
+
         PrintConsole("[WS] Unequip spell " + std::string(spell->GetName()) + " \xe2\x86\x90 " + hand);
-        return {true, ""};
+        return {true, "", dbg};
     }
 }
