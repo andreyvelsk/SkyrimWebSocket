@@ -191,7 +191,8 @@ namespace MagicReader
         if (!player)
             return nlohmann::json::array();
 
-        auto* spellData = player->GetSpellList();
+        auto* npc = player->GetActorBase();
+        auto* spellData = npc ? npc->GetSpellList() : nullptr;
         if (!spellData)
             return nlohmann::json::array();
 
@@ -221,7 +222,8 @@ namespace MagicReader
         if (!player)
             return nlohmann::json::array();
 
-        auto* spellData = player->GetSpellList();
+        auto* npc = player->GetActorBase();
+        auto* spellData = npc ? npc->GetSpellList() : nullptr;
         if (!spellData)
             return nlohmann::json::array();
 
