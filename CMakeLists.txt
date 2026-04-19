@@ -42,6 +42,7 @@ add_commonlibsse_plugin(${PROJECT_NAME} SOURCES
     src/game/GameReader.cpp
     src/game/GameWriter.cpp
     src/game/InventoryReader.cpp
+    src/game/MagicReader.cpp
     src/game/PlayerReader.cpp
     src/server/MessageRouter.cpp
     src/server/WsSession.cpp
