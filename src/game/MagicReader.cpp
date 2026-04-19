@@ -122,15 +122,14 @@ namespace MagicReader
     }
 
     // Returns which hands (if any) the spell is currently equipped for casting.
-    // Uses each hand's MagicCaster to query the current spell slot.
+    // Checks selectedSpells[] in ACTOR_RUNTIME_DATA — the HUD-visible equipped slot,
+    // not currentSpell which is only set while actively casting.
     // Returns nullptr, "left", "right", or "both".
     static nlohmann::json GetEquippedHand(RE::SpellItem* spell, RE::PlayerCharacter* player)
     {
-        auto* castLeft  = player->GetMagicCaster(RE::MagicSystem::CastingSource::kLeftHand);
-        auto* castRight = player->GetMagicCaster(RE::MagicSystem::CastingSource::kRightHand);
-
-        const bool inLeft  = castLeft  && castLeft->currentSpell  == spell;
-        const bool inRight = castRight && castRight->currentSpell == spell;
+        const auto& rt     = player->GetActorRuntimeData();
+        const bool  inLeft  = rt.selectedSpells[RE::Actor::SlotTypes::kLeftHand]  == spell;
+        const bool  inRight = rt.selectedSpells[RE::Actor::SlotTypes::kRightHand] == spell;
 
         if (inLeft && inRight) return "both";
         if (inRight)           return "right";

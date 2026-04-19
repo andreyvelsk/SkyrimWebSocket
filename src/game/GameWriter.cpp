@@ -390,12 +390,11 @@ namespace GameWriter
         if (!equipMgr)
             return {false, "Equipment manager not available"};
 
-        // Verify the spell is equipped in the requested hand.
-        const auto source = (hand == "left")
-            ? RE::MagicSystem::CastingSource::kLeftHand
-            : RE::MagicSystem::CastingSource::kRightHand;
-        auto* caster = player->GetMagicCaster(source);
-        if (!caster || caster->currentSpell != spell)
+        // Verify the spell is equipped in the requested hand via selectedSpells[],
+        // which tracks the HUD-visible slot (not currentSpell — that's only set while casting).
+        const int slotIdx = (hand == "left") ? RE::Actor::SlotTypes::kLeftHand
+                                              : RE::Actor::SlotTypes::kRightHand;
+        if (player->GetActorRuntimeData().selectedSpells[slotIdx] != spell)
             return {false, "Spell is not equipped in " + hand + " hand"};
 
         // Equipping nullptr clears the slot.
