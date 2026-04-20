@@ -350,18 +350,30 @@ namespace GameWriter
             return {false, "Spell not found"};
 
         // Verify the player knows this spell.
+        bool known = false;
+
+        // 1) Check spells baked into the player's base NPC form.
         auto* npc       = player->GetActorBase();
         auto* spellData = npc ? npc->GetSpellList() : nullptr;
-        if (!spellData)
-            return {false, "Spell list not available"};
-
-        bool known = false;
-        for (std::uint32_t i = 0; i < spellData->numSpells; ++i) {
-            if (spellData->spells[i] && spellData->spells[i]->GetFormID() == formId) {
-                known = true;
-                break;
+        if (spellData) {
+            for (std::uint32_t i = 0; i < spellData->numSpells; ++i) {
+                if (spellData->spells[i] && spellData->spells[i]->GetFormID() == formId) {
+                    known = true;
+                    break;
+                }
             }
         }
+
+        // 2) Check spells learned at runtime (spell tomes, AddSpell(), console, etc.).
+        if (!known) {
+            for (auto* spell : player->GetActorRuntimeData().addedSpells) {
+                if (spell && spell->GetFormID() == formId) {
+                    known = true;
+                    break;
+                }
+            }
+        }
+
         if (!known)
             return {false, "Spell not known by player"};
 
