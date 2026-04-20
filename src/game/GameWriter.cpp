@@ -393,9 +393,26 @@ namespace GameWriter
         if (player->GetActorRuntimeData().selectedSpells[slotIdx] != spell)
             return {false, "Spell is not equipped in " + hand + " hand"};
 
-        // EquipSpell(player, nullptr, slot) is ignored by the engine.
-        // DeselectSpell removes the spell from the player's equipped hand slots.
+        // DeselectSpell clears ALL slots where the spell appears, not just one hand.
+        // To remove from only one hand: save the other hand's spell, deselect, then
+        // re-equip the other hand if it also had this spell.
+        const int otherSlotIdx = (slotIdx == RE::Actor::SlotTypes::kLeftHand)
+                                     ? RE::Actor::SlotTypes::kRightHand
+                                     : RE::Actor::SlotTypes::kLeftHand;
+        const std::string otherHand = (hand == "left") ? "right" : "left";
+
+        auto* otherMagicItem = player->GetActorRuntimeData().selectedSpells[otherSlotIdx];
+        auto* otherSpell     = otherMagicItem ? otherMagicItem->As<RE::SpellItem>() : nullptr;
+        const bool otherHadSameSpell = (otherSpell == spell);
+
         player->DeselectSpell(spell);
+
+        // Restore the other hand if it was also holding this spell.
+        if (otherHadSameSpell) {
+            auto* equipMgr = RE::ActorEquipManager::GetSingleton();
+            if (equipMgr)
+                equipMgr->EquipSpell(player, spell, GetHandSlot(otherHand));
+        }
 
         PrintConsole("[WS] Unequip spell " + std::string(spell->GetName()) + " \xe2\x86\x90 " + hand);
         return {true, ""};
