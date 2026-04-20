@@ -7,7 +7,7 @@ namespace GameWriter
     struct CommandResult
     {
         bool        success;
-        std::string error;     // empty on success
+        std::string error;   // empty on success
     };
 
     // Equip an item.
@@ -33,4 +33,18 @@ namespace GameWriter
     // Toggle favorite status on an item.
     // Must be called on the game thread.
     CommandResult FavoriteItem(RE::FormID formId);
+
+    // Equip a known spell to a hand slot.
+    // hand = "right" or "left" (default "right").
+    // Must be called on the game thread.
+    CommandResult EquipSpell(RE::FormID formId, const std::string& hand);
+
+    // Unequip a known spell from a hand slot.
+    // hand = "right" or "left" (default "right").
+    // Must be called on the game thread.
+    CommandResult UnequipSpell(RE::FormID formId, const std::string& hand);
+
+    // Toggle favorite status on a known spell.
+    // Must be called on the game thread.
+    CommandResult FavoriteSpell(RE::FormID formId);
 }

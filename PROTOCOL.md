@@ -118,9 +118,9 @@ validates the request and executes it on the game thread, then replies with a
 {
   "type": "command",
   "id": "cmd-1",            // unique request identifier (required)
-  "command": "equip",       // command name (required): equip | unequip | use | drop | favorite
+  "command": "equip",       // command name (required): equip | unequip | use | drop | favorite | equip_spell | unequip_spell | favorite_spell
   "formId": "0x00012EB7",  // item form ID as hex string (required)
-  "hand": "right",          // equip/unequip hand: "right" or "left" (optional, weapons only, default: "right")
+  "hand": "right",          // equip/unequip hand: "right" or "left" (optional, default: "right")
   "count": 1                // drop count (optional, default: 1, only used by "drop")
 }
 ```
@@ -128,9 +128,9 @@ validates the request and executes it on the game thread, then replies with a
 | Field | Required | Default | Description |
 |---|---|---|---|
 | `id` | **yes** | — | Unique identifier echoed back in the `"commandResult"` response. |
-| `command` | **yes** | — | One of: `equip`, `unequip`, `use`, `drop`, `favorite`. |
+| `command` | **yes** | — | One of: `equip`, `unequip`, `use`, `drop`, `favorite`, `equip_spell`, `unequip_spell`, `favorite_spell`. |
 | `formId` | **yes** | — | Hex form ID of the target item (e.g. `"0x00012EB7"`). |
-| `hand` | no | `"right"` | Target hand for weapons: `"right"` or `"left"`. Ignored for non-weapon items. Two-handed weapons only accept `"right"`. |
+| `hand` | no | `"right"` | Target hand for weapons and spells: `"right"` or `"left"`. Ignored for non-weapon items and non-spell commands. Two-handed weapons and master-level spells only accept `"right"`. |
 | `count` | no | `1` | Number of items to drop. Only used by the `drop` command. |
 
 #### Command details
@@ -142,6 +142,9 @@ validates the request and executes it on the game thread, then replies with a
 | `use` | Potions, Food, Ingredients, Scrolls | Consumes the item (applies effect). Scrolls are equipped for casting. |
 | `drop` | Any item | Drops `count` items from inventory onto the ground. |
 | `favorite` | Any item | Toggles the item's favorite status on/off. |
+| `equip_spell` | Spells (must be known by player) | Equips a known spell to a hand slot for casting. The `hand` parameter specifies `"right"` or `"left"`. Master-level spells automatically equip to both hands and cannot be single-handed. |
+| `unequip_spell` | Spells (must be equipped) | Unequips a spell from a hand slot. If a non-master spell is dual-cast and unequipped from one hand, it remains equipped in the other hand. Master-level spells are removed from both hands. |
+| `favorite_spell` | Spells (must be known by player) | Toggles the spell's favorite status on/off. Favorited spells appear in the magic favorites list in the spell menu. |
 
 ---
 
@@ -228,6 +231,7 @@ Fields of different types can be freely mixed in a single `subscribe` or `query`
 - [docs/Inventory.md](docs/Inventory.md) — All Inventory fields with detailed response structures
 - [docs/Player.md](docs/Player.md) — Character level, XP, and inventory weight fields
 - [docs/Game.md](docs/Game.md) — Game-level settings such as the current language
+- [docs/Magic.md](docs/Magic.md) — All Magic fields with spell information and status
 
 ---
 
@@ -552,6 +556,126 @@ independent intervals. To stop only the skill subscription:
   "id": "bad-equip",
   "success": false,
   "error": "Item not in inventory"
+}
+```
+
+---
+
+### Example 12 — Equip a spell to the right hand
+
+**Client sends:**
+```json
+{
+  "type": "command",
+  "id": "equip-fireball",
+  "command": "equip_spell",
+  "formId": "0x0000A23E",
+  "hand": "right"
+}
+```
+
+**Server replies:**
+```json
+{
+  "type": "commandResult",
+  "id": "equip-fireball",
+  "success": true
+}
+```
+
+---
+
+### Example 13 — Dual-cast a spell (equip to both hands)
+
+**Client sends (equip non-master spell to left hand, will dual-cast if already in right):**
+```json
+{
+  "type": "command",
+  "id": "dual-cast-spell",
+  "command": "equip_spell",
+  "formId": "0x0000A23E",
+  "hand": "left"
+}
+```
+
+**Server replies:**
+```json
+{
+  "type": "commandResult",
+  "id": "dual-cast-spell",
+  "success": true
+}
+```
+
+---
+
+### Example 14 — Unequip a spell from one hand
+
+**Client sends (unequip from right hand, keeping left if it was dual-cast):**
+```json
+{
+  "type": "command",
+  "id": "unequip-fireball-right",
+  "command": "unequip_spell",
+  "formId": "0x0000A23E",
+  "hand": "right"
+}
+```
+
+**Server replies:**
+```json
+{
+  "type": "commandResult",
+  "id": "unequip-fireball-right",
+  "success": true
+}
+```
+
+---
+
+### Example 15 — Spell equip validation error
+
+**Client sends (spell not known by player):**
+```json
+{
+  "type": "command",
+  "id": "bad-spell",
+  "command": "equip_spell",
+  "formId": "0xDEADBEEF",
+  "hand": "right"
+}
+```
+
+**Server replies:**
+```json
+{
+  "type": "commandResult",
+  "id": "bad-spell",
+  "success": false,
+  "error": "Spell not known by player"
+}
+```
+
+---
+
+### Example 16 — Favorite a spell
+
+**Client sends:**
+```json
+{
+  "type": "command",
+  "id": "fav-spell",
+  "command": "favorite_spell",
+  "formId": "0x0000A23E"
+}
+```
+
+**Server replies:**
+```json
+{
+  "type": "commandResult",
+  "id": "fav-spell",
+  "success": true
 }
 ```
 
