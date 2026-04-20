@@ -192,6 +192,18 @@ namespace MagicReader
         }
         j["hotkeys"] = std::move(hotkeys);
 
+        // isFavorite: is this spell marked as a favorite.
+        bool isFavorite = false;
+        if (favorites) {
+            for (const auto* fav : favorites->spells) {
+                if (fav == spell) {
+                    isFavorite = true;
+                    break;
+                }
+            }
+        }
+        j["isFavorite"] = isFavorite;
+
         return j;
     }
 

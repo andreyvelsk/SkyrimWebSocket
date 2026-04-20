@@ -43,4 +43,8 @@ namespace GameWriter
     // hand = "right" or "left" (default "right").
     // Must be called on the game thread.
     CommandResult UnequipSpell(RE::FormID formId, const std::string& hand);
+
+    // Toggle favorite status on a known spell.
+    // Must be called on the game thread.
+    CommandResult FavoriteSpell(RE::FormID formId);
 }

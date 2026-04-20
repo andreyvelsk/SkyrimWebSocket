@@ -71,6 +71,7 @@ All per-school and \`Magic::Items::*\` arrays return spell entries with the foll
   "isEquipped": true,
   "equippedHand": "right",
   "isActive": false,
+  "isFavorite": true,
   "hotkeys": [0, 3]
 }
 \`\`\`
@@ -91,6 +92,7 @@ All per-school and \`Magic::Items::*\` arrays return spell entries with the foll
 - \`isEquipped\` — \`true\` if the spell is currently equipped for casting in either hand
 - \`equippedHand\` — Where the spell is equipped: \`"right"\`, \`"left"\`, \`"both"\` (dual-cast), or \`null\` if not equipped
 - \`isActive\` — \`true\` if currently being cast by the player
+- \`isFavorite\` — \`true\` if this spell is marked as a favorite (appears in spell menu favorites list)
 - \`hotkeys\` — Array of hotkey slot numbers (0-7) where this spell is assigned (empty if not hotkeyed)
 
 ---
@@ -164,6 +166,18 @@ Spells returned include:
    - Any other method that adds to the player's \`addedSpells\` list
 
 Note: The list does **not** include powers, abilities, diseases, or other non-castable magic items. Only regular spells (SpellType::kSpell) are included.
+
+---
+
+## Game Commands for Spells
+
+The following commands are available for spells (see [PROTOCOL.md](../PROTOCOL.md) for full command documentation):
+
+| Command | Description |
+|---|---|
+| `equip_spell` | Equips a known spell to a hand slot for casting |
+| `unequip_spell` | Unequips a spell from a hand slot |
+| `favorite_spell` | Toggles spell's favorite status (toggles between favorited and unfavorited) |
 
 ---
 

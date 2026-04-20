@@ -459,4 +459,67 @@ namespace GameWriter
         PrintConsole("[WS] Unequip spell " + std::string(spell->GetName()) + " \xe2\x86\x90 " + hand);
         return {true, ""};
     }
+
+    CommandResult FavoriteSpell(RE::FormID formId)
+    {
+        auto* player = RE::PlayerCharacter::GetSingleton();
+        if (!player)
+            return {false, "Player not available"};
+
+        auto* spell = RE::TESForm::LookupByID<RE::SpellItem>(formId);
+        if (!spell)
+            return {false, "Spell not found"};
+
+        // Verify the player knows this spell.
+        bool known = false;
+
+        // 1) Check spells baked into the player's base NPC form.
+        auto* npc       = player->GetActorBase();
+        auto* spellData = npc ? npc->GetSpellList() : nullptr;
+        if (spellData) {
+            for (std::uint32_t i = 0; i < spellData->numSpells; ++i) {
+                if (spellData->spells[i] && spellData->spells[i]->GetFormID() == formId) {
+                    known = true;
+                    break;
+                }
+            }
+        }
+
+        // 2) Check spells learned at runtime (spell tomes, AddSpell(), console, etc.).
+        if (!known) {
+            for (auto* s : player->GetActorRuntimeData().addedSpells) {
+                if (s && s->GetFormID() == formId) {
+                    known = true;
+                    break;
+                }
+            }
+        }
+
+        if (!known)
+            return {false, "Spell not known by player"};
+
+        auto* favorites = RE::MagicFavorites::GetSingleton();
+        if (!favorites)
+            return {false, "Magic favorites not available"};
+
+        // Check if already favorited
+        bool isFavorited = false;
+        for (const auto* fav : favorites->spells) {
+            if (fav == spell) {
+                isFavorited = true;
+                break;
+            }
+        }
+
+        // Toggle favorite
+        if (isFavorited) {
+            favorites->spells.erase(spell);
+            PrintConsole("[WS] Unfavorite spell " + std::string(spell->GetName()));
+        } else {
+            favorites->spells.push_back(spell);
+            PrintConsole("[WS] Favorite spell " + std::string(spell->GetName()));
+        }
+
+        return {true, ""};
+    }
 }
