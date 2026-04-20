@@ -386,10 +386,6 @@ namespace GameWriter
         if (!spell)
             return {false, "Spell not found"};
 
-        auto* equipMgr = RE::ActorEquipManager::GetSingleton();
-        if (!equipMgr)
-            return {false, "Equipment manager not available"};
-
         // Verify the spell is equipped in the requested hand via selectedSpells[],
         // which tracks the HUD-visible slot (not currentSpell — that's only set while casting).
         const int slotIdx = (hand == "left") ? RE::Actor::SlotTypes::kLeftHand
@@ -397,25 +393,11 @@ namespace GameWriter
         if (player->GetActorRuntimeData().selectedSpells[slotIdx] != spell)
             return {false, "Spell is not equipped in " + hand + " hand"};
 
-        // Equipping nullptr clears the slot.
-        const auto* slot = GetHandSlot(hand);
-
-        // ── Debug snapshot ──
-        auto spellNameOf = [](RE::MagicItem* m) -> std::string {
-            return m ? std::string(m->GetName()) : "null";
-        };
-        std::string dbg;
-        dbg += "slot_ptr=" + (slot ? std::format("0x{:X}", reinterpret_cast<std::uintptr_t>(slot)) : "null");
-        dbg += " before[" + std::to_string(slotIdx) + "]="
-             + spellNameOf(player->GetActorRuntimeData().selectedSpells[slotIdx]);
-
-        equipMgr->EquipSpell(player, nullptr, slot);
-
-        dbg += " after[" + std::to_string(slotIdx) + "]="
-             + spellNameOf(player->GetActorRuntimeData().selectedSpells[slotIdx]);
-        // ── End debug ──
+        // EquipSpell(player, nullptr, slot) is ignored by the engine.
+        // DeselectSpell removes the spell from the player's equipped hand slots.
+        player->DeselectSpell(spell);
 
         PrintConsole("[WS] Unequip spell " + std::string(spell->GetName()) + " \xe2\x86\x90 " + hand);
-        return {true, "", dbg};
+        return {true, ""};
     }
 }

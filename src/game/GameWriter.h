@@ -8,7 +8,6 @@ namespace GameWriter
     {
         bool        success;
         std::string error;   // empty on success
-        std::string debug;   // non-empty only when debug info is requested
     };
 
     // Equip an item.
