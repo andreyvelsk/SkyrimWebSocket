@@ -196,32 +196,41 @@ namespace MagicReader
     }
 
     // Generic per-school reader.
+    // Iterates both the NPC base spell list and runtime addedSpells (learned via tomes).
     static nlohmann::json ReadSchool(RE::ActorValue school)
     {
         auto* player = RE::PlayerCharacter::GetSingleton();
         if (!player)
             return nlohmann::json::array();
 
-        auto* npc = player->GetActorBase();
-        auto* spellData = npc ? npc->GetSpellList() : nullptr;
-        if (!spellData)
-            return nlohmann::json::array();
-
         const std::string& categoryType = s_schools.at(school).categoryId;
         auto*              favorites    = RE::MagicFavorites::GetSingleton();
 
         nlohmann::json result = nlohmann::json::array();
-        for (std::uint32_t i = 0; i < spellData->numSpells; ++i) {
-            auto* spell = spellData->spells[i];
+
+        auto tryAdd = [&](RE::SpellItem* spell) {
             if (!spell)
-                continue;
+                return;
             // Only regular castable spells — skip powers, diseases, abilities, etc.
             if (spell->GetSpellType() != RE::MagicSystem::SpellType::kSpell)
-                continue;
+                return;
             if (spell->GetAssociatedSkill() != school)
-                continue;
+                return;
             result.push_back(BuildSpellEntry(spell, categoryType, favorites, player));
+        };
+
+        // 1) Spells baked into the player's base NPC form.
+        auto* npc       = player->GetActorBase();
+        auto* spellData = npc ? npc->GetSpellList() : nullptr;
+        if (spellData) {
+            for (std::uint32_t i = 0; i < spellData->numSpells; ++i)
+                tryAdd(spellData->spells[i]);
         }
+
+        // 2) Spells learned at runtime (spell tomes, AddSpell(), console, etc.).
+        for (auto* spell : player->GetActorRuntimeData().addedSpells)
+            tryAdd(spell);
+
         return result;
     }
 
@@ -233,23 +242,30 @@ namespace MagicReader
         if (!player)
             return nlohmann::json::array();
 
-        auto* npc = player->GetActorBase();
-        auto* spellData = npc ? npc->GetSpellList() : nullptr;
-        if (!spellData)
-            return nlohmann::json::array();
-
         std::unordered_map<RE::ActorValue, int32_t> counts;
-        for (std::uint32_t i = 0; i < spellData->numSpells; ++i) {
-            auto* spell = spellData->spells[i];
+
+        auto tryCount = [&](RE::SpellItem* spell) {
             if (!spell)
-                continue;
+                return;
             if (spell->GetSpellType() != RE::MagicSystem::SpellType::kSpell)
-                continue;
+                return;
             const auto school = spell->GetAssociatedSkill();
             if (s_schools.find(school) == s_schools.end())
-                continue;
+                return;
             ++counts[school];
+        };
+
+        // 1) Spells baked into the player's base NPC form.
+        auto* npc       = player->GetActorBase();
+        auto* spellData = npc ? npc->GetSpellList() : nullptr;
+        if (spellData) {
+            for (std::uint32_t i = 0; i < spellData->numSpells; ++i)
+                tryCount(spellData->spells[i]);
         }
+
+        // 2) Spells learned at runtime (spell tomes, AddSpell(), console, etc.).
+        for (auto* spell : player->GetActorRuntimeData().addedSpells)
+            tryCount(spell);
 
         nlohmann::json result = nlohmann::json::array();
         for (auto& [school, count] : counts) {
