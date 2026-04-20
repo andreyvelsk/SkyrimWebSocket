@@ -95,6 +95,21 @@ namespace GameWriter
         return inv.begin()->second.first;
     }
 
+    // Returns true if a spell is a master-level dual-cast spell.
+    // Master-level spells (requiring 100 skill) occupy both hands and cannot be single-handed.
+    static bool IsMasterLevelSpell(RE::SpellItem* spell)
+    {
+        if (!spell)
+            return false;
+        
+        const auto* costliestEff = spell->GetCostliestEffectItem();
+        if (!costliestEff || !costliestEff->baseEffect)
+            return false;
+        
+        // Master level = 100 skill requirement
+        return costliestEff->baseEffect->GetMinimumSkillLevel() >= 100;
+    }
+
     // Returns the first ExtraDataList that is NOT worn in either hand.
     // Used to obtain a "clean" xList to pass to EquipObject.
     static RE::ExtraDataList* FindUnwornExtraDataList(RE::InventoryEntryData* entry)
@@ -405,25 +420,40 @@ namespace GameWriter
         if (player->GetActorRuntimeData().selectedSpells[slotIdx] != spell)
             return {false, "Spell is not equipped in " + hand + " hand"};
 
-        // DeselectSpell clears ALL slots where the spell appears, not just one hand.
-        // To remove from only one hand: save the other hand's spell, deselect, then
-        // re-equip the other hand if it also had this spell.
+        // DeselectSpell clears ALL slots where the spell appears. If the other hand
+        // had a DIFFERENT spell, we need to restore it since DeselectSpell removes
+        // it from everywhere. However, if the spell was in both hands (dual-cast):
+        // - Master-level spells: cannot be single-handed, so don't restore
+        // - Non-master spells: restore to the other hand if not a different spell
         const int otherSlotIdx = (slotIdx == RE::Actor::SlotTypes::kLeftHand)
                                      ? RE::Actor::SlotTypes::kRightHand
                                      : RE::Actor::SlotTypes::kLeftHand;
-        const std::string otherHand = (hand == "left") ? "right" : "left";
-
         auto* otherMagicItem = player->GetActorRuntimeData().selectedSpells[otherSlotIdx];
-        auto* otherSpell     = otherMagicItem ? otherMagicItem->As<RE::SpellItem>() : nullptr;
-        const bool otherHadSameSpell = (otherSpell == spell);
+        const bool spellInBothHands = (otherMagicItem == spell);
+        const bool isMasterSpell = IsMasterLevelSpell(spell);
 
         player->DeselectSpell(spell);
 
-        // Restore the other hand if it was also holding this spell.
-        if (otherHadSameSpell) {
+        // If spell was in both hands and it's NOT a master spell, restore it to the other hand
+        if (spellInBothHands && !isMasterSpell) {
             auto* equipMgr = RE::ActorEquipManager::GetSingleton();
-            if (equipMgr)
+            if (equipMgr) {
+                const std::string otherHand = (hand == "left") ? "right" : "left";
                 equipMgr->EquipSpell(player, spell, GetHandSlot(otherHand));
+            }
+        }
+        // If spell was in both hands and IS a master spell, it's now completely unequipped
+
+        // If other hand had a DIFFERENT spell, restore it
+        if (otherMagicItem && otherMagicItem != spell) {
+            auto* otherSpell = otherMagicItem->As<RE::SpellItem>();
+            if (otherSpell) {
+                auto* equipMgr = RE::ActorEquipManager::GetSingleton();
+                if (equipMgr) {
+                    const std::string otherHand = (hand == "left") ? "right" : "left";
+                    equipMgr->EquipSpell(player, otherSpell, GetHandSlot(otherHand));
+                }
+            }
         }
 
         PrintConsole("[WS] Unequip spell " + std::string(spell->GetName()) + " \xe2\x86\x90 " + hand);
