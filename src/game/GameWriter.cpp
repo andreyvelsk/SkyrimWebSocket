@@ -507,4 +507,40 @@ namespace GameWriter
 
         return {true, ""};
     }
+
+    CommandResult SetActiveQuest(RE::FormID formId)
+    {
+        auto* target = RE::TESForm::LookupByID<RE::TESQuest>(formId);
+        if (!target)
+            return {false, "Quest not found"};
+
+        // The HUD/compass only tracks quests that are currently running — it's
+        // nonsensical to "activate" an unstarted or completed quest.
+        if (!target->IsEnabled())
+            return {false, "Quest is not currently running"};
+        if (target->IsCompleted())
+            return {false, "Quest is already completed"};
+
+        auto* data = RE::TESDataHandler::GetSingleton();
+        if (!data)
+            return {false, "TESDataHandler not available"};
+
+        // Vanilla journal behaviour: at most one quest has kActive set at a
+        // time.  Clear it everywhere first, then set it on the target so the
+        // engine emits the expected change records.
+        for (auto* q : data->GetFormArray<RE::TESQuest>()) {
+            if (!q || q == target)
+                continue;
+            if (q->data.flags.all(RE::QuestFlag::kActive)) {
+                q->data.flags.reset(RE::QuestFlag::kActive);
+                q->AddChange(RE::TESQuest::ChangeFlags::kQuestFlags);
+            }
+        }
+
+        target->data.flags.set(RE::QuestFlag::kActive);
+        target->AddChange(RE::TESQuest::ChangeFlags::kQuestFlags);
+
+        PrintConsole("[WS] Set active quest " + std::string(target->GetName() ? target->GetName() : ""));
+        return {true, ""};
+    }
 }

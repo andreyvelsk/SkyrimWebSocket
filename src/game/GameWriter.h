@@ -47,4 +47,12 @@ namespace GameWriter
     // Toggle favorite status on a known spell.
     // Must be called on the game thread.
     CommandResult FavoriteSpell(RE::FormID formId);
+
+    // Mark the given quest as the HUD/compass-tracked "active" quest.
+    // Clears the kActive flag on every other quest so the journal behaves as
+    // if the user had selected this quest in the menu.  The target quest must
+    // currently be enabled (running) — completed or unstarted quests are
+    // rejected.
+    // Must be called on the game thread.
+    CommandResult SetActiveQuest(RE::FormID formId);
 }

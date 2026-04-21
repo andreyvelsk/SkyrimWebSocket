@@ -2,6 +2,7 @@
 #include "InventoryReader.h"
 #include "MagicReader.h"
 #include "PlayerReader.h"
+#include "QuestReader.h"
 
 #include <nlohmann/json.hpp>
 
@@ -286,6 +287,14 @@ namespace FieldRegistry
         { "Game::Language",
           { "Current game language from sLanguage:General INI setting (e.g. \"english\", \"russian\")", "string",
             &PlayerReader::ReadLanguage } },
+
+        // Quests
+        { "Quests::Items",
+          { "Array of regular (non-miscellaneous) known quests, each with its localized objectives list", "array",
+            &QuestReader::ReadAll } },
+        { "Quests::Items::Others",
+          { "Array of miscellaneous (\"Разное\") quests — no per-objective breakdown", "array",
+            &QuestReader::ReadOthers } },
     };
     // clang-format on
 

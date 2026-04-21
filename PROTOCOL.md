@@ -118,8 +118,8 @@ validates the request and executes it on the game thread, then replies with a
 {
   "type": "command",
   "id": "cmd-1",            // unique request identifier (required)
-  "command": "equip",       // command name (required): equip | unequip | use | drop | favorite | equip_spell | unequip_spell | favorite_spell
-  "formId": "0x00012EB7",  // item form ID as hex string (required)
+  "command": "equip",       // command name (required): equip | unequip | use | drop | favorite | equip_spell | unequip_spell | favorite_spell | set_active_quest
+  "formId": "0x00012EB7",  // item (or quest) form ID as hex string (required)
   "hand": "right",          // equip/unequip hand: "right" or "left" (optional, default: "right")
   "count": 1                // drop count (optional, default: 1, only used by "drop")
 }
@@ -128,8 +128,8 @@ validates the request and executes it on the game thread, then replies with a
 | Field | Required | Default | Description |
 |---|---|---|---|
 | `id` | **yes** | — | Unique identifier echoed back in the `"commandResult"` response. |
-| `command` | **yes** | — | One of: `equip`, `unequip`, `use`, `drop`, `favorite`, `equip_spell`, `unequip_spell`, `favorite_spell`. |
-| `formId` | **yes** | — | Hex form ID of the target item (e.g. `"0x00012EB7"`). |
+| `command` | **yes** | — | One of: `equip`, `unequip`, `use`, `drop`, `favorite`, `equip_spell`, `unequip_spell`, `favorite_spell`, `set_active_quest`. |
+| `formId` | **yes** | — | Hex form ID of the target item or quest (e.g. `"0x00012EB7"`). |
 | `hand` | no | `"right"` | Target hand for weapons and spells: `"right"` or `"left"`. Ignored for non-weapon items and non-spell commands. Two-handed weapons and master-level spells only accept `"right"`. |
 | `count` | no | `1` | Number of items to drop. Only used by the `drop` command. |
 
@@ -145,6 +145,7 @@ validates the request and executes it on the game thread, then replies with a
 | `equip_spell` | Spells (must be known by player) | Equips a known spell to a hand slot for casting. The `hand` parameter specifies `"right"` or `"left"`. Master-level spells automatically equip to both hands and cannot be single-handed. |
 | `unequip_spell` | Spells (must be equipped) | Unequips a spell from a hand slot. If a non-master spell is dual-cast and unequipped from one hand, it remains equipped in the other hand. Master-level spells are removed from both hands. |
 | `favorite_spell` | Spells (must be known by player) | Toggles the spell's favorite status on/off. Favorited spells appear in the magic favorites list in the spell menu. |
+| `set_active_quest` | Quests (must be currently running) | Marks the quest as the HUD/compass-tracked "active" quest, mirroring the journal's **Make Active** toggle. Clears the active flag on every other quest first, so only one quest is ever active. `hand` and `count` are ignored. See [docs/Quests.md](docs/Quests.md#set_active_quest). |
 
 ---
 
@@ -232,6 +233,7 @@ Fields of different types can be freely mixed in a single `subscribe` or `query`
 - [docs/Player.md](docs/Player.md) — Character level, XP, and inventory weight fields
 - [docs/Game.md](docs/Game.md) — Game-level settings such as the current language
 - [docs/Magic.md](docs/Magic.md) — All Magic fields with spell information and status
+- [docs/Quests.md](docs/Quests.md) — Quest journal fields (`Quests::Items`, `Quests::Items::Others`) and the `set_active_quest` command
 
 ---
 
