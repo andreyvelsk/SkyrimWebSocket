@@ -8,9 +8,12 @@ namespace QuestReader
 {
     // ─── Helpers ──────────────────────────────────────────────────────────
 
-    // A quest is "relevant" to surface to the client if it's currently known
-    // to the player — either enabled (started/running) or already completed.
-    // We also require a non-empty display name, otherwise the entry is useless.
+    // A quest is "relevant" to surface to the client only if the engine has
+    // set kDisplayedInHUD on it.  That flag is set exactly for quests that
+    // appear in the player's journal — it excludes dialogue quests, creature-AI
+    // quests, and other internal engine quests that are technically "enabled"
+    // but never shown to the player.  The flag persists after completion, so
+    // finished journal quests are included as well.
     static bool IsRelevantQuest(const RE::TESQuest* quest)
     {
         if (!quest)
@@ -18,7 +21,7 @@ namespace QuestReader
         const char* name = quest->GetName();
         if (!name || !*name)
             return false;
-        return quest->IsEnabled() || quest->IsCompleted();
+        return quest->data.flags.all(RE::QuestFlag::kDisplayedInHUD);
     }
 
     // The "Miscellaneous" category is how the vanilla journal groups simple
