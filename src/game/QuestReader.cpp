@@ -8,6 +8,22 @@ namespace QuestReader
 {
     // ─── Helpers ──────────────────────────────────────────────────────────
 
+    // True when the objective is currently visible in the journal (or was
+    // visible and is now resolved).  Dormant objectives are internal stages
+    // the engine hasn't surfaced to the player yet.
+    static bool IsObjectiveVisible(SKSE::stl::enumeration<RE::QUEST_OBJECTIVE_STATE, uint8_t> state)
+    {
+        using S = RE::QUEST_OBJECTIVE_STATE;
+        return state == S::kDisplayed || state == S::kCompletedDisplayed ||
+               state == S::kCompleted || state == S::kFailed || state == S::kFailedDisplayed;
+    }
+
+    static bool IsObjectiveCompleted(SKSE::stl::enumeration<RE::QUEST_OBJECTIVE_STATE, uint8_t> state)
+    {
+        using S = RE::QUEST_OBJECTIVE_STATE;
+        return state == S::kCompleted || state == S::kCompletedDisplayed;
+    }
+
     // A quest is "relevant" to surface to the client only if the engine has
     // set kDisplayedInHUD on it.  That flag is set exactly for quests that
     // appear in the player's journal — it excludes dialogue quests, creature-AI
@@ -24,28 +40,32 @@ namespace QuestReader
         return quest->data.flags.all(RE::QuestFlag::kDisplayedInHUD);
     }
 
+    // Miscellaneous quests don't get kDisplayedInHUD — the vanilla journal
+    // shows them under the "Misc" tab when they are running and have at least
+    // one objective currently displayed (kDisplayed state).  A quest with only
+    // dormant or completed-but-hidden objectives is not visible in the journal.
+    static bool IsRelevantMiscQuest(RE::TESQuest* quest)
+    {
+        if (!quest)
+            return false;
+        const char* name = quest->GetName();
+        if (!name || !*name)
+            return false;
+        if (!quest->IsEnabled())
+            return false;
+        for (auto* obj : quest->objectives) {
+            if (obj && IsObjectiveVisible(obj->state))
+                return true;
+        }
+        return false;
+    }
+
     // The "Miscellaneous" category is how the vanilla journal groups simple
     // one-shot tasks (bounty letters, fetch quests, ...).  In data this is
     // QUEST_DATA::Type::kMiscellaneous.
     static bool IsMiscellaneous(const RE::TESQuest* quest)
     {
         return quest && quest->GetType() == RE::QUEST_DATA::Type::kMiscellaneous;
-    }
-
-    // True when the objective is currently visible in the journal (or was
-    // visible and is now resolved).  Dormant objectives are internal stages
-    // the engine hasn't surfaced to the player yet.
-    static bool IsObjectiveVisible(SKSE::stl::enumeration<RE::QUEST_OBJECTIVE_STATE, uint8_t> state)
-    {
-        using S = RE::QUEST_OBJECTIVE_STATE;
-        return state == S::kDisplayed || state == S::kCompletedDisplayed ||
-               state == S::kCompleted || state == S::kFailed || state == S::kFailedDisplayed;
-    }
-
-    static bool IsObjectiveCompleted(SKSE::stl::enumeration<RE::QUEST_OBJECTIVE_STATE, uint8_t> state)
-    {
-        using S = RE::QUEST_OBJECTIVE_STATE;
-        return state == S::kCompleted || state == S::kCompletedDisplayed;
     }
 
     static nlohmann::json BuildTaskJson(const RE::BGSQuestObjective* obj)
@@ -114,9 +134,9 @@ namespace QuestReader
             return out;
 
         for (auto* quest : data->GetFormArray<RE::TESQuest>()) {
-            if (!IsRelevantQuest(quest))
-                continue;
             if (!IsMiscellaneous(quest))
+                continue;
+            if (!IsRelevantMiscQuest(quest))
                 continue;
             out.push_back(BuildQuestJson(quest, /*includeTasks=*/false));
         }
