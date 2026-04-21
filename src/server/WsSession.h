@@ -21,6 +21,10 @@ class WsSession : public std::enable_shared_from_this<WsSession>
     struct SubscriptionEntry {
         SubscriptionState                          state;
         std::unique_ptr<boost::asio::steady_timer> timer;
+        // Bumped on every SetSubscription with the same id so that stale
+        // responses produced by the previous subscription generation can be
+        // recognised and discarded.
+        std::uint64_t                              generation = 0;
     };
 
     std::unordered_map<std::string, SubscriptionEntry> subscriptions_;

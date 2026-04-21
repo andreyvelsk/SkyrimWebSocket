@@ -45,7 +45,6 @@ add_commonlibsse_plugin(${PROJECT_NAME} SOURCES
     src/game/PlayerReader.cpp
     src/server/MessageRouter.cpp
     src/server/WsSession.cpp
-    src/server/SessionManager.cpp
     src/server/WsServer.cpp
 ) # <--- specifies all source files
 target_compile_features(${PROJECT_NAME} PRIVATE cxx_std_23) # <--- use C++23 standard

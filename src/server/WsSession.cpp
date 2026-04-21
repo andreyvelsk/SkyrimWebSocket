@@ -43,8 +43,16 @@ void WsSession::doWrite()
     writing_ = true;
     ws_.async_write(asio::buffer(writeQueue_.front()),
         [self = shared_from_this()](beast::error_code ec, std::size_t) {
-            self->writeQueue_.pop_front();
-            if (ec) return;
+            if (!self->writeQueue_.empty())
+                self->writeQueue_.pop_front();
+            if (ec) {
+                // On any write error: stop the write loop and drop any pending
+                // queued messages — the socket is done, and the read error will
+                // tear down the session.
+                self->writing_ = false;
+                self->writeQueue_.clear();
+                return;
+            }
             self->doWrite();
         });
 }
@@ -69,17 +77,24 @@ void WsSession::doRead()
 
 void WsSession::SetSubscription(SubscriptionState state)
 {
+    // Bump the generation for this id.  Any in-flight push from the previous
+    // subscription with the same id will see a mismatched generation on return
+    // and discard its result instead of clobbering the fresh lastValues.
+    const std::string id      = state.id;
+    std::uint64_t     prevGen = 0;
+    if (auto it = subscriptions_.find(id); it != subscriptions_.end())
+        prevGen = it->second.generation;
+
     // Cancel any existing subscription with the same id.
-    CancelSubscription(state.id);
+    CancelSubscription(id);
 
     state.frequencyMs = std::max(MIN_FREQUENCY_MS, state.frequencyMs);
 
     SubscriptionEntry entry;
-    entry.state = std::move(state);
-    entry.timer = std::make_unique<asio::steady_timer>(ioc_);
+    entry.state      = std::move(state);
+    entry.timer      = std::make_unique<asio::steady_timer>(ioc_);
+    entry.generation = prevGen + 1;
 
-    // Copy the id before moving entry into the map.
-    const std::string id = entry.state.id;
     subscriptions_.emplace(id, std::move(entry));
     schedulePush(id);
 }
@@ -119,17 +134,23 @@ void WsSession::doPush(const std::string& id)
     if (it == subscriptions_.end())
         return;
 
-    // Snapshot the current subscription state for the game thread.
-    // lastValues is propagated back to the session after the read.
-    SubscriptionState snapshot = it->second.state;
+    // Snapshot the current subscription state and its generation for the
+    // game thread.  On return we verify the generation still matches before
+    // propagating lastValues, which protects against the subscription having
+    // been replaced while the push was in flight.
+    SubscriptionState snapshot   = it->second.state;
+    const std::uint64_t generation = it->second.generation;
 
-    SKSE::GetTaskInterface()->AddTask([self = shared_from_this(), snapshot]() mutable {
+    SKSE::GetTaskInterface()->AddTask([self = shared_from_this(), snapshot, generation]() mutable {
         std::string json = GameReader::BuildSubscriptionJson(snapshot);
 
-        asio::post(self->ioc_, [self, json, id = snapshot.id, lastValues = snapshot.lastValues] {
+        asio::post(self->ioc_, [self, json, id = snapshot.id,
+                                lastValues = snapshot.lastValues, generation] {
             auto it = self->subscriptions_.find(id);
             if (it == self->subscriptions_.end())
                 return;
+            if (it->second.generation != generation)
+                return;  // subscription was replaced while push was in flight
 
             // Propagate updated lastValues back to the live subscription.
             it->second.state.lastValues = lastValues;

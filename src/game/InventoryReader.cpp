@@ -1,4 +1,5 @@
 #include "InventoryReader.h"
+#include "../Utils.h"
 
 #include <array>
 #include <format>
@@ -257,6 +258,28 @@ namespace InventoryReader
 
     // ─── ReadCategories ───────────────────────────────────────────────────
 
+    // Maps a form object to the stable categoryType string exposed in the API.
+    // The values here mirror docs/Inventory.md § Category Types.
+    static std::string CategoryTypeFor(const RE::TESBoundObject& obj)
+    {
+        switch (obj.GetFormType()) {
+            case RE::FormType::Weapon:     return "Weapon";
+            case RE::FormType::Armor:      return "Apparel";
+            case RE::FormType::Book:       return "Book";
+            case RE::FormType::AlchemyItem: {
+                const auto* alch = obj.As<RE::AlchemyItem>();
+                return (alch && alch->IsFood()) ? "Food" : "Potion";
+            }
+            case RE::FormType::Ingredient: return "Ingredient";
+            case RE::FormType::Misc:       return "Misc";
+            case RE::FormType::Ammo:       return "Ammo";
+            case RE::FormType::KeyMaster:  return "Key";
+            case RE::FormType::SoulGem:    return "SoulGem";
+            case RE::FormType::Scroll:     return "Scroll";
+            default:                       return "Unknown";
+        }
+    }
+
     nlohmann::json ReadCategories()
     {
         auto* player = RE::PlayerCharacter::GetSingleton();
@@ -359,18 +382,7 @@ namespace InventoryReader
 
     // Returns true for weapon types that occupy both hands (two-handed melee,
     // bows, crossbows).  Staves are one-handed.
-    static bool IsWeaponTwoHanded(RE::WEAPON_TYPE type)
-    {
-        switch (type) {
-            case RE::WEAPON_TYPE::kTwoHandSword:
-            case RE::WEAPON_TYPE::kTwoHandAxe:
-            case RE::WEAPON_TYPE::kBow:
-            case RE::WEAPON_TYPE::kCrossbow:
-                return true;
-            default:
-                return false;
-        }
-    }
+    // (Implementation lives in src/Utils.h as a shared helper.)
 
     // Determines which hand a weapon is currently equipped in by inspecting
     // the ExtraWorn / ExtraWornLeft flags on its extra-data lists.
@@ -742,35 +754,7 @@ namespace InventoryReader
 
             auto j          = BuildBaseEntry(item, data);
             j["isEquipped"] = data.second->IsWorn();
-
-            auto it   = s_formTypeNames.find(item->GetFormType());
-            j["type"] = (it != s_formTypeNames.end()) ? it->second : "Unknown";
-            
-            // Set categoryType based on FormType
-            std::string categoryType = "Unknown";
-            if (item->GetFormType() == RE::FormType::Weapon) {
-                categoryType = "Weapon";
-            } else if (item->GetFormType() == RE::FormType::Armor) {
-                categoryType = "Apparel";
-            } else if (item->GetFormType() == RE::FormType::Book) {
-                categoryType = "Book";
-            } else if (item->GetFormType() == RE::FormType::AlchemyItem) {
-                const auto* alch = item->As<RE::AlchemyItem>();
-                categoryType = (alch && alch->IsFood()) ? "Food" : "Potion";
-            } else if (item->GetFormType() == RE::FormType::Ingredient) {
-                categoryType = "Ingredient";
-            } else if (item->GetFormType() == RE::FormType::Misc) {
-                categoryType = "Misc";
-            } else if (item->GetFormType() == RE::FormType::Ammo) {
-                categoryType = "Ammo";
-            } else if (item->GetFormType() == RE::FormType::KeyMaster) {
-                categoryType = "Key";
-            } else if (item->GetFormType() == RE::FormType::SoulGem) {
-                categoryType = "SoulGem";
-            } else if (item->GetFormType() == RE::FormType::Scroll) {
-                categoryType = "Scroll";
-            }
-            j["categoryType"] = categoryType;
+            j["categoryType"] = CategoryTypeFor(*item);
 
             result.push_back(std::move(j));
         }
@@ -801,29 +785,6 @@ namespace InventoryReader
         return result;
     }
 
-    // Attempts to extract a base-damage value from various form types.
-    // Different CommonLibSSE/RE versions expose damage under different
-    // members/methods (GetAttackDamage, GetDamage, gamedata/data.damage, etc.).
-    template <typename T>
-    static float ExtractBaseDamage(const T* obj)
-    {
-        if (!obj)
-            return 0.0f;
-        if constexpr (requires(const T* x) { x->GetAttackDamage(); }) {
-            return obj->GetAttackDamage();
-        } else if constexpr (requires(const T* x) { x->GetDamage(); }) {
-            return obj->GetDamage();
-        } else if constexpr (requires(const T* x) { x->gamedata.damage; }) {
-            return obj->gamedata.damage;
-        } else if constexpr (requires(const T* x) { x->data.damage; }) {
-            return obj->data.damage;
-        } else if constexpr (requires(const T* x) { x->damage; }) {
-            return obj->damage;
-        } else {
-            return 0.0f;
-        }
-    }
-
     // ─── Generic resolver (Ammo, Keys) ───────────────────────────────────
 
     static nlohmann::json ReadItemsByType(RE::FormType formType)
@@ -845,27 +806,17 @@ namespace InventoryReader
             if (!item || data.first <= 0)
                 continue;
             auto j = BuildBaseEntry(item, data);
-            
-            // Set categoryType based on FormType
-            if (formType == RE::FormType::Ammo) {
-                j["categoryType"] = "Ammo";
-            } else if (formType == RE::FormType::KeyMaster) {
-                j["categoryType"] = "Key";
-            } else {
-                j["categoryType"] = "Unknown";
-            }
-            
-            j["isEquipped"] = data.second ? data.second->IsWorn() : false;
+
+            j["categoryType"] = CategoryTypeFor(*item);
+            j["isEquipped"]   = data.second ? data.second->IsWorn() : false;
 
             // For Ammo entries include an effective damage field.
             if (formType == RE::FormType::Ammo) {
                 float base = 0.0f;
                 if (const auto* ammo = item->As<RE::TESAmmo>())
-                    base = ExtractBaseDamage(ammo);
-                else if (const auto* weap = item->As<RE::TESObjectWEAP>())
-                    base = ExtractBaseDamage(weap);
+                    base = ammo->data.damage;
                 j["baseDamage"] = base;
-                j["damage"] = base * atkMult;
+                j["damage"]     = base * atkMult;
             }
 
             result.push_back(std::move(j));

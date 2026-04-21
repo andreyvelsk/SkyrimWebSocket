@@ -17,6 +17,8 @@ namespace GameReader
             return {};
 
         auto* avo = player->AsActorValueOwner();
+        if (!avo)
+            return {};
 
         nlohmann::json dataFields;
         bool           anyChanged = false;

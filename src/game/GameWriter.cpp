@@ -17,20 +17,6 @@ namespace GameWriter
         return ft == RE::FormType::Weapon || ft == RE::FormType::Armor || ft == RE::FormType::Ammo;
     }
 
-    // Returns true for weapon types that occupy both hands.
-    static bool IsWeaponTwoHanded(RE::WEAPON_TYPE type)
-    {
-        switch (type) {
-            case RE::WEAPON_TYPE::kTwoHandSword:
-            case RE::WEAPON_TYPE::kTwoHandAxe:
-            case RE::WEAPON_TYPE::kBow:
-            case RE::WEAPON_TYPE::kCrossbow:
-                return true;
-            default:
-                return false;
-        }
-    }
-
     // Well-known Skyrim equip-slot FormIDs used as a fallback when
     // BGSDefaultObjectManager fails to resolve them.
     static constexpr RE::FormID kRightHandSlotID = 0x00013F42;
