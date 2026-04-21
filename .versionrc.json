@@ -60,5 +60,8 @@
   "compareUrlFormat": "{{host}}/{{owner}}/{{repository}}/compare/{{previousTag}}...{{currentTag}}",
   "issueUrlFormat": "{{host}}/{{owner}}/{{repository}}/issues/{{id}}",
   "userUrlFormat": "{{host}}/{{user}}",
-  "releaseCommitMessageFormat": "chore(release): v{{currentTag}}"
+  "releaseCommitMessageFormat": "chore(release): v{{currentTag}}",
+  "scripts": {
+    "postbump": "node scripts/update-version.js"
+  }
 }
