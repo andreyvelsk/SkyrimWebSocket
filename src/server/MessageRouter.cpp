@@ -114,6 +114,12 @@ namespace MessageRouter
                 result = GameWriter::DropItem(formId, count);
             else if (command == "favorite")
                 result = GameWriter::FavoriteItem(formId);
+            else if (command == "equip_spell")
+                result = GameWriter::EquipSpell(formId, hand);
+            else if (command == "unequip_spell")
+                result = GameWriter::UnequipSpell(formId, hand);
+            else if (command == "favorite_spell")
+                result = GameWriter::FavoriteSpell(formId);
             else
                 result = {false, "Unknown command: '" + command + "'"};
 

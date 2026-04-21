@@ -3,7 +3,7 @@
 cmake_minimum_required(VERSION 3.21)
 
 # Set your project name. This will be the name of your SKSE .dll file.
-project(SkyrimWebSocket VERSION 1.4.0 LANGUAGES CXX)
+project(SkyrimWebSocket VERSION 1.5.0 LANGUAGES CXX)
 
 #
 # YOU DO NOT NEED TO EDIT ANYTHING BELOW HERE
@@ -42,6 +42,7 @@ add_commonlibsse_plugin(${PROJECT_NAME} SOURCES
     src/game/GameReader.cpp
     src/game/GameWriter.cpp
     src/game/InventoryReader.cpp
+    src/game/MagicReader.cpp
     src/game/PlayerReader.cpp
     src/server/MessageRouter.cpp
     src/server/WsSession.cpp

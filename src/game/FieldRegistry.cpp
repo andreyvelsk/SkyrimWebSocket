@@ -1,5 +1,6 @@
 #include "FieldRegistry.h"
 #include "InventoryReader.h"
+#include "MagicReader.h"
 #include "PlayerReader.h"
 
 #include <nlohmann/json.hpp>
@@ -236,6 +237,30 @@ namespace FieldRegistry
         { "Inventory::Items::Favorites",
           { "Favorited items across all categories", "array",
             &InventoryReader::ReadFavorites } },
+
+        // Magic schools and spells
+        { "Magic::Categories",
+          { "Array of magic schools with spell counts", "array",
+            &MagicReader::ReadCategories } },
+
+        { "Magic::Items::Destruction",
+          { "Destruction spells known by player", "array",
+            &MagicReader::ReadDestruction } },
+        { "Magic::Items::Alteration",
+          { "Alteration spells known by player", "array",
+            &MagicReader::ReadAlteration } },
+        { "Magic::Items::Conjuration",
+          { "Conjuration spells known by player", "array",
+            &MagicReader::ReadConjuration } },
+        { "Magic::Items::Illusion",
+          { "Illusion spells known by player", "array",
+            &MagicReader::ReadIllusion } },
+        { "Magic::Items::Restoration",
+          { "Restoration spells known by player", "array",
+            &MagicReader::ReadRestoration } },
+        { "Magic::Items::Enchanting",
+          { "Enchanting spells known by player", "array",
+            &MagicReader::ReadEnchanting } },
 
         // Player stats
         { "Player::Level",
