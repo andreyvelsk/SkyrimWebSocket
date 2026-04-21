@@ -61,7 +61,22 @@
   "issueUrlFormat": "{{host}}/{{owner}}/{{repository}}/issues/{{id}}",
   "userUrlFormat": "{{host}}/{{user}}",
   "releaseCommitMessageFormat": "chore(release): v{{currentTag}}",
-  "scripts": {
-    "postbump": "node scripts/update-version.js"
-  }
+  "bumpFiles": [
+    {
+      "filename": "package.json",
+      "type": "json"
+    },
+    {
+      "filename": "package-lock.json",
+      "type": "json"
+    },
+    {
+      "filename": "CMakeLists.txt",
+      "updater": "scripts/updaters/cmake-updater.cjs"
+    },
+    {
+      "filename": "vcpkg.json",
+      "updater": "scripts/updaters/vcpkg-updater.cjs"
+    }
+  ]
 }
