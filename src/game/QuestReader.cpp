@@ -57,7 +57,7 @@ namespace QuestReader
         return j;
     }
 
-    static nlohmann::json BuildQuestJson(const RE::TESQuest* quest, bool includeTasks)
+    static nlohmann::json BuildQuestJson(RE::TESQuest* quest, bool includeTasks)
     {
         nlohmann::json j;
         // GetName() comes from TESFullName (FULL record) which is localized by
