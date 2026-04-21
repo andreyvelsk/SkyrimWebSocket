@@ -32,14 +32,14 @@ namespace QuestReader
     // True when the objective is currently visible in the journal (or was
     // visible and is now resolved).  Dormant objectives are internal stages
     // the engine hasn't surfaced to the player yet.
-    static bool IsObjectiveVisible(RE::QUEST_OBJECTIVE_STATE state)
+    static bool IsObjectiveVisible(SKSE::stl::enumeration<RE::QUEST_OBJECTIVE_STATE, uint8_t> state)
     {
         using S = RE::QUEST_OBJECTIVE_STATE;
         return state == S::kDisplayed || state == S::kCompletedDisplayed ||
                state == S::kCompleted || state == S::kFailed || state == S::kFailedDisplayed;
     }
 
-    static bool IsObjectiveCompleted(RE::QUEST_OBJECTIVE_STATE state)
+    static bool IsObjectiveCompleted(SKSE::stl::enumeration<RE::QUEST_OBJECTIVE_STATE, uint8_t> state)
     {
         using S = RE::QUEST_OBJECTIVE_STATE;
         return state == S::kCompleted || state == S::kCompletedDisplayed;
