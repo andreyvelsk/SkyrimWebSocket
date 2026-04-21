@@ -40,24 +40,13 @@ namespace QuestReader
         return quest->data.flags.all(RE::QuestFlag::kDisplayedInHUD);
     }
 
-    // Miscellaneous quests don't get kDisplayedInHUD — the vanilla journal
-    // shows them under the "Misc" tab when they are running and have at least
-    // one objective currently displayed (kDisplayed state).  A quest with only
-    // dormant or completed-but-hidden objectives is not visible in the journal.
-    static bool IsRelevantMiscQuest(RE::TESQuest* quest)
+    // Miscellaneous quests use the same kDisplayedInHUD flag the journal sets
+    // for all visible quests.  The Misc tab is just a UI grouping by questType.
+    static bool IsRelevantMiscQuest(const RE::TESQuest* quest)
     {
         if (!quest)
             return false;
-        const char* name = quest->GetName();
-        if (!name || !*name)
-            return false;
-        if (!quest->IsEnabled())
-            return false;
-        for (auto* obj : quest->objectives) {
-            if (obj && IsObjectiveVisible(obj->state))
-                return true;
-        }
-        return false;
+        return quest->data.flags.all(RE::QuestFlag::kDisplayedInHUD);
     }
 
     // The "Miscellaneous" category is how the vanilla journal groups simple
@@ -68,42 +57,82 @@ namespace QuestReader
         return quest && quest->GetType() == RE::QUEST_DATA::Type::kMiscellaneous;
     }
 
+    static const char* ObjectiveStateName(RE::QUEST_OBJECTIVE_STATE s)
+    {
+        using S = RE::QUEST_OBJECTIVE_STATE;
+        switch (s) {
+            case S::kDormant:            return "kDormant";
+            case S::kDisplayed:          return "kDisplayed";
+            case S::kCompleted:          return "kCompleted";
+            case S::kCompletedDisplayed: return "kCompletedDisplayed";
+            case S::kFailed:             return "kFailed";
+            case S::kFailedDisplayed:    return "kFailedDisplayed";
+            default:                     return "unknown";
+        }
+    }
+
+    static const char* QuestTypeName(RE::QUEST_DATA::Type t)
+    {
+        using T = RE::QUEST_DATA::Type;
+        switch (t) {
+            case T::kNone:            return "None";
+            case T::kMainQuest:       return "MainQuest";
+            case T::kMagesGuild:      return "MagesGuild";
+            case T::kThievesGuild:    return "ThievesGuild";
+            case T::kDarkBrotherhood: return "DarkBrotherhood";
+            case T::kCompanionsQuest: return "CompanionsQuest";
+            case T::kMiscellaneous:   return "Miscellaneous";
+            case T::kDaedric:         return "Daedric";
+            case T::kSideQuest:       return "SideQuest";
+            case T::kCivilWar:        return "CivilWar";
+            case T::kDLC01_Vampire:   return "DLC01_Vampire";
+            case T::kDLC02_Dragonborn:return "DLC02_Dragonborn";
+            default:                  return "unknown";
+        }
+    }
+
     static nlohmann::json BuildTaskJson(const RE::BGSQuestObjective* obj)
     {
         nlohmann::json j;
-        // displayText is a BSFixedString populated from the NNAM record, which
-        // the engine resolves against the currently-loaded STRINGS file — so
-        // the text is already in the game's current language.
         const char* text = obj->displayText.c_str();
+        j["index"]       = obj->index;
         j["name"]        = text ? text : "";
+        j["state"]       = ObjectiveStateName(obj->state.get());
         j["isCompleted"] = IsObjectiveCompleted(obj->state);
+        j["isVisible"]   = IsObjectiveVisible(obj->state);
         return j;
     }
 
     static nlohmann::json BuildQuestJson(RE::TESQuest* quest, bool includeTasks)
     {
         nlohmann::json j;
-        // GetName() comes from TESFullName (FULL record) which is localized by
-        // the engine, matching the game's sLanguage:General setting.
-        j["questId"]     = std::format("0x{:08X}", quest->GetFormID());
-        j["name"]        = quest->GetName();
-        j["isActive"]    = quest->IsActive();
-        j["isCompleted"] = quest->IsCompleted();
+        j["questId"]      = std::format("0x{:08X}", quest->GetFormID());
+        j["editorId"]     = quest->GetFormEditorID() ? quest->GetFormEditorID() : "";
+        j["name"]         = quest->GetName();
+        j["type"]         = static_cast<int>(quest->GetType());
+        j["typeName"]     = QuestTypeName(quest->GetType());
+        j["flags"]        = std::format("0x{:04X}", quest->data.flags.underlying());
+        j["isActive"]     = quest->IsActive();
+        j["isEnabled"]    = quest->IsEnabled();
+        j["isCompleted"]  = quest->IsCompleted();
+        j["isRunning"]    = quest->IsRunning();
+        j["isStopped"]    = quest->IsStopped();
+        j["currentStage"] = quest->GetCurrentStageID();
 
         if (includeTasks) {
-            j["description"] = "";  // See docs/Quests.md for the rationale.
-            nlohmann::json tasks = nlohmann::json::array();
-            for (auto* obj : quest->objectives) {
-                if (!obj)
-                    continue;
-                if (!IsObjectiveVisible(obj->state))
-                    continue;
-                tasks.push_back(BuildTaskJson(obj));
-            }
-            j["tasks"] = std::move(tasks);
+            j["description"] = "";
         } else {
             j["isOther"] = true;
         }
+
+        nlohmann::json objectives = nlohmann::json::array();
+        for (auto* obj : quest->objectives) {
+            if (!obj)
+                continue;
+            objectives.push_back(BuildTaskJson(obj));
+        }
+        j["objectives"] = std::move(objectives);
+
         return j;
     }
 
