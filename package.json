@@ -1,10 +1,10 @@
 {
   "name": "skyrim-websocket",
-  "version": "1.5.0",
+  "version": "1.6.0",
   "description": "An SKSE plugin for Skyrim that provides a WebSocket server interface for remote game state monitoring and control",
   "type": "module",
   "scripts": {
-    "release": "standard-version && node scripts/update-version.js $(node -p \"require('./package.json').version\")",
+    "release": "standard-version",
     "release:dry-run": "standard-version --dry-run",
     "prepare": "husky install || true"
   },

@@ -10,10 +10,10 @@
 import fs from 'fs';
 import path from 'path';
 
-const newVersion = process.argv[2];
+const newVersion = process.argv[2] || JSON.parse(fs.readFileSync(path.join(process.cwd(), 'package.json'), 'utf8')).version;
 
 if (!newVersion) {
-  console.error('Usage: update-version.js <newVersion>');
+  console.error('Could not determine version. Pass it as argument or ensure package.json exists.');
   process.exit(1);
 }
 

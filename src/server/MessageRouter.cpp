@@ -8,6 +8,7 @@
 
 #include <chrono>
 #include <nlohmann/json.hpp>
+#include <optional>
 
 namespace asio = boost::asio;
 
@@ -39,12 +40,18 @@ namespace MessageRouter
     }
 
     // Parse a hex formId string (e.g. "0x00012EB7" or "12EB7") to a FormID.
-    static RE::FormID ParseFormId(const std::string& str)
+    // Returns std::nullopt on parse failure (unlike a 0 sentinel, this lets
+    // callers distinguish the legitimate "0" input from a malformed one).
+    static std::optional<RE::FormID> ParseFormId(const std::string& str)
     {
         try {
-            return static_cast<RE::FormID>(std::stoul(str, nullptr, 16));
+            std::size_t pos = 0;
+            auto        val = std::stoul(str, &pos, 16);
+            if (pos == 0)
+                return std::nullopt;
+            return static_cast<RE::FormID>(val);
         } catch (...) {
-            return 0;
+            return std::nullopt;
         }
     }
 
@@ -82,8 +89,8 @@ namespace MessageRouter
         const std::string hand       = msg.value("hand", "right");
         const int         count      = msg.value("count", 1);
 
-        const RE::FormID formId = ParseFormId(formIdStr);
-        if (formId == 0) {
+        const auto parsed = ParseFormId(formIdStr);
+        if (!parsed) {
             nlohmann::json err;
             err["type"]    = "commandResult";
             err["id"]      = cmdId;
@@ -92,6 +99,7 @@ namespace MessageRouter
             session->send(err.dump());
             return;
         }
+        const RE::FormID formId = *parsed;
 
         SKSE::GetTaskInterface()->AddTask([session, cmdId, command, formId, hand, count]() {
             GameWriter::CommandResult result;
