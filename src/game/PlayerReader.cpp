@@ -162,15 +162,18 @@ namespace PlayerReader
 
         nlohmann::json result = nlohmann::json::array();
 
-        auto& runtimeData   = player->GetPlayerRuntimeData();
-        auto& markerHandles = runtimeData.currentMapMarkers;
+        // Iterate all persistent object references to find map markers.
+        // This approach works in SE/AE/VR and multi-targeting builds where
+        // PlayerCharacter::PLAYER_RUNTIME_DATA::currentMapMarkers is absent.
+        auto* handler = RE::TESDataHandler::GetSingleton();
+        if (!handler)
+            return result;
 
-        for (auto& handle : markerHandles) {
-            auto ref = handle.get();
-            if (!ref)
+        for (auto* form : handler->GetFormArray<RE::TESObjectREFR>()) {
+            if (!form)
                 continue;
 
-            auto* extra = ref->extraList.GetByType<RE::ExtraMapMarker>();
+            auto* extra = form->extraList.GetByType<RE::ExtraMapMarker>();
             if (!extra || !extra->mapData)
                 continue;
 
@@ -178,24 +181,29 @@ namespace PlayerReader
 
             using Flag = RE::MapMarkerData::Flag;
             const bool isVisible     = data->flags.any(Flag::kVisible);
+
+            // Skip markers the player hasn't discovered yet
+            if (!isVisible)
+                continue;
+
             const bool canFastTravel = data->flags.any(Flag::kCanTravelTo);
 
-            const auto   typeId   = static_cast<uint32_t>(data->type.underlying());
-            const auto   typeName = typeId < kTypeNames.size()
-                                        ? std::string(kTypeNames[typeId])
-                                        : "Unknown";
+            const auto typeId   = static_cast<uint32_t>(data->type.underlying());
+            const auto typeName = typeId < kTypeNames.size()
+                                      ? std::string(kTypeNames[typeId])
+                                      : "Unknown";
 
             const char* fullName = data->locationName.GetFullName();
             std::string name     = fullName ? fullName : "";
 
             nlohmann::json entry;
-            entry["refId"]        = std::format("{:#010X}", ref->GetFormID());
-            entry["name"]         = name;
-            entry["type"]         = typeName;
-            entry["typeId"]       = typeId;
-            entry["x"]            = ref->GetPositionX();
-            entry["y"]            = ref->GetPositionY();
-            entry["isVisible"]    = isVisible;
+            entry["refId"]         = std::format("0x{:08X}", form->GetFormID());
+            entry["name"]          = name;
+            entry["type"]          = typeName;
+            entry["typeId"]        = typeId;
+            entry["x"]             = form->GetPositionX();
+            entry["y"]             = form->GetPositionY();
+            entry["isVisible"]     = isVisible;
             entry["canFastTravel"] = canFastTravel;
 
             result.push_back(std::move(entry));
