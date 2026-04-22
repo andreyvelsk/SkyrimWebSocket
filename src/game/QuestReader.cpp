@@ -103,7 +103,7 @@ namespace QuestReader
         return j;
     }
 
-    static nlohmann::json BuildQuestJson(RE::TESQuest* quest, bool includeTasks)
+    static nlohmann::json BuildQuestJson(RE::TESQuest* quest)
     {
         nlohmann::json j;
         j["questId"]      = std::format("0x{:08X}", quest->GetFormID());
@@ -112,18 +112,13 @@ namespace QuestReader
         j["type"]         = static_cast<int>(quest->GetType());
         j["typeName"]     = QuestTypeName(quest->GetType());
         j["flags"]        = std::format("0x{:04X}", quest->data.flags.underlying());
+        j["isOther"]      = IsMiscellaneous(quest);
         j["isActive"]     = quest->IsActive();
         j["isEnabled"]    = quest->IsEnabled();
         j["isCompleted"]  = quest->IsCompleted();
         j["isRunning"]    = quest->IsRunning();
         j["isStopped"]    = quest->IsStopped();
         j["currentStage"] = quest->GetCurrentStageID();
-
-        if (includeTasks) {
-            j["description"] = "";
-        } else {
-            j["isOther"] = true;
-        }
 
         nlohmann::json objectives = nlohmann::json::array();
         for (auto* obj : quest->objectives) {
@@ -146,29 +141,24 @@ namespace QuestReader
             return out;
 
         for (auto* quest : data->GetFormArray<RE::TESQuest>()) {
-            if (!IsRelevantQuest(quest))
+            if (!quest)
                 continue;
-            if (IsMiscellaneous(quest))
-                continue;  // Miscellaneous quests are returned via ReadOthers().
-            out.push_back(BuildQuestJson(quest, /*includeTasks=*/true));
+            const char* name = quest->GetName();
+            if (!name || !*name)
+                continue;
+            // Include any quest the engine considers journal-visible (kDisplayedInHUD),
+            // regardless of type.  isOther=true marks Miscellaneous ones.
+            if (!quest->data.flags.all(RE::QuestFlag::kDisplayedInHUD))
+                continue;
+            out.push_back(BuildQuestJson(quest));
         }
         return out;
     }
 
     nlohmann::json ReadOthers()
     {
-        nlohmann::json out = nlohmann::json::array();
-        auto* data = RE::TESDataHandler::GetSingleton();
-        if (!data)
-            return out;
-
-        for (auto* quest : data->GetFormArray<RE::TESQuest>()) {
-            if (!IsMiscellaneous(quest))
-                continue;
-            if (!IsRelevantMiscQuest(quest))
-                continue;
-            out.push_back(BuildQuestJson(quest, /*includeTasks=*/false));
-        }
-        return out;
+        // Kept for backwards compatibility — returns the same list as ReadAll
+        // so clients subscribed to Quests::Items::Others still get data.
+        return ReadAll();
     }
 }
