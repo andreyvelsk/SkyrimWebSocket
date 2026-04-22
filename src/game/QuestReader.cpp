@@ -184,9 +184,9 @@ namespace QuestReader
             // ── Quest data flags (raw + individual bits) ──────────────────
             const auto qf = quest->data.flags.underlying();
             j["questFlags"] = std::format("0x{:04X}", qf);
-            // bit 0x0001
-            j["flag_kStartGameEnabled"] =
-                quest->data.flags.all(RE::QuestFlag::kStartGameEnabled);
+            // bit 0x0010 — quest starts enabled at game start
+            j["flag_kStartsEnabled"] =
+                quest->data.flags.all(RE::QuestFlag::kStartsEnabled);
             // bit that IsActive() tests
             j["flag_kActive"] =
                 quest->data.flags.all(RE::QuestFlag::kActive);
