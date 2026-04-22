@@ -523,7 +523,6 @@ namespace GameWriter
             case RE::MagicSystem::SpellType::kPower:
             case RE::MagicSystem::SpellType::kLesserPower:
             case RE::MagicSystem::SpellType::kVoicePower:
-            case RE::MagicSystem::SpellType::kShout:
                 return true;
             default:
                 return false;
@@ -545,14 +544,9 @@ namespace GameWriter
                 }
             }
         }
-        // Spells added at runtime (tomes, AddSpell).
+        // Spells added at runtime (tomes, AddSpell, powers).
         for (auto* s : player->GetActorRuntimeData().addedSpells) {
             if (s == spell)
-                return true;
-        }
-        // Shouts are in GetPowers() — still owned SpellItem*.
-        for (auto* p : player->GetPowers()) {
-            if (p == spell)
                 return true;
         }
         return false;

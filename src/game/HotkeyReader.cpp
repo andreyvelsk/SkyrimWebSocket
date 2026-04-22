@@ -60,20 +60,17 @@ namespace HotkeyReader
             case RE::MagicSystem::SpellType::kPower:       spellType = "Power";       break;
             case RE::MagicSystem::SpellType::kLesserPower: spellType = "LesserPower"; break;
             case RE::MagicSystem::SpellType::kVoicePower:  spellType = "VoicePower";  break;
-            case RE::MagicSystem::SpellType::kShout:       spellType = "Shout";       break;
             default:                                        spellType = "Spell";       break;
         }
         j["spellType"] = spellType;
 
         const char* school = "None";
-        switch (spell->GetSchool()) {
-            case RE::ActorValue::kDestruction: school = "Destruction"; break;
-            case RE::ActorValue::kAlteration:  school = "Alteration";  break;
-            case RE::ActorValue::kConjuration: school = "Conjuration"; break;
-            case RE::ActorValue::kIllusion:    school = "Illusion";    break;
-            case RE::ActorValue::kRestoration: school = "Restoration"; break;
-            default: break;
-        }
+        const auto av = spell->GetAssociatedSkill();
+        if      (av == RE::ActorValue::kDestruction) school = "Destruction";
+        else if (av == RE::ActorValue::kAlteration)  school = "Alteration";
+        else if (av == RE::ActorValue::kConjuration) school = "Conjuration";
+        else if (av == RE::ActorValue::kIllusion)    school = "Illusion";
+        else if (av == RE::ActorValue::kRestoration) school = "Restoration";
         j["school"] = school;
 
         j["cost"] = static_cast<int32_t>(spell->CalculateMagickaCost(player));
