@@ -157,8 +157,74 @@ namespace QuestReader
 
     nlohmann::json ReadOthers()
     {
-        // Kept for backwards compatibility — returns the same list as ReadAll
-        // so clients subscribed to Quests::Items::Others still get data.
-        return ReadAll();
+        // DEBUG DUMP — no filtering, every TESQuest with every available field.
+        // Use this to find which flag/field distinguishes Miscellaneous quests.
+        nlohmann::json out = nlohmann::json::array();
+        auto* handler = RE::TESDataHandler::GetSingleton();
+        if (!handler)
+            return out;
+
+        for (auto* quest : handler->GetFormArray<RE::TESQuest>()) {
+            if (!quest)
+                continue;
+
+            nlohmann::json j;
+
+            // ── Identity ──────────────────────────────────────────────────
+            j["questId"]  = std::format("0x{:08X}", quest->GetFormID());
+            j["editorId"] = quest->GetFormEditorID() ? quest->GetFormEditorID() : "";
+            const char* name = quest->GetName();
+            j["name"]    = name ? name : "";
+            j["hasName"] = name && *name;
+
+            // ── Type ──────────────────────────────────────────────────────
+            j["type"]     = static_cast<int>(quest->GetType());
+            j["typeName"] = QuestTypeName(quest->GetType());
+
+            // ── Quest data flags (raw + individual bits) ──────────────────
+            const auto qf = quest->data.flags.underlying();
+            j["questFlags"] = std::format("0x{:04X}", qf);
+            // bit 0x0001
+            j["flag_kStartGameEnabled"] =
+                quest->data.flags.all(RE::QuestFlag::kStartGameEnabled);
+            // bit that IsActive() tests
+            j["flag_kActive"] =
+                quest->data.flags.all(RE::QuestFlag::kActive);
+            // the flag we use for Quests::Items
+            j["flag_kDisplayedInHUD"] =
+                quest->data.flags.all(RE::QuestFlag::kDisplayedInHUD);
+            // run-once quests never restart
+            j["flag_kRunOnce"] =
+                quest->data.flags.all(RE::QuestFlag::kRunOnce);
+
+            // ── TESForm base flags (deleted, ignored, …) ──────────────────
+            j["formFlags"] = std::format("0x{:08X}", quest->formFlags);
+
+            // ── Priority (0-255, higher = more important) ─────────────────
+            j["priority"] = static_cast<int>(quest->data.priority);
+
+            // ── Runtime state ─────────────────────────────────────────────
+            j["isActive"]     = quest->IsActive();
+            j["isEnabled"]    = quest->IsEnabled();
+            j["isCompleted"]  = quest->IsCompleted();
+            j["isRunning"]    = quest->IsRunning();
+            j["isStopped"]    = quest->IsStopped();
+            j["currentStage"] = quest->GetCurrentStageID();
+
+            // ── Objectives summary ────────────────────────────────────────
+            int totalObj = 0, visibleObj = 0;
+            for (auto* obj : quest->objectives) {
+                if (!obj)
+                    continue;
+                ++totalObj;
+                if (IsObjectiveVisible(obj->state))
+                    ++visibleObj;
+            }
+            j["objectivesTotal"]   = totalObj;
+            j["objectivesVisible"] = visibleObj;
+
+            out.push_back(std::move(j));
+        }
+        return out;
     }
 }
