@@ -1,9 +1,10 @@
 # Player Fields Reference
 
 Player fields expose character-level stats that are not available through the
-`ActorValue` system: character level, experience points, and inventory weight.
+`ActorValue` system: character level, experience points, inventory weight, and
+world position.
 
-All values are returned as `float` or `integer` as noted.
+All values are returned as `float`, `integer`, or `object` as noted.
 
 ## Available Player Fields
 
@@ -15,6 +16,7 @@ All values are returned as `float` or `integer` as noted.
 | `Player::XP::LevelStart` | `float` | XP value at the start of the current level (always `0.0`; provided for progress-bar math) |
 | `Player::InventoryWeight` | `float` | Total weight of all items currently in the player's inventory |
 | `Player::CarryWeight` | `float` | Maximum carry weight (same value as `ActorValue::kCarryWeight`) |
+| `Player::Position` | `object` | Player world position and heading — see below |
 
 ---
 
@@ -85,6 +87,46 @@ Progress bar fill: `500.0 / 1000.0 = 50 %`.
   "fields": {
     "currentWeight": 183.5,
     "maxWeight":     300.0
+  }
+}
+```
+
+---
+
+## `Player::Position`
+
+Returns the player's current world-space position and compass heading as a single JSON object.
+
+### Object shape
+
+| Field | Type | Description |
+|---|---|---|
+| `x` | `float` | World X coordinate |
+| `y` | `float` | World Y coordinate |
+| `z` | `float` | World Z coordinate (height) |
+| `angle` | `float` | Z-axis rotation (yaw / heading) in **radians**. `0` = North, increases clockwise. Convert to degrees: `angle * 180 / π`. |
+
+### Example — high-frequency map position subscription
+
+```json
+{
+  "type": "subscribe",
+  "id": "map-pos",
+  "settings": { "frequency": 100, "sendOnChange": true },
+  "fields": {
+    "pos": "Player::Position"
+  }
+}
+```
+
+**Server push:**
+```json
+{
+  "type": "data",
+  "id": "map-pos",
+  "ts": 1712462400123,
+  "fields": {
+    "pos": { "x": 18000.5, "y": -15200.3, "z": 312.0, "angle": 1.5707963 }
   }
 }
 ```

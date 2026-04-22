@@ -33,4 +33,15 @@ namespace PlayerReader
     // Reads sLanguage:General from the INI setting collection.
     // Must be called on the game thread.
     nlohmann::json ReadLanguage();
+
+    // Returns the player's current world position and heading as a JSON object:
+    // { "x": float, "y": float, "z": float, "angle": float }
+    // x/y/z are world-space coordinates; angle is the Z-axis rotation (yaw) in radians.
+    // Must be called on the game thread.
+    nlohmann::json ReadPosition();
+
+    // Returns an array of all map markers the player has discovered.
+    // Each entry: { "refId", "name", "type", "typeId", "x", "y", "isVisible", "canFastTravel" }
+    // Must be called on the game thread.
+    nlohmann::json ReadMapMarkers();
 }

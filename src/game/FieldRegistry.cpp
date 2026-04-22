@@ -286,6 +286,16 @@ namespace FieldRegistry
         { "Game::Language",
           { "Current game language from sLanguage:General INI setting (e.g. \"english\", \"russian\")", "string",
             &PlayerReader::ReadLanguage } },
+
+        // Player position and heading
+        { "Player::Position",
+          { "Player world position and heading: { x, y, z, angle }. x/y/z are world-space coordinates; angle is Z-axis yaw in radians.", "object",
+            &PlayerReader::ReadPosition } },
+
+        // Map markers
+        { "Map::Markers",
+          { "Array of all map markers the player has discovered. Each entry: { refId, name, type, typeId, x, y, isVisible, canFastTravel }.", "array",
+            &PlayerReader::ReadMapMarkers } },
     };
     // clang-format on
 
