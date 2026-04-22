@@ -184,44 +184,71 @@ namespace QuestReader
             // ── Quest data flags (raw + individual bits) ──────────────────
             const auto qf = quest->data.flags.underlying();
             j["questFlags"] = std::format("0x{:04X}", qf);
-            // bit 0x0010 — quest starts enabled at game start
-            j["flag_kStartsEnabled"] =
-                quest->data.flags.all(RE::QuestFlag::kStartsEnabled);
-            // bit that IsActive() tests
-            j["flag_kActive"] =
-                quest->data.flags.all(RE::QuestFlag::kActive);
-            // the flag we use for Quests::Items
-            j["flag_kDisplayedInHUD"] =
-                quest->data.flags.all(RE::QuestFlag::kDisplayedInHUD);
-            // run-once quests never restart
-            j["flag_kRunOnce"] =
-                quest->data.flags.all(RE::QuestFlag::kRunOnce);
+            j["flag_kEnabled"]              = quest->data.flags.all(RE::QuestFlag::kEnabled);
+            j["flag_kCompleted"]            = quest->data.flags.all(RE::QuestFlag::kCompleted);
+            j["flag_kFailed"]               = quest->data.flags.all(RE::QuestFlag::kFailed);
+            j["flag_kStartsEnabled"]        = quest->data.flags.all(RE::QuestFlag::kStartsEnabled);
+            j["flag_kDisplayedInHUD"]       = quest->data.flags.all(RE::QuestFlag::kDisplayedInHUD);
+            j["flag_kRunOnce"]              = quest->data.flags.all(RE::QuestFlag::kRunOnce);
+            j["flag_kActive"]               = quest->data.flags.all(RE::QuestFlag::kActive);
+            j["flag_kAddIdleToHello"]       = quest->data.flags.all(RE::QuestFlag::kAddIdleToHello);
+            j["flag_kAllowRepeatStages"]    = quest->data.flags.all(RE::QuestFlag::kAllowRepeatStages);
+            j["flag_kStageWait"]            = quest->data.flags.all(RE::QuestFlag::kStageWait);
+            j["flag_kExcludeFromExport"]    = quest->data.flags.all(RE::QuestFlag::kExcludeFromExport);
+            j["flag_kWarnOnAliasFillFail"]  = quest->data.flags.all(RE::QuestFlag::kWarnOnAliasFillFailure);
+            j["flag_kRepeatsConditions"]    = quest->data.flags.all(RE::QuestFlag::kKeepInstance);
+            j["flag_kWantDormant"]          = quest->data.flags.all(RE::QuestFlag::kWantDormant);
+            j["flag_kHasDialogueData"]      = quest->data.flags.all(RE::QuestFlag::kHasDialogueData);
 
-            // ── TESForm base flags (deleted, ignored, …) ──────────────────
+            // ── TESForm base flags (deleted=0x20, ignored=0x1000) ─────────
             j["formFlags"] = std::format("0x{:08X}", quest->formFlags);
 
             // ── Priority (0-255, higher = more important) ─────────────────
             j["priority"] = static_cast<int>(quest->data.priority);
 
             // ── Runtime state ─────────────────────────────────────────────
-            j["isActive"]     = quest->IsActive();
-            j["isEnabled"]    = quest->IsEnabled();
-            j["isCompleted"]  = quest->IsCompleted();
-            j["isRunning"]    = quest->IsRunning();
-            j["isStopped"]    = quest->IsStopped();
-            j["currentStage"] = quest->GetCurrentStageID();
+            j["isActive"]      = quest->IsActive();
+            j["isEnabled"]     = quest->IsEnabled();
+            j["isCompleted"]   = quest->IsCompleted();
+            j["isRunning"]     = quest->IsRunning();
+            j["isStarting"]    = quest->IsStarting();
+            j["isStopped"]     = quest->IsStopped();
+            j["isStopping"]    = quest->IsStopping();
+            j["startsEnabled"] = quest->StartsEnabled();
+            j["alreadyRun"]    = quest->alreadyRun;
+            j["currentStage"]  = quest->GetCurrentStageID();
+            j["currentStageRaw"] = static_cast<int>(quest->currentStage);
 
-            // ── Objectives summary ────────────────────────────────────────
+            // ── Aliases & instance data counts ────────────────────────────
+            j["aliasCount"]        = static_cast<int>(quest->aliases.size());
+            j["instanceDataCount"] = static_cast<int>(quest->instanceData.size());
+
+            // ── Event ID ─────────────────────────────────────────────────
+            j["eventId"] = static_cast<int>(quest->eventID);
+
+            // ── Objectives (all, with full state) ─────────────────────────
+            nlohmann::json objectives = nlohmann::json::array();
             int totalObj = 0, visibleObj = 0;
             for (auto* obj : quest->objectives) {
                 if (!obj)
                     continue;
                 ++totalObj;
-                if (IsObjectiveVisible(obj->state))
+                const bool vis = IsObjectiveVisible(obj->state);
+                if (vis)
                     ++visibleObj;
+                nlohmann::json oj;
+                const char* txt = obj->displayText.c_str();
+                oj["index"]       = obj->index;
+                oj["text"]        = txt ? txt : "";
+                oj["hasText"]     = txt && *txt;
+                oj["state"]       = ObjectiveStateName(obj->state.get());
+                oj["isVisible"]   = vis;
+                oj["isCompleted"] = IsObjectiveCompleted(obj->state);
+                objectives.push_back(std::move(oj));
             }
             j["objectivesTotal"]   = totalObj;
             j["objectivesVisible"] = visibleObj;
+            j["objectives"]        = std::move(objectives);
 
             out.push_back(std::move(j));
         }
