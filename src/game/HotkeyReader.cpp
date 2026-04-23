@@ -97,8 +97,27 @@ namespace HotkeyReader
 
         const char* cat = "Unknown";
         switch (item->GetFormType()) {
-            case RE::FormType::Weapon:      cat = "Weapon";     break;
-            case RE::FormType::Armor:       cat = "Apparel";    break;
+            case RE::FormType::Weapon: {
+                cat = "Weapon";
+                if (const auto* weap = item->As<RE::TESObjectWEAP>()) {
+                    const char* wt = "Unknown";
+                    for (const auto& [type, name] : kWeaponTypeNames)
+                        if (weap->GetWeaponType() == type) { wt = name; break; }
+                    j["weaponType"] = wt;
+                }
+                break;
+            }
+            case RE::FormType::Armor: {
+                cat = "Apparel";
+                if (const auto* armo = item->As<RE::TESObjectARMO>()) {
+                    const char* bs = "Unknown";
+                    for (const auto& [slot, name] : kBodySlotNames) {
+                        if (armo->HasPartOf(slot)) { bs = name; break; }
+                    }
+                    j["bodySlot"] = bs;
+                }
+                break;
+            }
             case RE::FormType::Book:        cat = "Book";       break;
             case RE::FormType::AlchemyItem: {
                 const auto* alch = item->As<RE::AlchemyItem>();
