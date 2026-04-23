@@ -1,4 +1,5 @@
 #include "HotkeyReader.h"
+#include "../Utils.h"
 
 #include <format>
 
