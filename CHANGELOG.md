@@ -2,6 +2,21 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+## [1.7.0](https://github.com/yourusername/SkyrimWebSocket/compare/v1.6.0...v1.7.0) (2026-04-23)
+
+
+### ✨ Features
+
+* **hotkey:** add extra fields to hotkey type ([91523c2](https://github.com/yourusername/SkyrimWebSocket/commits/91523c2d226e6c1398e8ce11b6b7e393b2a89e7b))
+* **hotkey:** native trigger ([f9a514f](https://github.com/yourusername/SkyrimWebSocket/commits/f9a514fd5dbe7c9fafd6dc6ff1031afdd2f9dfd0))
+* **hotkeys:** real ([cde18a2](https://github.com/yourusername/SkyrimWebSocket/commits/cde18a2a2745ed1cd4752336b4b657e87f170109))
+
+
+### 🐛 Bug Fixes
+
+* **build:** lost header ([46ab23e](https://github.com/yourusername/SkyrimWebSocket/commits/46ab23e140aeeb1a753bf8933fc07f9e7adf9693))
+* **hotkey:** build ([e72323f](https://github.com/yourusername/SkyrimWebSocket/commits/e72323f843b4fda4d5fec4ea8ded60a8cb466778))
+
 ## [1.6.0](https://github.com/yourusername/SkyrimWebSocket/compare/v1.2.0...v1.6.0) (2026-04-21)
 
 
