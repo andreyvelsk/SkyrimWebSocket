@@ -149,7 +149,7 @@ validates the request and executes it on the game thread, then replies with a
 | `favorite_spell` | Spells (must be known by player) | Toggles the spell's favorite status on/off. Favorited spells appear in the magic favorites list in the spell menu. |
 | `hotkey_set` | Inventory items *or* spells/shouts/powers | Binds the given `formId` to the given `slot` (1..8). For spells, the form must be known by the player and of a hotkeyable type (spell, power, lesser power, voice power, shout). For items, the form must be present in the inventory. Replaces any previous binding for that slot and automatically favourites the target if needed. Skyrim supports exactly eight hotkey slots — requests for slots outside `1..8` are rejected. |
 | `hotkey_clear` | — | Removes the binding on the given `slot` (1..8). No-op if the slot is already empty. |
-| `hotkey_trigger` | — | Fires the action bound to the given `slot` as if the player pressed the corresponding number key: spells/powers/shouts are equipped (consumables are used, weapons/apparel/ammo are equipped). Returns an error if the slot is empty. |
+| `hotkey_trigger` | — | Fires the action bound to the given `slot` by synthesizing a `Hotkey<N>` button event and dispatching it through the engine's own `FavoritesHandler`. Behavior is bit-for-bit identical to the player physically pressing the corresponding number key in gameplay: spells toggle right-hand → left-hand → unequip, weapons toggle equip ↔ unequip (with the special two-handed/dual-wield rules), shouts/powers go to the voice slot, consumables are used, etc. Always succeeds when slot is valid (no error if the slot is empty — the engine simply does nothing, just like vanilla). |
 
 ---
 

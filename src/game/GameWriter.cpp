@@ -758,33 +758,55 @@ namespace GameWriter
         if (!ValidateSlot(slot, slotIdx))
             return {false, "Slot must be in range 1..8"};
 
-        auto* player    = RE::PlayerCharacter::GetSingleton();
-        auto* favorites = RE::MagicFavorites::GetSingleton();
-        if (!player || !favorites)
-            return {false, "Player or favorites not available"};
-        EnsureHotkeySlots(favorites);
+        // Native engine path: synthesize a keyboard ButtonEvent with the
+        // appropriate "HotkeyN" user-event name and feed it directly to
+        // FavoritesHandler::ProcessButton — the same call the game itself
+        // performs when the player presses 1..8 in gameplay.  This ensures
+        // 100% vanilla behavior, including:
+        //   * spells: right-hand → left-hand → no-op toggle,
+        //   * shouts/powers: voice slot equip,
+        //   * weapons: equip ↔ unequip toggle,
+        //   * 1H weapon with 2+ copies: right → other-hand → no-op,
+        //   * armor / ammo / consumables handled identically to vanilla,
+        //   * any third-party MCM tweaks of FavoritesHandler are honored.
 
-        // 1) Magic binding takes precedence (matches FavoritesHandler logic).
-        if (auto* form = GetMagicHotkey(favorites, slotIdx)) {
-            auto* spell = form->As<RE::SpellItem>();
-            if (!spell)
-                return {false, "Slot holds a non-spell magic form"};
-            // Shouts use the voice slot; FavoritesHandler routes by spell type.
-            // EquipSpell with the right-hand slot covers regular spells; for
-            // shouts/powers the equip manager picks the correct slot internally.
-            return EquipSpell(spell->GetFormID(), "right");
-        }
+        auto* mc = RE::MenuControls::GetSingleton();
+        if (!mc || !mc->favoritesHandler)
+            return {false, "MenuControls/FavoritesHandler not available"};
 
-        // 2) Inventory item binding.
-        auto ref = FindItemHotkey(player, slotIdx);
-        if (!ref.entry || !ref.entry->object)
-            return {false, "Slot is empty"};
+        auto* userEvents = RE::UserEvents::GetSingleton();
+        if (!userEvents)
+            return {false, "UserEvents singleton not available"};
 
-        const auto ft = ref.entry->object->GetFormType();
-        if (IsConsumable(ft))
-            return UseItem(ref.entry->object->GetFormID());
+        // Pick the BSFixedString that the engine uses for this hotkey slot
+        // (matches what UserEvents stores: "Hotkey1".."Hotkey8").
+        const RE::BSFixedString* hotkeyNames[8] = {
+            &userEvents->hotkey1, &userEvents->hotkey2,
+            &userEvents->hotkey3, &userEvents->hotkey4,
+            &userEvents->hotkey5, &userEvents->hotkey6,
+            &userEvents->hotkey7, &userEvents->hotkey8,
+        };
+        const RE::BSFixedString& userEvent = *hotkeyNames[slotIdx];
 
-        // Weapons / armor / ammo → equip (right hand default for weapons).
-        return EquipItem(ref.entry->object->GetFormID(), "right");
+        // DIK_1..DIK_8 are 0x02..0x09 — what the keyboard input layer would
+        // report.  Value=1.0 + heldDownSecs=0.0 represents a fresh key-down
+        // (ButtonEvent::IsDown() == true), which is what FavoritesHandler
+        // acts on.
+        const std::uint32_t idCode = 0x02u + slotIdx;
+
+        auto* event = RE::ButtonEvent::Create(
+            RE::INPUT_DEVICE::kKeyboard, userEvent, idCode, 1.0f, 0.0f);
+        if (!event)
+            return {false, "Failed to allocate ButtonEvent"};
+
+        auto* handler = mc->favoritesHandler.get();
+        const bool handled = handler->ProcessButton(event);
+
+        // ButtonEvent::Create allocates via the game's heap; release it.
+        RE::free(event);
+
+        PrintConsole(std::format("[WS] Hotkey {} triggered (handled={})",
+                                 slot, handled ? "true" : "false"));
+        return {true, ""};
     }
 }
