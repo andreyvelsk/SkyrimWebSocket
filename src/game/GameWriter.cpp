@@ -2,6 +2,8 @@
 #include "../Utils.h"
 
 #include <algorithm>
+#include <cstdlib>
+#include <cstring>
 
 namespace logger = SKSE::log;
 
@@ -357,7 +359,15 @@ namespace GameWriter
         if (!xList) {
             if (!liveEntry->extraLists)
                 liveEntry->extraLists = new RE::BSSimpleList<RE::ExtraDataList*>();
-            xList = new RE::ExtraDataList();
+            // RE::ExtraDataList's default constructor is declared but not
+            // exported by CommonLibSSE-NG, so we allocate zero-initialized
+            // memory directly.  All members (BaseExtraList::data,
+            // BaseExtraList::presence, lock) are pointer-/POD-sized and
+            // correctly represent "empty" when zeroed.  The engine will take
+            // over management once the entry is registered.
+            xList = static_cast<RE::ExtraDataList*>(std::calloc(1, sizeof(RE::ExtraDataList)));
+            if (!xList)
+                return {false, "Failed to allocate ExtraDataList"};
             liveEntry->extraLists->push_front(xList);
             logger::debug("favorite 0x{:08X}: created on-demand ExtraDataList", formId);
         }
