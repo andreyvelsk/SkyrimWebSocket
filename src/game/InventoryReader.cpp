@@ -365,19 +365,9 @@ namespace InventoryReader
     // Maps RE::WEAPON_TYPE to a stable string identifier for the API.
     static const char* WeaponTypeToString(RE::WEAPON_TYPE type)
     {
-        switch (type) {
-            case RE::WEAPON_TYPE::kHandToHandMelee: return "HandToHand";
-            case RE::WEAPON_TYPE::kOneHandSword:    return "OneHandSword";
-            case RE::WEAPON_TYPE::kOneHandDagger:   return "OneHandDagger";
-            case RE::WEAPON_TYPE::kOneHandAxe:      return "OneHandAxe";
-            case RE::WEAPON_TYPE::kOneHandMace:     return "OneHandMace";
-            case RE::WEAPON_TYPE::kTwoHandSword:    return "TwoHandSword";
-            case RE::WEAPON_TYPE::kTwoHandAxe:      return "TwoHandAxe";
-            case RE::WEAPON_TYPE::kBow:             return "Bow";
-            case RE::WEAPON_TYPE::kStaff:           return "Staff";
-            case RE::WEAPON_TYPE::kCrossbow:        return "Crossbow";
-            default:                                return "Unknown";
-        }
+        for (const auto& [t, name] : kWeaponTypeNames)
+            if (t == type) return name;
+        return "Unknown";
     }
 
     // Returns true for weapon types that occupy both hands (two-handed melee,

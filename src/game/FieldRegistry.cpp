@@ -1,4 +1,5 @@
 #include "FieldRegistry.h"
+#include "HotkeyReader.h"
 #include "InventoryReader.h"
 #include "MagicReader.h"
 #include "PlayerReader.h"
@@ -261,6 +262,11 @@ namespace FieldRegistry
         { "Magic::Items::Enchanting",
           { "Enchanting spells known by player", "array",
             &MagicReader::ReadEnchanting } },
+
+        // Hotkeys
+        { "Hotkey::Items",
+          { "All 8 hotkey slots with their current bindings (spells, shouts, powers, or items)", "array",
+            &HotkeyReader::ReadItems } },
 
         // Player stats
         { "Player::Level",
