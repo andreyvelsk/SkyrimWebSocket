@@ -323,17 +323,28 @@ namespace GameWriter
         if (count <= 0)
             return {false, "Item not in inventory"};
 
-        auto* liveEntry = FindLiveEntry(player, formId);
-        if (!liveEntry) {
-            logger::debug("favorite 0x{:08X}: no live entry in InventoryChanges", formId);
-            return {false, "Item not found in inventory changes"};
-        }
-
         auto* invChanges = player->GetInventoryChanges();
         if (!invChanges)
             return {false, "Inventory changes not available"};
 
-        // Get the first available ExtraDataList (may be nullptr for basic items).
+        // Items that live in the player's base TESContainer (e.g. starting iron
+        // dagger, freshly levelled gear) show up in GetInventory() but don't
+        // have an InventoryEntryData in InventoryChanges::entryList yet — the
+        // engine lazily allocates entries only on mutation.  SetFavorite needs
+        // a real entry, so create one on demand with countDelta=0 (the base
+        // container already accounts for the item count).
+        auto* liveEntry = FindLiveEntry(player, formId);
+        if (!liveEntry) {
+            liveEntry = new RE::InventoryEntryData(form, 0);
+            if (!invChanges->entryList)
+                invChanges->entryList = new RE::BSSimpleList<RE::InventoryEntryData*>();
+            invChanges->entryList->push_front(liveEntry);
+            logger::debug("favorite 0x{:08X}: created on-demand InventoryEntryData", formId);
+        }
+
+        // Get the first available ExtraDataList, or create one if the entry
+        // has none.  SetFavorite attaches an ExtraHotkey to this list, so a
+        // valid xList is required for non-unique items too.
         RE::ExtraDataList* xList = nullptr;
         if (liveEntry->extraLists) {
             for (auto* xl : *liveEntry->extraLists) {
@@ -342,6 +353,13 @@ namespace GameWriter
                     break;
                 }
             }
+        }
+        if (!xList) {
+            if (!liveEntry->extraLists)
+                liveEntry->extraLists = new RE::BSSimpleList<RE::ExtraDataList*>();
+            xList = new RE::ExtraDataList();
+            liveEntry->extraLists->push_front(xList);
+            logger::debug("favorite 0x{:08X}: created on-demand ExtraDataList", formId);
         }
 
         if (liveEntry->IsFavorited()) {

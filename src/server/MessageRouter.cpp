@@ -149,7 +149,9 @@ namespace MessageRouter
 
         const std::string type = msg.value("type", "");
 
-        logger::debug("WS message: type='{}'", type);
+        // Skip noisy heartbeat messages from debug log.
+        if (type != "heartbeat")
+            logger::debug("WS message: type='{}'", type);
 
         if (type == "subscribe") {
             if (!msg.contains("id") || !msg["id"].is_string()) {
