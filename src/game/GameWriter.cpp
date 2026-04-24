@@ -4,6 +4,8 @@
 #include <algorithm>
 #include <format>
 
+namespace logger = SKSE::log;
+
 namespace GameWriter
 {
     // ─── Helpers ──────────────────────────────────────────────────────────
@@ -195,8 +197,8 @@ namespace GameWriter
                               /*a_forceEquip=*/false,
                               /*a_playSounds=*/true,
                               /*a_applyNow=*/false);
-
-        PrintConsole("[WS] Equip " + std::string(form->GetName()) + (slot ? " → " + hand : ""));
+        logger::debug("equip 0x{:08X} ('{}') hand='{}'  type={}",
+                      formId, form->GetName(), hand, static_cast<int>(ft));        PrintConsole("[WS] Equip " + std::string(form->GetName()) + (slot ? " → " + hand : ""));
         return {true, ""};
     }
 
@@ -248,6 +250,7 @@ namespace GameWriter
             equipMgr->UnequipObject(player, form);
         }
 
+        logger::debug("unequip 0x{:08X} ('{}') hand='{}'", formId, form->GetName(), hand);
         PrintConsole("[WS] Unequip " + std::string(form->GetName()));
         return {true, ""};
     }
@@ -311,12 +314,21 @@ namespace GameWriter
         if (!player)
             return {false, "Player not available"};
 
-        if (GetInventoryCount(player, formId) <= 0)
+        auto* form = RE::TESForm::LookupByID<RE::TESBoundObject>(formId);
+        if (!form)
+            return {false, "Form not found"};
+
+        const int32_t count = GetInventoryCount(player, formId);
+        logger::debug("favorite 0x{:08X} ('{}') invCount={}", formId, form->GetName(), count);
+
+        if (count <= 0)
             return {false, "Item not in inventory"};
 
         auto* liveEntry = FindLiveEntry(player, formId);
-        if (!liveEntry)
+        if (!liveEntry) {
+            logger::debug("favorite 0x{:08X}: no live entry in InventoryChanges", formId);
             return {false, "Item not found in inventory changes"};
+        }
 
         auto* invChanges = player->GetInventoryChanges();
         if (!invChanges)
@@ -335,9 +347,11 @@ namespace GameWriter
 
         if (liveEntry->IsFavorited()) {
             invChanges->RemoveFavorite(liveEntry, xList);
+            logger::debug("favorite 0x{:08X}: removed from favorites", formId);
             PrintConsole("[WS] Unfavorite " + std::string(liveEntry->object->GetName()));
         } else {
             invChanges->SetFavorite(liveEntry, xList);
+            logger::debug("favorite 0x{:08X}: added to favorites", formId);
             PrintConsole("[WS] Favorite " + std::string(liveEntry->object->GetName()));
         }
         return {true, ""};
@@ -388,6 +402,7 @@ namespace GameWriter
         const auto* slot = GetHandSlot(hand);
         equipMgr->EquipSpell(player, spell, slot);
 
+        logger::debug("equip_spell 0x{:08X} ('{}') hand='{}'", formId, spell->GetName(), hand);
         PrintConsole("[WS] Equip spell " + std::string(spell->GetName()) + " \xe2\x86\x92 " + hand);
         return {true, ""};
     }
@@ -445,6 +460,8 @@ namespace GameWriter
             }
         }
 
+        logger::debug("unequip_spell 0x{:08X} ('{}') hand='{}' inBothHands={} isMaster={}",
+                      formId, spell->GetName(), hand, spellInBothHands, isMasterSpell);
         PrintConsole("[WS] Unequip spell " + std::string(spell->GetName()) + " \xe2\x86\x90 " + hand);
         return {true, ""};
     }
