@@ -2,8 +2,6 @@
 #include "../Utils.h"
 
 #include <algorithm>
-#include <cstdlib>
-#include <cstring>
 #include <format>
 
 namespace logger = SKSE::log;
@@ -139,6 +137,7 @@ namespace GameWriter
 
     CommandResult EquipItem(RE::FormID formId, const std::string& hand)
     {
+        logger::trace("EquipItem enter: formId=0x{:08X} hand='{}'", formId, hand);
         auto* player = RE::PlayerCharacter::GetSingleton();
         if (!player)
             return {false, "Player not available"};
@@ -148,6 +147,8 @@ namespace GameWriter
             return {false, "Form not found"};
 
         const int32_t itemCount = GetInventoryCount(player, formId);
+        logger::trace("EquipItem 0x{:08X} ('{}') invCount={} formType={}",
+                      formId, form->GetName(), itemCount, static_cast<int>(form->GetFormType()));
         if (itemCount <= 0)
             return {false, "Item not in inventory"};
 
@@ -206,6 +207,7 @@ namespace GameWriter
 
     CommandResult UnequipItem(RE::FormID formId, const std::string& hand)
     {
+        logger::trace("UnequipItem enter: formId=0x{:08X} hand='{}'", formId, hand);
         auto* player = RE::PlayerCharacter::GetSingleton();
         if (!player)
             return {false, "Player not available"};
@@ -218,6 +220,9 @@ namespace GameWriter
             return {false, "Item not in inventory"};
 
         auto* liveEntry = FindLiveEntry(player, formId);
+        logger::trace("UnequipItem 0x{:08X}: liveEntry={} isWorn={}", formId,
+                      static_cast<const void*>(liveEntry),
+                      liveEntry ? liveEntry->IsWorn() : false);
         if (!liveEntry || !liveEntry->IsWorn())
             return {false, "Item is not equipped"};
 
@@ -259,6 +264,7 @@ namespace GameWriter
 
     CommandResult UseItem(RE::FormID formId)
     {
+        logger::trace("UseItem enter: formId=0x{:08X}", formId);
         auto* player = RE::PlayerCharacter::GetSingleton();
         if (!player)
             return {false, "Player not available"};
@@ -267,7 +273,10 @@ namespace GameWriter
         if (!form)
             return {false, "Form not found"};
 
-        if (GetInventoryCount(player, formId) <= 0)
+        const int32_t invCnt = GetInventoryCount(player, formId);
+        logger::trace("UseItem 0x{:08X} ('{}') invCount={} formType={}",
+                      formId, form->GetName(), invCnt, static_cast<int>(form->GetFormType()));
+        if (invCnt <= 0)
             return {false, "Item not in inventory"};
 
         if (!IsConsumable(form->GetFormType()))
@@ -287,6 +296,7 @@ namespace GameWriter
 
     CommandResult DropItem(RE::FormID formId, int count)
     {
+        logger::trace("DropItem enter: formId=0x{:08X} count={}", formId, count);
         auto* player = RE::PlayerCharacter::GetSingleton();
         if (!player)
             return {false, "Player not available"};
@@ -327,27 +337,40 @@ namespace GameWriter
             return {false, "Item not in inventory"};
 
         auto* invChanges = player->GetInventoryChanges();
+        if (!invChanges) {
+            logger::trace("favorite 0x{:08X}: GetInventoryChanges returned null, calling ForceInitInventoryChanges", formId);
+            invChanges = player->ForceInitInventoryChanges();
+        }
         if (!invChanges)
             return {false, "Inventory changes not available"};
 
-        // Items that live in the player's base TESContainer (e.g. starting iron
-        // dagger, freshly levelled gear) show up in GetInventory() but don't
-        // have an InventoryEntryData in InventoryChanges::entryList yet — the
-        // engine lazily allocates entries only on mutation.  SetFavorite needs
-        // a real entry, so create one on demand with countDelta=0 (the base
-        // container already accounts for the item count).
+        // Items that live only in the player's base TESContainer (e.g. starting
+        // iron dagger, freshly levelled gear) are visible via GetInventory() but
+        // have no live InventoryEntryData in InventoryChanges::entryList — the
+        // engine lazily allocates entries only on mutation.  Force the engine
+        // to create a proper entry (with its own ExtraDataList managed by the
+        // engine) by doing a neutral +1/-1 container transaction.  This way we
+        // never hand a hand-rolled ExtraDataList to the engine, which avoids
+        // crashes on AE 1.6.629+ where BaseExtraList has a virtual destructor
+        // and non-trivial layout.
         auto* liveEntry = FindLiveEntry(player, formId);
+        logger::trace("favorite 0x{:08X}: initial FindLiveEntry={}", formId,
+                      static_cast<const void*>(liveEntry));
         if (!liveEntry) {
-            liveEntry = new RE::InventoryEntryData(form, 0);
-            if (!invChanges->entryList)
-                invChanges->entryList = new RE::BSSimpleList<RE::InventoryEntryData*>();
-            invChanges->entryList->push_front(liveEntry);
-            logger::debug("favorite 0x{:08X}: created on-demand InventoryEntryData", formId);
+            logger::trace("favorite 0x{:08X}: forcing entry creation via AddObjectToContainer/RemoveItem", formId);
+            player->AddObjectToContainer(form, nullptr, 1, nullptr);
+            player->RemoveItem(form, 1, RE::ITEM_REMOVE_REASON::kRemove, nullptr, nullptr);
+
+            liveEntry = FindLiveEntry(player, formId);
+            logger::trace("favorite 0x{:08X}: after force, FindLiveEntry={}", formId,
+                          static_cast<const void*>(liveEntry));
+            if (!liveEntry)
+                return {false, "Failed to materialize inventory entry for item"};
         }
 
-        // Get the first available ExtraDataList, or create one if the entry
-        // has none.  SetFavorite attaches an ExtraHotkey to this list, so a
-        // valid xList is required for non-unique items too.
+        // Pick an ExtraDataList owned by the engine, if any.  SetFavorite
+        // attaches an ExtraHotkey to it; when xList is null the engine
+        // allocates one itself (safe path — never pass a hand-rolled xList).
         RE::ExtraDataList* xList = nullptr;
         if (liveEntry->extraLists) {
             for (auto* xl : *liveEntry->extraLists) {
@@ -357,23 +380,15 @@ namespace GameWriter
                 }
             }
         }
-        if (!xList) {
-            if (!liveEntry->extraLists)
-                liveEntry->extraLists = new RE::BSSimpleList<RE::ExtraDataList*>();
-            // RE::ExtraDataList's default constructor is declared but not
-            // exported by CommonLibSSE-NG, so we allocate zero-initialized
-            // memory directly.  All members (BaseExtraList::data,
-            // BaseExtraList::presence, lock) are pointer-/POD-sized and
-            // correctly represent "empty" when zeroed.  The engine will take
-            // over management once the entry is registered.
-            xList = static_cast<RE::ExtraDataList*>(std::calloc(1, sizeof(RE::ExtraDataList)));
-            if (!xList)
-                return {false, "Failed to allocate ExtraDataList"};
-            liveEntry->extraLists->push_front(xList);
-            logger::debug("favorite 0x{:08X}: created on-demand ExtraDataList", formId);
-        }
+        logger::trace("favorite 0x{:08X}: selected xList={} extraListsPtr={}",
+                      formId,
+                      static_cast<const void*>(xList),
+                      static_cast<const void*>(liveEntry->extraLists));
 
-        if (liveEntry->IsFavorited()) {
+        const bool wasFavorited = liveEntry->IsFavorited();
+        logger::trace("favorite 0x{:08X}: wasFavorited={}", formId, wasFavorited);
+
+        if (wasFavorited) {
             invChanges->RemoveFavorite(liveEntry, xList);
             logger::debug("favorite 0x{:08X}: removed from favorites", formId);
             PrintConsole("[WS] Unfavorite " + std::string(liveEntry->object->GetName()));
@@ -387,6 +402,7 @@ namespace GameWriter
 
     CommandResult EquipSpell(RE::FormID formId, const std::string& hand)
     {
+        logger::trace("EquipSpell enter: formId=0x{:08X} hand='{}'", formId, hand);
         auto* player = RE::PlayerCharacter::GetSingleton();
         if (!player)
             return {false, "Player not available"};
@@ -437,6 +453,7 @@ namespace GameWriter
 
     CommandResult UnequipSpell(RE::FormID formId, const std::string& hand)
     {
+        logger::trace("UnequipSpell enter: formId=0x{:08X} hand='{}'", formId, hand);
         auto* player = RE::PlayerCharacter::GetSingleton();
         if (!player)
             return {false, "Player not available"};
@@ -496,6 +513,7 @@ namespace GameWriter
 
     CommandResult FavoriteSpell(RE::FormID formId)
     {
+        logger::trace("FavoriteSpell enter: formId=0x{:08X}", formId);
         auto* player = RE::PlayerCharacter::GetSingleton();
         if (!player)
             return {false, "Player not available"};
