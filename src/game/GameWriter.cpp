@@ -337,10 +337,7 @@ namespace GameWriter
             return {false, "Item not in inventory"};
 
         auto* invChanges = player->GetInventoryChanges();
-        if (!invChanges) {
-            logger::trace("favorite 0x{:08X}: GetInventoryChanges returned null, calling ForceInitInventoryChanges", formId);
-            invChanges = player->ForceInitInventoryChanges();
-        }
+        logger::trace("favorite 0x{:08X}: invChanges={}", formId, static_cast<const void*>(invChanges));
         if (!invChanges)
             return {false, "Inventory changes not available"};
 
