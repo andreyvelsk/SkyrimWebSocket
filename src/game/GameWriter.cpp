@@ -141,7 +141,7 @@ namespace GameWriter
     static bool DispatchPlayerMethod(RE::PlayerCharacter* player,
                                      const char*          className,
                                      const char*          methodName,
-                                     Args&&...            args)
+                                     Args...              args)
     {
         auto* vm = RE::BSScript::Internal::VirtualMachine::GetSingleton();
         if (!vm) {
@@ -156,7 +156,7 @@ namespace GameWriter
         const auto handle = policy->GetHandleForObject(
             static_cast<RE::VMTypeID>(player->GetFormType()), player);
 
-        auto* fnArgs = RE::MakeFunctionArguments(std::forward<Args>(args)...);
+        auto* fnArgs = RE::MakeFunctionArguments(std::move(args)...);
         RE::BSTSmartPointer<RE::BSScript::IStackCallbackFunctor> callback;
         return vm->DispatchMethodCall(handle,
                                       RE::BSFixedString(className),
