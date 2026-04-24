@@ -337,7 +337,7 @@ namespace GameWriter
             liveEntry = new RE::InventoryEntryData(form, count);
             if (!invChanges->entryList)
                 return {false, "Inventory entry list not available"};
-            invChanges->entryList->push_back(liveEntry);
+            invChanges->entryList->emplace_front(liveEntry);
         }
 
         // Get the first available ExtraDataList (may be nullptr for unmodified items).
