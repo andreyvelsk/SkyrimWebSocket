@@ -88,7 +88,7 @@ namespace GameWriter
 
     // Returns true if a spell is a master-level dual-cast spell.
     // Master-level spells (requiring 100 skill) occupy both hands and cannot be single-handed.
-    [[maybe_unused]] static bool IsMasterLevelSpell(RE::SpellItem* spell)
+    static bool IsMasterLevelSpell(RE::SpellItem* spell)
     {
         if (!spell)
             return false;
@@ -173,33 +173,6 @@ namespace GameWriter
     static constexpr std::int32_t kEquipSlotDefault   = 0;
     static constexpr std::int32_t kEquipSlotRightHand = 1;
     static constexpr std::int32_t kEquipSlotLeftHand  = 2;
-
-    // Papyrus Actor.EquipSpell / UnequipSpell aiSource values.
-    // See https://ck.uesp.net/wiki/EquipSpell_-_Actor
-    //   0 = Left Hand, 1 = Right Hand, 2 = Voice
-    // NB: numbering differs from EquipItemEx — do not mix the constants.
-    static constexpr std::int32_t kSpellSourceLeftHand  = 0;
-    static constexpr std::int32_t kSpellSourceRightHand = 1;
-
-    // Returns true if `player` knows the spell with the given FormID, either
-    // from their base NPC spell list or from runtime-added spells (tomes,
-    // AddSpell, console).
-    static bool PlayerKnowsSpell(RE::PlayerCharacter* player, RE::FormID formId)
-    {
-        auto* npc       = player->GetActorBase();
-        auto* spellData = npc ? npc->GetSpellList() : nullptr;
-        if (spellData) {
-            for (std::uint32_t i = 0; i < spellData->numSpells; ++i) {
-                if (spellData->spells[i] && spellData->spells[i]->GetFormID() == formId)
-                    return true;
-            }
-        }
-        for (auto* s : player->GetActorRuntimeData().addedSpells) {
-            if (s && s->GetFormID() == formId)
-                return true;
-        }
-        return false;
-    }
 
     // ─── Commands ─────────────────────────────────────────────────────────
 
@@ -460,27 +433,42 @@ namespace GameWriter
         if (!spell)
             return {false, "Spell not found"};
 
-        if (!PlayerKnowsSpell(player, formId))
+        // Verify the player knows this spell.
+        bool known = false;
+
+        // 1) Check spells baked into the player's base NPC form.
+        auto* npc       = player->GetActorBase();
+        auto* spellData = npc ? npc->GetSpellList() : nullptr;
+        if (spellData) {
+            for (std::uint32_t i = 0; i < spellData->numSpells; ++i) {
+                if (spellData->spells[i] && spellData->spells[i]->GetFormID() == formId) {
+                    known = true;
+                    break;
+                }
+            }
+        }
+
+        // 2) Check spells learned at runtime (spell tomes, AddSpell(), console, etc.).
+        if (!known) {
+            for (auto* s : player->GetActorRuntimeData().addedSpells) {
+                if (s && s->GetFormID() == formId) {
+                    known = true;
+                    break;
+                }
+            }
+        }
+
+        if (!known)
             return {false, "Spell not known by player"};
 
-        // Papyrus Actor.EquipSpell aiSource values (different from EquipItemEx!).
-        // See https://ck.uesp.net/wiki/EquipSpell_-_Actor
-        //   0 = Left Hand, 1 = Right Hand, 2 = Voice
-        // Master-level spells: the engine auto-equips them in both hands
-        // regardless of which hand is passed, so no special casing is needed.
-        const std::int32_t source = (hand == "left") ? kSpellSourceLeftHand
-                                                      : kSpellSourceRightHand;
+        auto* equipMgr = RE::ActorEquipManager::GetSingleton();
+        if (!equipMgr)
+            return {false, "Equipment manager not available"};
 
-        logger::trace("EquipSpell 0x{:08X}: dispatching Actor.EquipSpell source={}", formId, source);
-        const bool ok = DispatchPlayerMethod(
-            player, "Actor", "EquipSpell",
-            static_cast<RE::TESForm*>(spell),
-            source);
-        if (!ok)
-            return {false, "Papyrus dispatch failed"};
+        const auto* slot = GetHandSlot(hand);
+        equipMgr->EquipSpell(player, spell, slot);
 
-        logger::debug("equip_spell 0x{:08X} ('{}') hand='{}' source={}",
-                      formId, spell->GetName(), hand, source);
+        logger::debug("equip_spell 0x{:08X} ('{}') hand='{}'", formId, spell->GetName(), hand);
         PrintConsole("[WS] Equip spell " + std::string(spell->GetName()) + " \xe2\x86\x92 " + hand);
         return {true, ""};
     }
@@ -496,19 +484,51 @@ namespace GameWriter
         if (!spell)
             return {false, "Spell not found"};
 
-        const std::int32_t source = (hand == "left") ? kSpellSourceLeftHand
-                                                      : kSpellSourceRightHand;
+        // Verify the spell is equipped in the requested hand via selectedSpells[],
+        // which tracks the HUD-visible slot (not currentSpell — that's only set while casting).
+        const int slotIdx = (hand == "left") ? RE::Actor::SlotTypes::kLeftHand
+                                              : RE::Actor::SlotTypes::kRightHand;
+        if (player->GetActorRuntimeData().selectedSpells[slotIdx] != spell)
+            return {false, "Spell is not equipped in " + hand + " hand"};
 
-        logger::trace("UnequipSpell 0x{:08X}: dispatching Actor.UnequipSpell source={}", formId, source);
-        const bool ok = DispatchPlayerMethod(
-            player, "Actor", "UnequipSpell",
-            static_cast<RE::TESForm*>(spell),
-            source);
-        if (!ok)
-            return {false, "Papyrus dispatch failed"};
+        // DeselectSpell clears ALL slots where the spell appears. If the other hand
+        // had a DIFFERENT spell, we need to restore it since DeselectSpell removes
+        // it from everywhere. However, if the spell was in both hands (dual-cast):
+        // - Master-level spells: cannot be single-handed, so don't restore
+        // - Non-master spells: restore to the other hand if not a different spell
+        const int otherSlotIdx = (slotIdx == RE::Actor::SlotTypes::kLeftHand)
+                                     ? RE::Actor::SlotTypes::kRightHand
+                                     : RE::Actor::SlotTypes::kLeftHand;
+        auto* otherMagicItem = player->GetActorRuntimeData().selectedSpells[otherSlotIdx];
+        const bool spellInBothHands = (otherMagicItem == spell);
+        const bool isMasterSpell = IsMasterLevelSpell(spell);
 
-        logger::debug("unequip_spell 0x{:08X} ('{}') hand='{}' source={}",
-                      formId, spell->GetName(), hand, source);
+        player->DeselectSpell(spell);
+
+        // If spell was in both hands and it's NOT a master spell, restore it to the other hand
+        if (spellInBothHands && !isMasterSpell) {
+            auto* equipMgr = RE::ActorEquipManager::GetSingleton();
+            if (equipMgr) {
+                const std::string otherHand = (hand == "left") ? "right" : "left";
+                equipMgr->EquipSpell(player, spell, GetHandSlot(otherHand));
+            }
+        }
+        // If spell was in both hands and IS a master spell, it's now completely unequipped
+
+        // If other hand had a DIFFERENT spell, restore it
+        if (otherMagicItem && otherMagicItem != spell) {
+            auto* otherSpell = otherMagicItem->As<RE::SpellItem>();
+            if (otherSpell) {
+                auto* equipMgr = RE::ActorEquipManager::GetSingleton();
+                if (equipMgr) {
+                    const std::string otherHand = (hand == "left") ? "right" : "left";
+                    equipMgr->EquipSpell(player, otherSpell, GetHandSlot(otherHand));
+                }
+            }
+        }
+
+        logger::debug("unequip_spell 0x{:08X} ('{}') hand='{}' inBothHands={} isMaster={}",
+                      formId, spell->GetName(), hand, spellInBothHands, isMasterSpell);
         PrintConsole("[WS] Unequip spell " + std::string(spell->GetName()) + " \xe2\x86\x90 " + hand);
         return {true, ""};
     }
@@ -524,7 +544,32 @@ namespace GameWriter
         if (!targetSpell)
             return {false, "Spell not found"};
 
-        if (!PlayerKnowsSpell(player, formId))
+        // Verify the player knows this spell.
+        bool known = false;
+
+        // 1) Check spells baked into the player's base NPC form.
+        auto* npc       = player->GetActorBase();
+        auto* spellData = npc ? npc->GetSpellList() : nullptr;
+        if (spellData) {
+            for (std::uint32_t i = 0; i < spellData->numSpells; ++i) {
+                if (spellData->spells[i] && spellData->spells[i]->GetFormID() == formId) {
+                    known = true;
+                    break;
+                }
+            }
+        }
+
+        // 2) Check spells learned at runtime (spell tomes, AddSpell(), console, etc.).
+        if (!known) {
+            for (auto* s : player->GetActorRuntimeData().addedSpells) {
+                if (s && s->GetFormID() == formId) {
+                    known = true;
+                    break;
+                }
+            }
+        }
+
+        if (!known)
             return {false, "Spell not known by player"};
 
         auto* favorites = RE::MagicFavorites::GetSingleton();
