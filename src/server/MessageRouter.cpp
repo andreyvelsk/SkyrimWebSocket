@@ -10,7 +10,8 @@
 #include <nlohmann/json.hpp>
 #include <optional>
 
-namespace asio = boost::asio;
+namespace asio   = boost::asio;
+namespace logger = SKSE::log;
 
 namespace MessageRouter
 {
@@ -89,6 +90,9 @@ namespace MessageRouter
         const std::string hand       = msg.value("hand", "right");
         const int         count      = msg.value("count", 1);
 
+        logger::debug("command '{}' id='{}' formId={} hand={} count={}",
+                      command, cmdId, formIdStr, hand, count);
+
         const auto parsed = ParseFormId(formIdStr);
         if (!parsed) {
             nlohmann::json err;
@@ -123,6 +127,11 @@ namespace MessageRouter
             else
                 result = {false, "Unknown command: '" + command + "'"};
 
+            if (result.success)
+                logger::debug("command '{}' id='{}' succeeded", command, cmdId);
+            else
+                logger::warn("command '{}' id='{}' failed: {}", command, cmdId, result.error);
+
             std::string json = BuildCommandResultJson(cmdId, result);
             asio::post(session->ioc(), [session, json] { session->send(json); });
         });
@@ -139,6 +148,8 @@ namespace MessageRouter
         }
 
         const std::string type = msg.value("type", "");
+
+        logger::debug("WS message: type='{}'", type);
 
         if (type == "subscribe") {
             if (!msg.contains("id") || !msg["id"].is_string()) {
@@ -160,6 +171,8 @@ namespace MessageRouter
                     return;
             }
 
+            logger::debug("subscribe id='{}' freq={}ms sendOnChange={} fields={}",
+                          state.id, state.frequencyMs, state.sendOnChange, state.fields.size());
             session->SetSubscription(std::move(state));
 
         } else if (type == "unsubscribe") {

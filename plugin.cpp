@@ -1,6 +1,7 @@
 #include "logger.h"
 #include "src/server/WsServer.h"
 
+#include <DbgHelp.h>
 #include <boost/asio.hpp>
 #include <memory>
 #include <thread>
@@ -21,6 +22,53 @@ static std::unique_ptr<asio::executor_work_guard<
 
 // Address marker used to locate this DLL's HMODULE at runtime.
 static const char kModuleLocator = 0;
+
+// Path for the minidump written by the crash handler (set at plugin load).
+static std::wstring                    g_dumpPath;
+// Previous unhandled-exception filter, chained from our handler.
+static LPTOP_LEVEL_EXCEPTION_FILTER    g_prevCrashFilter = nullptr;
+
+// Parse the LogLevel string read from the [Debug] INI section.
+// Accepted values (case-insensitive): "trace", "debug", "info".
+// Anything else (including the default empty/"off") returns level::off.
+static spdlog::level::level_enum ParseLogLevel(const char* str)
+{
+    if (_stricmp(str, "trace") == 0) return spdlog::level::trace;
+    if (_stricmp(str, "debug") == 0) return spdlog::level::debug;
+    if (_stricmp(str, "info")  == 0) return spdlog::level::info;
+    return spdlog::level::off;
+}
+
+// Unhandled-exception filter: flushes the log and writes a minidump next to
+// the log file, then chains to any previously registered filter.
+static LONG WINAPI SkyrimWebSocketCrashHandler(EXCEPTION_POINTERS* ep)
+{
+    if (auto* log = spdlog::default_logger_raw()) {
+        log->critical("=== CRASH DETECTED ===");
+        log->critical("Exception code:    0x{:08X}", ep->ExceptionRecord->ExceptionCode);
+        log->critical("Exception address: 0x{:016X}",
+                      reinterpret_cast<std::uintptr_t>(ep->ExceptionRecord->ExceptionAddress));
+        log->flush();
+    }
+
+    if (!g_dumpPath.empty()) {
+        HANDLE hFile = ::CreateFileW(g_dumpPath.c_str(), GENERIC_WRITE, 0, nullptr,
+                                     CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, nullptr);
+        if (hFile != INVALID_HANDLE_VALUE) {
+            MINIDUMP_EXCEPTION_INFORMATION info{};
+            info.ThreadId          = ::GetCurrentThreadId();
+            info.ExceptionPointers = ep;
+            info.ClientPointers    = FALSE;
+            ::MiniDumpWriteDump(::GetCurrentProcess(), ::GetCurrentProcessId(),
+                                hFile, MiniDumpNormal, &info, nullptr, nullptr);
+            ::CloseHandle(hFile);
+        }
+    }
+
+    if (g_prevCrashFilter)
+        return g_prevCrashFilter(ep);
+    return EXCEPTION_CONTINUE_SEARCH;
+}
 
 static std::string GetIniPath()
 {
@@ -58,8 +106,34 @@ static std::string GetIniPath()
 SKSEPluginLoad(const SKSE::LoadInterface* skse)
 {
     SKSE::Init(skse);
-    SetupLog();
 
+    // ── Logging setup ────────────────────────────────────────────────────
+    // Read LogLevel from [Debug] before anything else so every subsequent
+    // log call is already routed to the right sink.
+    std::string iniPath = GetIniPath();
+
+    char levelBuf[32] = {};
+    ::GetPrivateProfileStringA("Debug", "LogLevel", "off",
+                               levelBuf, sizeof(levelBuf), iniPath.c_str());
+    const auto logLevel = ParseLogLevel(levelBuf);
+
+    SetupLog(logLevel);
+
+    if (logLevel != spdlog::level::off) {
+        logger::info("SkyrimWebSocket starting (LogLevel={})", levelBuf);
+
+        // Pre-compute the minidump path (same folder as the .log file).
+        auto logsFolder = SKSE::log::log_directory();
+        if (logsFolder) {
+            auto pluginName = SKSE::PluginDeclaration::GetSingleton()->GetName();
+            g_dumpPath = (*logsFolder / std::format("{}.dmp", pluginName)).wstring();
+            logger::debug("Minidump path: {}", (*logsFolder / std::format("{}.dmp", pluginName)).string());
+        }
+
+        g_prevCrashFilter = ::SetUnhandledExceptionFilter(SkyrimWebSocketCrashHandler);
+    }
+
+    // ── Server startup ───────────────────────────────────────────────────
     SKSE::GetMessagingInterface()->RegisterListener([](SKSE::MessagingInterface::Message* msg) {
         if (msg->type == SKSE::MessagingInterface::kPostLoadGame && !g_server) {
             std::string iniPath = GetIniPath();
@@ -77,6 +151,8 @@ SKSEPluginLoad(const SKSE::LoadInterface* skse)
             auto addr = asio::ip::make_address(addressBuf, ec);
             if (ec)
                 addr = asio::ip::make_address(DEFAULT_ADDRESS);
+
+            logger::debug("WS server starting on {}:{}", addressBuf, port);
 
             tcp::endpoint endpoint(addr, static_cast<std::uint16_t>(port));
             g_server = std::make_unique<WsServer>(g_ioc, endpoint);
