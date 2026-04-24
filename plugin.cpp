@@ -121,6 +121,7 @@ SKSEPluginLoad(const SKSE::LoadInterface* skse)
 
     if (logLevel != spdlog::level::off) {
         logger::info("SkyrimWebSocket starting (LogLevel={})", levelBuf);
+        logger::info("INI path: {}", iniPath.empty() ? "(not found)" : iniPath);
 
         // Pre-compute the minidump path (same folder as the .log file).
         auto logsFolder = SKSE::log::log_directory();

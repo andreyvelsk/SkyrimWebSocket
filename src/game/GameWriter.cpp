@@ -313,18 +313,34 @@ namespace GameWriter
         if (!player)
             return {false, "Player not available"};
 
-        if (GetInventoryCount(player, formId) <= 0)
-            return {false, "Item not in inventory"};
+        auto* form = RE::TESForm::LookupByID<RE::TESBoundObject>(formId);
+        if (!form)
+            return {false, "Form not found"};
 
-        auto* liveEntry = FindLiveEntry(player, formId);
-        if (!liveEntry)
-            return {false, "Item not found in inventory changes"};
+        const int32_t count = GetInventoryCount(player, formId);
+        logger::debug("favorite 0x{:08X} ('{}') invCount={}", formId, form->GetName(), count);
+
+        if (count <= 0)
+            return {false, "Item not in inventory"};
 
         auto* invChanges = player->GetInventoryChanges();
         if (!invChanges)
             return {false, "Inventory changes not available"};
 
-        // Get the first available ExtraDataList (may be nullptr for basic items).
+        auto* liveEntry = FindLiveEntry(player, formId);
+        if (!liveEntry) {
+            // Item is in inventory but has no InventoryEntryData yet.
+            // This happens with base-NPC inventory items that haven't been modified
+            // (equipped, repaired, renamed, etc.) since the game started.
+            // Create an entry so SetFavorite/RemoveFavorite can operate on it.
+            logger::debug("favorite 0x{:08X}: no live entry — base inventory item, creating entry", formId);
+            liveEntry = new RE::InventoryEntryData(form, count);
+            if (!invChanges->entryList)
+                return {false, "Inventory entry list not available"};
+            invChanges->entryList->push_back(liveEntry);
+        }
+
+        // Get the first available ExtraDataList (may be nullptr for unmodified items).
         RE::ExtraDataList* xList = nullptr;
         if (liveEntry->extraLists) {
             for (auto* xl : *liveEntry->extraLists) {
@@ -337,9 +353,11 @@ namespace GameWriter
 
         if (liveEntry->IsFavorited()) {
             invChanges->RemoveFavorite(liveEntry, xList);
+            logger::debug("favorite 0x{:08X}: removed from favorites", formId);
             PrintConsole("[WS] Unfavorite " + std::string(liveEntry->object->GetName()));
         } else {
             invChanges->SetFavorite(liveEntry, xList);
+            logger::debug("favorite 0x{:08X}: added to favorites", formId);
             PrintConsole("[WS] Favorite " + std::string(liveEntry->object->GetName()));
         }
         return {true, ""};
