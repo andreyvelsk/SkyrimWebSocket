@@ -452,6 +452,7 @@ namespace GameWriter
                       formId, spell->GetName(), hand, spellInBothHands, isMasterSpell);
         PrintConsole("[WS] Unequip spell " + std::string(spell->GetName()) + " \xe2\x86\x90 " + hand);
         return {true, ""};
+    }
 
     CommandResult FavoriteSpell(RE::FormID formId)
     {
