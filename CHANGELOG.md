@@ -2,6 +2,25 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+## [1.8.0](https://github.com/yourusername/SkyrimWebSocket/compare/v1.7.0...v1.8.0) (2026-04-24)
+
+
+### ✨ Features
+
+* **log:** add log levels ([e3878a5](https://github.com/yourusername/SkyrimWebSocket/commits/e3878a5a3649f0869584b8af15f5d49fd828571f))
+
+
+### 🐛 Bug Fixes
+
+* **build:** build ([cc5a128](https://github.com/yourusername/SkyrimWebSocket/commits/cc5a12855abc231205eccd85c5be6159c3d08aae))
+* **build:** build ([aba3f75](https://github.com/yourusername/SkyrimWebSocket/commits/aba3f7512cb9c3cd8aa3c95aded5887e376a9fc1))
+* **build:** build ([f57fcf1](https://github.com/yourusername/SkyrimWebSocket/commits/f57fcf186e2c7b048dc35943137fd6b1adaba7d2))
+* **build:** build error ([a8d0cf1](https://github.com/yourusername/SkyrimWebSocket/commits/a8d0cf117fac297acf9724fa90cda3e04216f24f))
+* **favorite:** fix add to fav item ([17fae69](https://github.com/yourusername/SkyrimWebSocket/commits/17fae69faaf44b971d3b7613872f507b878022b6))
+* **inventory:** fix nop item bug ([4f0457f](https://github.com/yourusername/SkyrimWebSocket/commits/4f0457f9aa849ba9b57acf977580efb81d732cb8))
+* **log:** mistype ([901e97a](https://github.com/yourusername/SkyrimWebSocket/commits/901e97aee5ff997c1b0fb043b72424c8d8766570))
+* **log:** remove favorite logic ([1c5af58](https://github.com/yourusername/SkyrimWebSocket/commits/1c5af5815e43f606d5c5ce47a8c96e1847bdcf4c))
+
 ## [1.7.0](https://github.com/yourusername/SkyrimWebSocket/compare/v1.6.0...v1.7.0) (2026-04-23)
 
 
