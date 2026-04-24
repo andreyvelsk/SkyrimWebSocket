@@ -165,10 +165,14 @@ namespace GameWriter
                                       callback);
     }
 
-    // Papyrus Actor.EquipItemEx aiEquipSlot values.
-    static constexpr std::int32_t kEquipSlotRightHand = 0;  // also default for non-weapons
-    static constexpr std::int32_t kEquipSlotLeftHand  = 1;
-    static constexpr std::int32_t kEquipSlotBothHands = 2;
+    // Papyrus Actor.EquipItemEx / UnequipItemEx aiEquipSlot values.
+    // See https://ck.uesp.net/wiki/EquipItemEx_-_Actor
+    //   0 = Default (engine picks; right for 1H, both for 2H, body slot for armor)
+    //   1 = Right Hand
+    //   2 = Left Hand
+    static constexpr std::int32_t kEquipSlotDefault   = 0;
+    static constexpr std::int32_t kEquipSlotRightHand = 1;
+    static constexpr std::int32_t kEquipSlotLeftHand  = 2;
 
     // ─── Commands ─────────────────────────────────────────────────────────
 
@@ -196,16 +200,18 @@ namespace GameWriter
         // Determine the Papyrus aiEquipSlot parameter.  The engine's
         // Actor.EquipItemEx handles all the 2H↔1H swapping, ExtraDataList
         // allocation and inventory bookkeeping that we previously did by hand.
-        std::int32_t slotArg = kEquipSlotRightHand;
+        std::int32_t slotArg = kEquipSlotDefault;
         if (ft == RE::FormType::Weapon) {
             const auto* weap = form->As<RE::TESObjectWEAP>();
             const bool  twoHanded = weap && IsWeaponTwoHanded(weap->GetWeaponType());
             if (twoHanded && hand == "left")
                 return {false, "Two-handed weapon can only be equipped in the right hand"};
             if (twoHanded)
-                slotArg = kEquipSlotBothHands;
+                slotArg = kEquipSlotDefault;  // engine auto-grips 2H with both hands
             else if (hand == "left")
                 slotArg = kEquipSlotLeftHand;
+            else
+                slotArg = kEquipSlotRightHand;
         }
         // For armor and ammo aiEquipSlot is ignored by the engine, so leave
         // it at the right-hand default.
