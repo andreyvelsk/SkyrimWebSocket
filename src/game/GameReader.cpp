@@ -12,13 +12,12 @@ namespace GameReader
         if (state.fields.empty())
             return {};
 
-        auto* player = RE::PlayerCharacter::GetSingleton();
-        if (!player)
-            return {};
+        const bool inGame = FieldRegistry::IsInGame();
 
-        auto* avo = player->AsActorValueOwner();
-        if (!avo)
-            return {};
+        auto* player = RE::PlayerCharacter::GetSingleton();
+        // When not in-game we still need to publish nulls for in-game fields,
+        // so don't bail out on a missing actor-value owner here.
+        auto* avo    = player ? player->AsActorValueOwner() : nullptr;
 
         nlohmann::json dataFields;
         bool           anyChanged = false;
@@ -28,7 +27,22 @@ namespace GameReader
             auto entryOpt = FieldRegistry::Resolve(registryKey);
             if (entryOpt) {
                 const auto& entry = entryOpt.value();
-                float val         = 0.f;
+
+                // Out-of-game: surface explicit null instead of a stale 0.
+                if (entry.requiresInGame && (!inGame || !avo)) {
+                    std::string valStr = "null";
+                    if (state.sendOnChange) {
+                        auto it = state.lastValues.find(alias);
+                        if (it != state.lastValues.end() && it->second == valStr)
+                            continue;
+                        anyChanged = true;
+                    }
+                    dataFields[alias]       = nullptr;
+                    state.lastValues[alias] = std::move(valStr);
+                    continue;
+                }
+
+                float val = 0.f;
 
                 switch (entry.valueType) {
                     case FieldRegistry::ValueType::kCurrent:
@@ -64,8 +78,13 @@ namespace GameReader
             // --- JSON fields (inventory, etc.) ---
             auto jsonEntryOpt = FieldRegistry::ResolveJson(registryKey);
             if (jsonEntryOpt) {
-                nlohmann::json val    = jsonEntryOpt->resolve();
-                std::string    valStr = val.dump();
+                nlohmann::json val;
+                if (jsonEntryOpt->requiresInGame && !inGame) {
+                    val = nullptr;
+                } else {
+                    val = jsonEntryOpt->resolve();
+                }
+                std::string valStr = val.dump();
 
                 if (state.sendOnChange) {
                     auto it = state.lastValues.find(alias);

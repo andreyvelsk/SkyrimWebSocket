@@ -135,8 +135,12 @@ SKSEPluginLoad(const SKSE::LoadInterface* skse)
     }
 
     // ── Server startup ───────────────────────────────────────────────────
+    // Start the WS server once, as soon as data files are loaded (i.e. main
+    // menu is visible). This lets clients connect before any save is loaded.
+    // Field resolvers are responsible for returning null for fields that
+    // require an actual in-game session (see FieldRegistry::IsInGame).
     SKSE::GetMessagingInterface()->RegisterListener([](SKSE::MessagingInterface::Message* msg) {
-        if (msg->type == SKSE::MessagingInterface::kPostLoadGame && !g_server) {
+        if (msg->type == SKSE::MessagingInterface::kDataLoaded && !g_server) {
             std::string iniPath = GetIniPath();
 
             char addressBuf[64];
