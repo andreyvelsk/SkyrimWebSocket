@@ -87,18 +87,23 @@ namespace PlayerReader
             out["paused"]     = ui->GameIsPaused();
             out["loading"]    = ui->IsMenuOpen("LoadingMenu"sv);
             out["inMainMenu"] = ui->IsMenuOpen("Main Menu"sv);
-            // UI::IsInDialogue covers the dialogue menu being on the stack
+            // Dialogue menu being open is one signal of an active conversation.
             out["inDialogue"] = ui->IsMenuOpen("Dialogue Menu"sv);
+        }
+
+        // MenuTopicManager.speaker / lastSpeaker remain set while a conversation
+        // is active even after the dialogue menu has been torn down (e.g. the
+        // NPC is still speaking the last line). Treat any valid speaker handle
+        // as "in dialogue".
+        if (auto* mtm = RE::MenuTopicManager::GetSingleton())
+        {
+            if (mtm->speaker || mtm->lastSpeaker)
+                out["inDialogue"] = true;
         }
 
         auto* player = RE::PlayerCharacter::GetSingleton();
         if (player)
         {
-            // Player flag is the most reliable signal for an active conversation
-            // (covers cases where the dialogue menu is being torn down but the
-            // engine still considers the player busy).
-            if (player->IsInDialogue())
-                out["inDialogue"] = true;
             out["inCombat"] = player->IsInCombat();
         }
 
