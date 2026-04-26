@@ -64,7 +64,7 @@ namespace GameWriter
 
     // Returns the ExtraDataList that carries the kWorn or kWornLeft flag
     // for unequipping from a specific hand.
-    static RE::ExtraDataList* FindWornExtraDataList(RE::InventoryEntryData* entry, bool leftHand)
+    [[maybe_unused]] static RE::ExtraDataList* FindWornExtraDataList(RE::InventoryEntryData* entry, bool leftHand)
     {
         if (!entry || !entry->extraLists)
             return nullptr;
@@ -103,7 +103,7 @@ namespace GameWriter
 
     // Returns the first ExtraDataList that is NOT worn in either hand.
     // Used to obtain a "clean" xList to pass to EquipObject.
-    static RE::ExtraDataList* FindUnwornExtraDataList(RE::InventoryEntryData* entry)
+    [[maybe_unused]] static RE::ExtraDataList* FindUnwornExtraDataList(RE::InventoryEntryData* entry)
     {
         if (!entry || !entry->extraLists)
             return nullptr;
@@ -119,7 +119,7 @@ namespace GameWriter
 
     // Unequips a weapon from a specific hand.  Used internally before
     // equipping to the opposite hand (hand swap).
-    static void DoUnequipWeapon(RE::ActorEquipManager* equipMgr,
+    [[maybe_unused]] static void DoUnequipWeapon(RE::ActorEquipManager* equipMgr,
                                 RE::PlayerCharacter*   player,
                                 RE::TESBoundObject*    form,
                                 RE::ExtraDataList*     xList,
@@ -132,6 +132,47 @@ namespace GameWriter
                                 /*a_playSounds=*/true,
                                 /*a_applyNow=*/false);
     }
+
+    // Dispatches a Papyrus method call on the player.  Returns true when the
+    // call was queued on the VM.  Delegating to Papyrus lets the engine run
+    // the same equip/unequip/drop logic that the vanilla UI uses — no more
+    // hand-rolled hand-swapping, ExtraDataList hunting, or 2H↔1H corner cases.
+    template <typename... Args>
+    static bool DispatchPlayerMethod(RE::PlayerCharacter* player,
+                                     const char*          className,
+                                     const char*          methodName,
+                                     Args...              args)
+    {
+        auto* vm = RE::BSScript::Internal::VirtualMachine::GetSingleton();
+        if (!vm) {
+            logger::error("Papyrus VM unavailable");
+            return false;
+        }
+        auto* policy = vm->GetObjectHandlePolicy();
+        if (!policy) {
+            logger::error("Papyrus VM handle policy unavailable");
+            return false;
+        }
+        const auto handle = policy->GetHandleForObject(
+            static_cast<RE::VMTypeID>(player->GetFormType()), player);
+
+        auto* fnArgs = RE::MakeFunctionArguments(std::move(args)...);
+        RE::BSTSmartPointer<RE::BSScript::IStackCallbackFunctor> callback;
+        return vm->DispatchMethodCall(handle,
+                                      RE::BSFixedString(className),
+                                      RE::BSFixedString(methodName),
+                                      fnArgs,
+                                      callback);
+    }
+
+    // Papyrus Actor.EquipItemEx / UnequipItemEx aiEquipSlot values.
+    // See https://ck.uesp.net/wiki/EquipItemEx_-_Actor
+    //   0 = Default (engine picks; right for 1H, both for 2H, body slot for armor)
+    //   1 = Right Hand
+    //   2 = Left Hand
+    static constexpr std::int32_t kEquipSlotDefault   = 0;
+    static constexpr std::int32_t kEquipSlotRightHand = 1;
+    static constexpr std::int32_t kEquipSlotLeftHand  = 2;
 
     // ─── Commands ─────────────────────────────────────────────────────────
 
@@ -156,52 +197,39 @@ namespace GameWriter
         if (!IsEquippable(ft))
             return {false, "Item is not equippable (use 'use' for consumables)"};
 
-        auto* equipMgr = RE::ActorEquipManager::GetSingleton();
-        if (!equipMgr)
-            return {false, "Equipment manager not available"};
-
-        const RE::BGSEquipSlot* slot  = nullptr;
-        RE::ExtraDataList*      xData = nullptr;
-
+        // Determine the Papyrus aiEquipSlot parameter.  The engine's
+        // Actor.EquipItemEx handles all the 2H↔1H swapping, ExtraDataList
+        // allocation and inventory bookkeeping that we previously did by hand.
+        std::int32_t slotArg = kEquipSlotDefault;
         if (ft == RE::FormType::Weapon) {
             const auto* weap = form->As<RE::TESObjectWEAP>();
-            if (weap && IsWeaponTwoHanded(weap->GetWeaponType()) && hand == "left")
+            const bool  twoHanded = weap && IsWeaponTwoHanded(weap->GetWeaponType());
+            if (twoHanded && hand == "left")
                 return {false, "Two-handed weapon can only be equipped in the right hand"};
-
-            slot = GetHandSlot(hand);
-
-            const bool leftHand = (hand == "left");
-
-            auto* liveEntry = FindLiveEntry(player, formId);
-            if (liveEntry) {
-                RE::ExtraDataList* wornRight = FindWornExtraDataList(liveEntry, false);
-                RE::ExtraDataList* wornLeft  = FindWornExtraDataList(liveEntry, true);
-
-                const bool inTarget = leftHand ? (wornLeft != nullptr)
-                                               : (wornRight != nullptr);
-                const bool inOther  = leftHand ? (wornRight != nullptr)
-                                               : (wornLeft != nullptr);
-
-                if (inTarget)
-                    return {true, ""};
-
-                if (inOther && itemCount < 2) {
-                    RE::ExtraDataList* otherXList = leftHand ? wornRight : wornLeft;
-                    DoUnequipWeapon(equipMgr, player, form, otherXList, !leftHand);
-                }
-
-                xData = FindUnwornExtraDataList(liveEntry);
-            }
+            if (twoHanded)
+                slotArg = kEquipSlotDefault;  // engine auto-grips 2H with both hands
+            else if (hand == "left")
+                slotArg = kEquipSlotLeftHand;
+            else
+                slotArg = kEquipSlotRightHand;
         }
-        // For armor and ammo: slot = nullptr, xData = nullptr → engine auto-selects.
+        // For armor and ammo aiEquipSlot is ignored by the engine, so leave
+        // it at the right-hand default.
 
-        equipMgr->EquipObject(player, form, xData, 1, slot,
-                              /*a_queueEquip=*/true,
-                              /*a_forceEquip=*/false,
-                              /*a_playSounds=*/true,
-                              /*a_applyNow=*/false);
-        logger::debug("equip 0x{:08X} ('{}') hand='{}'  type={}",
-                      formId, form->GetName(), hand, static_cast<int>(ft));        PrintConsole("[WS] Equip " + std::string(form->GetName()) + (slot ? " → " + hand : ""));
+        logger::trace("EquipItem 0x{:08X}: dispatching Actor.EquipItemEx slot={}", formId, slotArg);
+        const bool ok = DispatchPlayerMethod(
+            player, "Actor", "EquipItemEx",
+            static_cast<RE::TESForm*>(form),
+            slotArg,
+            /*abPreventRemoval=*/false,
+            /*abSilent=*/false);
+        if (!ok)
+            return {false, "Papyrus dispatch failed"};
+
+        logger::debug("equip 0x{:08X} ('{}') hand='{}' type={} slot={}",
+                      formId, form->GetName(), hand, static_cast<int>(ft), slotArg);
+        PrintConsole("[WS] Equip " + std::string(form->GetName()) +
+                     (ft == RE::FormType::Weapon ? " → " + hand : ""));
         return {true, ""};
     }
 
@@ -219,43 +247,29 @@ namespace GameWriter
         if (GetInventoryCount(player, formId) <= 0)
             return {false, "Item not in inventory"};
 
-        auto* liveEntry = FindLiveEntry(player, formId);
-        logger::trace("UnequipItem 0x{:08X}: liveEntry={} isWorn={}", formId,
-                      static_cast<const void*>(liveEntry),
-                      liveEntry ? liveEntry->IsWorn() : false);
-        if (!liveEntry || !liveEntry->IsWorn())
-            return {false, "Item is not equipped"};
-
-        auto* equipMgr = RE::ActorEquipManager::GetSingleton();
-        if (!equipMgr)
-            return {false, "Equipment manager not available"};
-
+        // For weapons we select the specific hand slot via UnequipItemEx.
+        // For everything else we call UnequipItem (slot is irrelevant and
+        // the engine will unequip wherever the item is currently worn).
         const auto ft = form->GetFormType();
-
+        bool ok = false;
         if (ft == RE::FormType::Weapon) {
-            const bool leftHand = (hand == "left");
-
-            RE::ExtraDataList* wornRight = FindWornExtraDataList(liveEntry, false);
-            RE::ExtraDataList* wornLeft  = FindWornExtraDataList(liveEntry, true);
-
-            bool doRight = !leftHand && wornRight;
-            bool doLeft  = leftHand && wornLeft;
-
-            if (!doRight && !doLeft) {
-                doRight = wornRight != nullptr;
-                doLeft  = wornLeft != nullptr;
-            }
-
-            if (!doRight && !doLeft)
-                return {false, "Weapon not found in any hand"};
-
-            if (doRight && wornRight)
-                DoUnequipWeapon(equipMgr, player, form, wornRight, false);
-            if (doLeft && wornLeft)
-                DoUnequipWeapon(equipMgr, player, form, wornLeft, true);
+            std::int32_t slotArg = (hand == "left") ? kEquipSlotLeftHand : kEquipSlotRightHand;
+            logger::trace("UnequipItem 0x{:08X}: dispatching Actor.UnequipItemEx slot={}", formId, slotArg);
+            ok = DispatchPlayerMethod(
+                player, "Actor", "UnequipItemEx",
+                static_cast<RE::TESForm*>(form),
+                slotArg,
+                /*abPreventEquipping=*/false);
         } else {
-            equipMgr->UnequipObject(player, form);
+            logger::trace("UnequipItem 0x{:08X}: dispatching Actor.UnequipItem", formId);
+            ok = DispatchPlayerMethod(
+                player, "Actor", "UnequipItem",
+                static_cast<RE::TESForm*>(form),
+                /*abPreventEquipping=*/false,
+                /*abSilent=*/false);
         }
+        if (!ok)
+            return {false, "Papyrus dispatch failed"};
 
         logger::debug("unequip 0x{:08X} ('{}') hand='{}'", formId, form->GetName(), hand);
         PrintConsole("[WS] Unequip " + std::string(form->GetName()));
@@ -282,14 +296,17 @@ namespace GameWriter
         if (!IsConsumable(form->GetFormType()))
             return {false, "Item is not consumable (use 'equip' for weapons/apparel)"};
 
-        auto* equipMgr = RE::ActorEquipManager::GetSingleton();
-        if (!equipMgr)
-            return {false, "Equipment manager not available"};
+        // Actor.EquipItem on a potion/food/scroll triggers consumption (or
+        // equip-for-casting for scrolls), mirroring vanilla UI behaviour.
+        const bool ok = DispatchPlayerMethod(
+            player, "Actor", "EquipItem",
+            static_cast<RE::TESForm*>(form),
+            /*abPreventRemoval=*/false,
+            /*abSilent=*/false);
+        if (!ok)
+            return {false, "Papyrus dispatch failed"};
 
-        // EquipObject on consumables triggers consumption (potions, food,
-        // ingredients) or equips for casting (scrolls).
-        equipMgr->EquipObject(player, form);
-
+        logger::debug("use 0x{:08X} ('{}')", formId, form->GetName());
         PrintConsole("[WS] Use " + std::string(form->GetName()));
         return {true, ""};
     }
@@ -314,8 +331,16 @@ namespace GameWriter
         if (count > have)
             return {false, "Not enough items (have " + std::to_string(have) + ")"};
 
-        player->RemoveItem(form, count, RE::ITEM_REMOVE_REASON::kDropping, nullptr, nullptr);
+        // ObjectReference.DropObject is the Papyrus equivalent of the vanilla
+        // drop-from-inventory action (animation, sound, physics).
+        const bool ok = DispatchPlayerMethod(
+            player, "ObjectReference", "DropObject",
+            static_cast<RE::TESForm*>(form),
+            static_cast<std::int32_t>(count));
+        if (!ok)
+            return {false, "Papyrus dispatch failed"};
 
+        logger::debug("drop 0x{:08X} ('{}') count={}", formId, form->GetName(), count);
         PrintConsole("[WS] Drop " + std::to_string(count) + "x " + std::string(form->GetName()));
         return {true, ""};
     }
