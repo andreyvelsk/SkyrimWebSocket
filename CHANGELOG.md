@@ -2,6 +2,21 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+## [1.10.0](https://github.com/yourusername/SkyrimWebSocket/compare/v1.9.0...v1.10.0) (2026-04-26)
+
+
+### ✨ Features
+
+* **game:** send current game status for Game::Status ([de99c72](https://github.com/yourusername/SkyrimWebSocket/commits/de99c72ac60081569c50ea690083608927503560))
+
+
+### 🐛 Bug Fixes
+
+* **controls:** some fields bug ([88c4ff8](https://github.com/yourusername/SkyrimWebSocket/commits/88c4ff85998076142fa4056df5b76df68bd2d7d2))
+* **status:** dead field, retry again logic for controlsEnabled ([d2873cf](https://github.com/yourusername/SkyrimWebSocket/commits/d2873cf038ed58dd07f1e177d65604078b63648f))
+* **status:** inDialogue source ([31f8124](https://github.com/yourusername/SkyrimWebSocket/commits/31f8124dde991e3a607e69ef051003d7ed53d23a))
+* **status:** loading detection ([9fe29ba](https://github.com/yourusername/SkyrimWebSocket/commits/9fe29bad8dc44a193351b28a483ce59f4bd8b1b5))
+
 ## [1.9.0](https://github.com/yourusername/SkyrimWebSocket/compare/v1.8.0...v1.9.0) (2026-04-26)
 
 
