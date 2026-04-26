@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+## [1.11.0](https://github.com/yourusername/SkyrimWebSocket/compare/v1.10.0...v1.11.0) (2026-04-26)
+
+
+### ✨ Features
+
+* **server:** start ws server in main menu ([85089e2](https://github.com/yourusername/SkyrimWebSocket/commits/85089e268431329bd64bdd6d0e5ac932024d0937))
+
 ## [1.10.0](https://github.com/yourusername/SkyrimWebSocket/compare/v1.9.0...v1.10.0) (2026-04-26)
 
 
