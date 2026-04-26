@@ -298,11 +298,14 @@ namespace GameWriter
 
         // Actor.EquipItem on a potion/food/scroll triggers consumption (or
         // equip-for-casting for scrolls), mirroring vanilla UI behaviour.
+        // abSilent=true suppresses the "<item> equipped" HUD message that
+        // Skyrim does not show when the player consumes the item from the
+        // inventory menu.
         const bool ok = DispatchPlayerMethod(
             player, "Actor", "EquipItem",
             static_cast<RE::TESForm*>(form),
             /*abPreventRemoval=*/false,
-            /*abSilent=*/false);
+            /*abSilent=*/true);
         if (!ok)
             return {false, "Papyrus dispatch failed"};
 
