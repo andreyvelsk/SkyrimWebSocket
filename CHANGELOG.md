@@ -2,6 +2,14 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+### [1.11.1](https://github.com/andreyvelsk/SkyrimWebSocket/compare/v1.11.0...v1.11.1) (2026-04-26)
+
+
+### 🐛 Bug Fixes
+
+* **hotkey:** fix some item not added to hotkey ([3761ba8](https://github.com/andreyvelsk/SkyrimWebSocket/commits/3761ba84ffcc2093fc0dd611b5d821622510d088))
+* **use:** do not show use command message ([1cfeaf4](https://github.com/andreyvelsk/SkyrimWebSocket/commits/1cfeaf43fb85d2e442ed818435006d5a529e08ea))
+
 ## [1.11.0](https://github.com/andreyvelsk/SkyrimWebSocket/compare/v1.10.0...v1.11.0) (2026-04-26)
 
 
