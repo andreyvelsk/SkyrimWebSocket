@@ -764,13 +764,30 @@ namespace GameWriter
         if (!bound)
             return {false, "Form is neither a spell nor a bound object"};
 
-        auto* liveEntry = FindLiveEntry(player, formId);
-        if (!liveEntry || GetInventoryCount(player, formId) <= 0)
+        if (GetInventoryCount(player, formId) <= 0)
             return {false, "Item not in inventory"};
 
         auto* invChanges = player->GetInventoryChanges();
         if (!invChanges)
             return {false, "Inventory changes not available"};
+
+        // Items that live only in the player's base TESContainer (e.g. starting
+        // gear, freshly levelled items) are visible via GetInventory() but
+        // have no live InventoryEntryData in InventoryChanges::entryList — the
+        // engine lazily allocates entries only on mutation.  Force the engine
+        // to create a proper entry by doing a neutral +1/-1 container
+        // transaction (mirrors the FavoriteItem code path).  Without this
+        // step, hotkey assignment fails with "Item not in inventory" for any
+        // item that has never been equipped, dropped, or favorited.
+        auto* liveEntry = FindLiveEntry(player, formId);
+        if (!liveEntry) {
+            logger::trace("SetHotkey 0x{:08X}: forcing entry creation via AddObjectToContainer/RemoveItem", formId);
+            player->AddObjectToContainer(bound, nullptr, 1, nullptr);
+            player->RemoveItem(bound, 1, RE::ITEM_REMOVE_REASON::kRemove, nullptr, nullptr);
+            liveEntry = FindLiveEntry(player, formId);
+            if (!liveEntry)
+                return {false, "Failed to materialize inventory entry for item"};
+        }
 
         // Clear any previous binding for this slot (magic or different item).
         ClearSlotBinding(player, favorites, slotIdx);
