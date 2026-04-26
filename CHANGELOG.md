@@ -2,6 +2,19 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+## [1.9.0](https://github.com/yourusername/SkyrimWebSocket/compare/v1.8.0...v1.9.0) (2026-04-26)
+
+
+### ✨ Features
+
+* **papyrus:** basic ([6e1dfa2](https://github.com/yourusername/SkyrimWebSocket/commits/6e1dfa2b3e073bacf61d19c778b7a588ff755d98))
+
+
+### 🐛 Bug Fixes
+
+* **build:** build ([22e3ed5](https://github.com/yourusername/SkyrimWebSocket/commits/22e3ed5594b553cef8fad195c68dbe579b810b2a))
+* **equip:** hand slot bug ([22200ae](https://github.com/yourusername/SkyrimWebSocket/commits/22200aec1bb8915963c0e179ac53133e706d0434))
+
 ## [1.8.0](https://github.com/yourusername/SkyrimWebSocket/compare/v1.7.0...v1.8.0) (2026-04-24)
 
 
