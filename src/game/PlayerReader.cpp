@@ -96,6 +96,11 @@ namespace PlayerReader
             loading    = ui->IsMenuOpen(RE::LoadingMenu::MENU_NAME);
             inMainMenu = ui->IsMenuOpen(RE::MainMenu::MENU_NAME);
             inDialogue = ui->IsMenuOpen(RE::DialogueMenu::MENU_NAME);
+
+            // Quick interior door transitions don't open the full LoadingMenu,
+            // they fade through FaderMenu instead. Treat that as loading too.
+            if (!loading && ui->IsMenuOpen("Fader Menu"))
+                loading = true;
         }
 
         // MenuTopicManager.speaker / lastSpeaker remain set while a conversation
@@ -113,7 +118,6 @@ namespace PlayerReader
         bool inKillMove      = false;
         bool inFurniture     = false;
         bool inForcedAnim    = false;  // ragdoll, knock-down, sit/sleep, mount, getting on/off mount
-        bool playerIsLoading = false;  // engine-level "loading new area" flag
 
         if (auto* player = RE::PlayerCharacter::GetSingleton())
         {
@@ -151,13 +155,7 @@ namespace PlayerReader
             // Knockdown / stagger / ragdoll
             if (player->AsActorState()->GetKnockState() != RE::KNOCK_STATE_ENUM::kNormal)
                 inForcedAnim = true;
-
-            // Engine flag set during cell transitions / fast travel even when
-            // the LoadingMenu UI hasn't (yet) appeared.
-            playerIsLoading = player->GetPlayerRuntimeData().playerFlags.isLoading;
         }
-
-        loading = loading || playerIsLoading;
 
         // PlayerControls::blockPlayerInput is set in cinematics / scripted
         // sequences / cart intro / forced first-person scenes. Combined with
