@@ -68,4 +68,58 @@ namespace PlayerReader
         const char* str = setting->GetString();
         return str ? std::string(str) : kDefaultLanguage;
     }
+
+    nlohmann::json ReadGameStatus()
+    {
+        nlohmann::json out = {
+            { "paused",           false },
+            { "loading",          false },
+            { "inMainMenu",       false },
+            { "inDialogue",       false },
+            { "inCombat",         false },
+            { "controlsEnabled",  true  },
+            { "canAct",           false },
+        };
+
+        auto* ui = RE::UI::GetSingleton();
+        if (ui)
+        {
+            out["paused"]     = ui->GameIsPaused();
+            out["loading"]    = ui->IsMenuOpen("LoadingMenu"sv);
+            out["inMainMenu"] = ui->IsMenuOpen("Main Menu"sv);
+            // UI::IsInDialogue covers the dialogue menu being on the stack
+            out["inDialogue"] = ui->IsMenuOpen("Dialogue Menu"sv);
+        }
+
+        auto* player = RE::PlayerCharacter::GetSingleton();
+        if (player)
+        {
+            // Player flag is the most reliable signal for an active conversation
+            // (covers cases where the dialogue menu is being torn down but the
+            // engine still considers the player busy).
+            if (player->IsInDialogue())
+                out["inDialogue"] = true;
+            out["inCombat"] = player->IsInCombat();
+        }
+
+        bool controlsEnabled = true;
+        if (auto* cm = RE::ControlMap::GetSingleton())
+        {
+            // Treat controls as "enabled" only when the player can both move and
+            // fight. This matches what callers usually mean by "can act":
+            // cinematics / forced sequences disable movement, menus disable
+            // fighting, etc.
+            controlsEnabled = cm->IsMovementControlsEnabled() &&
+                              cm->IsFightingControlsEnabled();
+        }
+        out["controlsEnabled"] = controlsEnabled;
+
+        out["canAct"] = !out["paused"].get<bool>() &&
+                        !out["loading"].get<bool>() &&
+                        !out["inMainMenu"].get<bool>() &&
+                        !out["inDialogue"].get<bool>() &&
+                        controlsEnabled;
+
+        return out;
+    }
 }
