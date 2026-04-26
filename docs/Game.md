@@ -93,13 +93,14 @@ flags flip (loading screen appears, dialogue starts/ends, combat begins, etc.).
 
 | Field | Type | Description |
 |---|---|---|
-| `paused`           | `boolean` | `true` while the engine has the world frozen — i.e. any pause-game menu is on the menu stack (Inventory / Magic / Map / Journal / Console / system pause). Backed by `RE::UI::GameIsPaused()`. |
-| `loading`          | `boolean` | `true` while a **loading screen** is being shown (cell transition, fast travel, save load). Backed by the `LoadingMenu` being open. |
+| `paused`           | `boolean` | `true` while the engine has the world frozen — i.e. any pause-game menu is on the menu stack (Inventory / Magic / Map / Journal / Console / system pause / **crafting menus** like Forge / Alchemy / Enchanting). Backed by `RE::UI::GameIsPaused()`. |
+| `loading`          | `boolean` | `true` while a **loading screen / cell transition / fast travel / save load** is in progress. Combines the `Loading Menu` being open with the engine flag `PlayerCharacter::playerFlags.isLoading` (the latter is set during interior↔exterior door transitions where no `LoadingMenu` is shown). |
 | `inMainMenu`       | `boolean` | `true` while the title screen / main menu is active (no save loaded yet, or the player exited to the main menu). |
 | `inDialogue`       | `boolean` | `true` while the player is engaged in a dialogue / conversation with an NPC. Combines the `Dialogue Menu` being open with `MenuTopicManager::speaker` / `lastSpeaker` (the latter stays set briefly after the menu closes while the NPC finishes speaking). |
 | `inCombat`         | `boolean` | `true` while the player is in combat. Useful informational flag — combat does **not** by itself prevent actions, so it is not factored into `canAct`. |
-| `controlsEnabled`  | `boolean` | `true` when the engine is letting the player control the character. Backed by `RE::PlayerControls::blockPlayerInput` (inverted) — goes `false` during cinematics, killmoves, scripted sequences, the fall-from-cart intro, sit / sleep / mount transitions, and any other moment where the engine takes input away from the player. |
-| `canAct`           | `boolean` | Convenience flag — `true` only when **all** of the following hold: not `paused`, not `loading`, not `inMainMenu`, not `inDialogue`, and `controlsEnabled` is `true`. Use this when you just want to know "can my external tool send a hotkey / equip request right now?". |
+| `dead`             | `boolean` | `true` whenever the player's `ActorState::lifeState` is anything other than `kAlive` — covers the dying animation, ragdoll, "you died" load-screen, bleedout (Essential), reanimate / restrained states. |
+| `controlsEnabled`  | `boolean` | `true` only when the engine is letting the player control the character. Goes `false` if **any** of: `PlayerControls::blockPlayerInput` is set (cinematic / scripted scene / cart intro), `Actor::IsInKillMove()` is true (killmove animation), the player is occupying a furniture (workbench / forge / alchemy / cooking pot / chair / bed — `Actor::GetOccupiedFurniture()` returns a valid handle), the actor is in a non-`kNormal` sit / sleep / mount transition (`SIT_SLEEP_STATE`), the actor is knocked down / staggered (`KNOCK_STATE_ENUM != kNormal`), or the player is dead. |
+| `canAct`           | `boolean` | Convenience flag — `true` only when **all** of the following hold: not `paused`, not `loading`, not `inMainMenu`, not `inDialogue`, not `dead`, and `controlsEnabled` is `true`. Use this when you just want to know "can my external tool send a hotkey / equip request right now?". |
 
 > **Note on `canAct`:** `inCombat` is intentionally *not* part of `canAct`. The
 > player can still press buttons, drink potions, swap spells, etc. while
@@ -108,15 +109,22 @@ flags flip (loading screen appears, dialogue starts/ends, combat begins, etc.).
 
 ### Typical scenarios — what each scenario looks like
 
-| Scenario | `paused` | `loading` | `inMainMenu` | `inDialogue` | `inCombat` | `controlsEnabled` | `canAct` |
-|---|:-:|:-:|:-:|:-:|:-:|:-:|:-:|
-| Free roaming, exploring         | ❌ | ❌ | ❌ | ❌ | ❌ | ✅ | ✅ |
-| In combat                       | ❌ | ❌ | ❌ | ❌ | ✅ | ✅ | ✅ |
-| Pause menu / Inventory open     | ✅ | ❌ | ❌ | ❌ | ❌ | ✅ | ❌ |
-| Cell transition / fast-travel   | ✅ | ✅ | ❌ | ❌ | ❌ | ✅ | ❌ |
-| Conversation with NPC           | ✅ | ❌ | ❌ | ✅ | ❌ | ✅ | ❌ |
-| Cinematic / killmove / cart ride| ❌ | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ |
-| Title screen, no save loaded    | ✅ | ❌ | ✅ | ❌ | ❌ | ✅/❌ | ❌ |
+| Scenario | `paused` | `loading` | `inMainMenu` | `inDialogue` | `inCombat` | `dead` | `controlsEnabled` | `canAct` |
+|---|:-:|:-:|:-:|:-:|:-:|:-:|:-:|:-:|
+| Free roaming, exploring                | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ | ✅ | ✅ |
+| In combat                              | ❌ | ❌ | ❌ | ❌ | ✅ | ❌ | ✅ | ✅ |
+| Pause menu / Inventory open            | ✅ | ❌ | ❌ | ❌ | ❌ | ❌ | ✅ | ❌ |
+| Cell transition (door)                 | ✅ | ✅ | ❌ | ❌ | ❌ | ❌ | ✅ | ❌ |
+| Fast-travel loading screen             | ✅ | ✅ | ❌ | ❌ | ❌ | ❌ | ✅ | ❌ |
+| Conversation with NPC                  | ✅ | ❌ | ❌ | ✅ | ❌ | ❌ | ✅ | ❌ |
+| Cinematic / killmove / cart ride       | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ |
+| At workbench / forge / alchemy / etc.  | ✅ | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ |
+| Cooking-pot stir animation             | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ |
+| Sitting on a chair / sleeping          | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ |
+| Knocked down / staggered / ragdoll     | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ |
+| Player dying animation                 | ❌ | ❌ | ❌ | ❌ | ❌ | ✅ | ❌ | ❌ |
+| "You died" load screen                 | ✅ | ✅ | ❌ | ❌ | ❌ | ✅ | ❌ | ❌ |
+| Title screen, no save loaded           | ✅ | ❌ | ✅ | ❌ | ❌ | ❌ | ✅/❌ | ❌ |
 
 > The pause menu also pauses the game, so `paused` is `true` whenever a
 > pause-game UI menu is open. Loading screens technically pause the world too,
@@ -149,6 +157,7 @@ flags flip (loading screen appears, dialogue starts/ends, combat begins, etc.).
       "inMainMenu":      false,
       "inDialogue":      false,
       "inCombat":        false,
+      "dead":            false,
       "controlsEnabled": true,
       "canAct":          true
     }
@@ -169,6 +178,7 @@ flags flip (loading screen appears, dialogue starts/ends, combat begins, etc.).
       "inMainMenu":      false,
       "inDialogue":      false,
       "inCombat":        false,
+      "dead":            false,
       "controlsEnabled": true,
       "canAct":          false
     }
@@ -189,6 +199,7 @@ flags flip (loading screen appears, dialogue starts/ends, combat begins, etc.).
       "inMainMenu":      false,
       "inDialogue":      false,
       "inCombat":        false,
+      "dead":            false,
       "controlsEnabled": true,
       "canAct":          false
     }
@@ -201,6 +212,8 @@ flags flip (loading screen appears, dialogue starts/ends, combat begins, etc.).
 ```text
 if (status.canAct) {
     // safe to send equip / hotkey / cast / use-item commands
+} else if (status.dead) {
+    // player died — wait for respawn / load
 } else if (status.loading) {
     // show "loading…" indicator, queue or drop the request
 } else if (status.inDialogue) {
@@ -208,7 +221,7 @@ if (status.canAct) {
 } else if (status.paused) {
     // game UI is open — usually safe to wait and retry
 } else if (!status.controlsEnabled) {
-    // cinematic / scripted scene — do nothing until it ends
+    // cinematic / crafting / killmove / scripted scene — do nothing until it ends
 }
 ```
 

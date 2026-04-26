@@ -295,7 +295,7 @@ namespace FieldRegistry
 
         // Game / player runtime state
         { "Game::Status",
-          { "Current game/player state flags: paused, loading, inMainMenu, inDialogue, inCombat, controlsEnabled, canAct", "object",
+          { "Current game/player state flags: paused, loading, inMainMenu, inDialogue, inCombat, dead, controlsEnabled, canAct", "object",
             &PlayerReader::ReadGameStatus } },
     };
     // clang-format on

@@ -77,6 +77,7 @@ namespace PlayerReader
             { "inMainMenu",       false },
             { "inDialogue",       false },
             { "inCombat",         false },
+            { "dead",             false },
             { "controlsEnabled",  true  },
             { "canAct",           false },
         };
@@ -107,33 +108,79 @@ namespace PlayerReader
                 inDialogue = true;
         }
 
-        bool inCombat = false;
+        bool inCombat        = false;
+        bool dead            = false;
+        bool inKillMove      = false;
+        bool inFurniture     = false;
+        bool inForcedAnim    = false;  // ragdoll, knock-down, sit/sleep, mount, getting on/off mount
+        bool playerIsLoading = false;  // engine-level "loading new area" flag
+
         if (auto* player = RE::PlayerCharacter::GetSingleton())
         {
             inCombat = player->IsInCombat();
+
+            // Use ActorState life-state so we catch the entire death sequence
+            // (dying animation -> ragdoll -> "you died" load screen), not just
+            // the final state.
+            switch (player->AsActorState()->GetLifeState())
+            {
+            case RE::ACTOR_LIFE_STATE::kAlive:
+                dead = false;
+                break;
+            default:
+                // kDying, kDead, kUnconcious, kReanimate, kRecycle,
+                // kRestrained, kEssentialDown, kBleedout
+                dead = true;
+                break;
+            }
+
+            inKillMove = player->IsInKillMove();
+
+            // Crafting (forge, workbench, alchemy, enchanting, cooking),
+            // sitting, sleeping, wait-menu — all set an occupied-furniture
+            // reference on the actor.
+            if (player->GetOccupiedFurniture())
+                inFurniture = true;
+
+            // Sit / sleep / mount transitions disable normal controls even
+            // while no UI menu is open (animation in progress).
+            const auto sitSleep = player->AsActorState()->GetSitSleepState();
+            if (sitSleep != RE::SIT_SLEEP_STATE::kNormal)
+                inForcedAnim = true;
+
+            // Knockdown / stagger / ragdoll
+            if (player->AsActorState()->GetKnockState() != RE::KNOCK_STATE_ENUM::kNormal)
+                inForcedAnim = true;
+
+            // Engine flag set during cell transitions / fast travel even when
+            // the LoadingMenu UI hasn't (yet) appeared.
+            playerIsLoading = player->GetPlayerRuntimeData().playerFlags.isLoading;
         }
 
-        // ControlMap::enabledControls is a bitfield that is only meaningful when
-        // the engine has explicitly toggled flags via ToggleControls(); in
-        // normal gameplay individual `Is*ControlsEnabled()` queries can return
-        // false even though the player is in full control. The most reliable
-        // single signal for "engine has taken control away from the player"
-        // (cinematics, killmoves, scripted sequences, riding-the-cart intro,
-        // sleep/sit transitions, etc.) is `PlayerControls::blockPlayerInput`.
-        bool controlsEnabled = true;
+        loading = loading || playerIsLoading;
+
+        // PlayerControls::blockPlayerInput is set in cinematics / scripted
+        // sequences / cart intro / forced first-person scenes. Combined with
+        // the actor-state checks above, this gives a reliable
+        // "the engine has taken control away from the player" signal.
+        bool inputBlocked = false;
         if (auto* pc = RE::PlayerControls::GetSingleton())
         {
-            controlsEnabled = !pc->blockPlayerInput;
+            inputBlocked = pc->blockPlayerInput;
         }
+
+        bool controlsEnabled =
+            !inputBlocked && !inKillMove && !inFurniture && !inForcedAnim && !dead;
 
         out["paused"]          = paused;
         out["loading"]         = loading;
         out["inMainMenu"]      = inMainMenu;
         out["inDialogue"]      = inDialogue;
         out["inCombat"]        = inCombat;
+        out["dead"]            = dead;
         out["controlsEnabled"] = controlsEnabled;
         out["canAct"]          = !paused && !loading && !inMainMenu &&
-                                 !inDialogue && controlsEnabled;
+                                 !inDialogue && !dead && controlsEnabled;
 
         return out;
     }
