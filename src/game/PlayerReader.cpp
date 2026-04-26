@@ -81,14 +81,20 @@ namespace PlayerReader
             { "canAct",           false },
         };
 
-        auto* ui = RE::UI::GetSingleton();
-        if (ui)
+        bool paused     = false;
+        bool loading    = false;
+        bool inMainMenu = false;
+        bool inDialogue = false;
+
+        if (auto* ui = RE::UI::GetSingleton())
         {
-            out["paused"]     = ui->GameIsPaused();
-            out["loading"]    = ui->IsMenuOpen("LoadingMenu"sv);
-            out["inMainMenu"] = ui->IsMenuOpen("Main Menu"sv);
-            // Dialogue menu being open is one signal of an active conversation.
-            out["inDialogue"] = ui->IsMenuOpen("Dialogue Menu"sv);
+            paused     = ui->GameIsPaused();
+            // NOTE: official menu names contain a space:
+            // LoadingMenu::MENU_NAME = "Loading Menu", MainMenu::MENU_NAME = "Main Menu",
+            // DialogueMenu::MENU_NAME = "Dialogue Menu".
+            loading    = ui->IsMenuOpen(RE::LoadingMenu::MENU_NAME);
+            inMainMenu = ui->IsMenuOpen(RE::MainMenu::MENU_NAME);
+            inDialogue = ui->IsMenuOpen(RE::DialogueMenu::MENU_NAME);
         }
 
         // MenuTopicManager.speaker / lastSpeaker remain set while a conversation
@@ -98,32 +104,36 @@ namespace PlayerReader
         if (auto* mtm = RE::MenuTopicManager::GetSingleton())
         {
             if (mtm->speaker || mtm->lastSpeaker)
-                out["inDialogue"] = true;
+                inDialogue = true;
         }
 
-        auto* player = RE::PlayerCharacter::GetSingleton();
-        if (player)
+        bool inCombat = false;
+        if (auto* player = RE::PlayerCharacter::GetSingleton())
         {
-            out["inCombat"] = player->IsInCombat();
+            inCombat = player->IsInCombat();
         }
 
+        // ControlMap::enabledControls is a bitfield that is only meaningful when
+        // the engine has explicitly toggled flags via ToggleControls(); in
+        // normal gameplay individual `Is*ControlsEnabled()` queries can return
+        // false even though the player is in full control. The most reliable
+        // single signal for "engine has taken control away from the player"
+        // (cinematics, killmoves, scripted sequences, riding-the-cart intro,
+        // sleep/sit transitions, etc.) is `PlayerControls::blockPlayerInput`.
         bool controlsEnabled = true;
-        if (auto* cm = RE::ControlMap::GetSingleton())
+        if (auto* pc = RE::PlayerControls::GetSingleton())
         {
-            // Treat controls as "enabled" only when the player can both move and
-            // fight. This matches what callers usually mean by "can act":
-            // cinematics / forced sequences disable movement, menus disable
-            // fighting, etc.
-            controlsEnabled = cm->IsMovementControlsEnabled() &&
-                              cm->IsFightingControlsEnabled();
+            controlsEnabled = !pc->blockPlayerInput;
         }
-        out["controlsEnabled"] = controlsEnabled;
 
-        out["canAct"] = !out["paused"].get<bool>() &&
-                        !out["loading"].get<bool>() &&
-                        !out["inMainMenu"].get<bool>() &&
-                        !out["inDialogue"].get<bool>() &&
-                        controlsEnabled;
+        out["paused"]          = paused;
+        out["loading"]         = loading;
+        out["inMainMenu"]      = inMainMenu;
+        out["inDialogue"]      = inDialogue;
+        out["inCombat"]        = inCombat;
+        out["controlsEnabled"] = controlsEnabled;
+        out["canAct"]          = !paused && !loading && !inMainMenu &&
+                                 !inDialogue && controlsEnabled;
 
         return out;
     }

@@ -98,7 +98,7 @@ flags flip (loading screen appears, dialogue starts/ends, combat begins, etc.).
 | `inMainMenu`       | `boolean` | `true` while the title screen / main menu is active (no save loaded yet, or the player exited to the main menu). |
 | `inDialogue`       | `boolean` | `true` while the player is engaged in a dialogue / conversation with an NPC. Combines the `Dialogue Menu` being open with `MenuTopicManager::speaker` / `lastSpeaker` (the latter stays set briefly after the menu closes while the NPC finishes speaking). |
 | `inCombat`         | `boolean` | `true` while the player is in combat. Useful informational flag — combat does **not** by itself prevent actions, so it is not factored into `canAct`. |
-| `controlsEnabled`  | `boolean` | `true` when both movement and fighting controls are enabled in the engine's `ControlMap`. Goes `false` during cinematics, scripted sequences, killmoves, fall-from-cart intro, riding/sleeping animations, etc. |
+| `controlsEnabled`  | `boolean` | `true` when the engine is letting the player control the character. Backed by `RE::PlayerControls::blockPlayerInput` (inverted) — goes `false` during cinematics, killmoves, scripted sequences, the fall-from-cart intro, sit / sleep / mount transitions, and any other moment where the engine takes input away from the player. |
 | `canAct`           | `boolean` | Convenience flag — `true` only when **all** of the following hold: not `paused`, not `loading`, not `inMainMenu`, not `inDialogue`, and `controlsEnabled` is `true`. Use this when you just want to know "can my external tool send a hotkey / equip request right now?". |
 
 > **Note on `canAct`:** `inCombat` is intentionally *not* part of `canAct`. The
