@@ -292,6 +292,11 @@ namespace FieldRegistry
         { "Game::Language",
           { "Current game language from sLanguage:General INI setting (e.g. \"english\", \"russian\")", "string",
             &PlayerReader::ReadLanguage } },
+
+        // Game / player runtime state
+        { "Game::Status",
+          { "Current game/player state flags: paused, loading, inMainMenu, inDialogue, inCombat, dead, controlsEnabled, canAct", "object",
+            &PlayerReader::ReadGameStatus } },
     };
     // clang-format on
 
