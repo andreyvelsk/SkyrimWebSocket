@@ -115,3 +115,7 @@ If you encounter a bug, please [open a GitHub issue](https://github.com/andreyve
    %USERPROFILE%\Documents\My Games\Skyrim Special Edition\SKSE\SkyrimWebSocket.log
    ```
 3. If the game crashed, also attach the `.dmp` file found in the same folder.
+
+## Credits
+
+- *The Elder Scrolls V: Skyrim* is © Bethesda Softworks / ZeniMax. This is an unofficial fan-made plugin and is not affiliated with or endorsed by Bethesda.
