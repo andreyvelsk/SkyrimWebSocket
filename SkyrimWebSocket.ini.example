@@ -7,3 +7,24 @@ ListenAddress=127.0.0.1
 ; TCP port the WebSocket server listens on.
 ; Default: 8765
 Port=8765
+
+[Debug]
+; Log verbosity level. By default no log file is written.
+;
+; Possible values:
+;   off   — no logging (default, recommended for normal use)
+;   info  — server start/stop, client connect/disconnect, command results
+;   debug — all of the above + every received message, subscription details,
+;           equip/unequip parameters
+;   trace — maximum verbosity, including every subscription poll cycle
+;
+; When any level other than "off" is set, the plugin also installs a crash
+; handler that flushes the log and writes a minidump (.dmp) next to the
+; log file when Skyrim crashes.
+;
+; Log file location:
+;   %USERPROFILE%\Documents\My Games\Skyrim Special Edition\SKSE\SkyrimWebSocket.log
+;
+; To report a bug or crash, set LogLevel=debug, reproduce the problem,
+; then send both the .log and .dmp files.
+LogLevel=off

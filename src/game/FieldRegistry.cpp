@@ -1,4 +1,5 @@
 #include "FieldRegistry.h"
+#include "HotkeyReader.h"
 #include "InventoryReader.h"
 #include "MagicReader.h"
 #include "PlayerReader.h"
@@ -262,6 +263,11 @@ namespace FieldRegistry
           { "Enchanting spells known by player", "array",
             &MagicReader::ReadEnchanting } },
 
+        // Hotkeys
+        { "Hotkey::Items",
+          { "All 8 hotkey slots with their current bindings (spells, shouts, powers, or items)", "array",
+            &HotkeyReader::ReadItems } },
+
         // Player stats
         { "Player::Level",
           { "Character level", "integer",
@@ -285,7 +291,12 @@ namespace FieldRegistry
         // Game settings
         { "Game::Language",
           { "Current game language from sLanguage:General INI setting (e.g. \"english\", \"russian\")", "string",
-            &PlayerReader::ReadLanguage } },
+            &PlayerReader::ReadLanguage, /*requiresInGame=*/false } },
+
+        // Game / player runtime state
+        { "Game::Status",
+          { "Current game/player state flags: paused, loading, inMainMenu, inDialogue, inCombat, dead, controlsEnabled, canAct", "object",
+            &PlayerReader::ReadGameStatus, /*requiresInGame=*/false } },
 
         // Player position and heading
         { "Player::Position",
@@ -318,5 +329,20 @@ namespace FieldRegistry
         if (it == s_json_registry.end())
             return std::nullopt;
         return it->second;
+    }
+
+    bool IsInGame()
+    {
+        // Main menu open => definitely not in a save.
+        if (auto* ui = RE::UI::GetSingleton()) {
+            if (ui->IsMenuOpen(RE::MainMenu::MENU_NAME))
+                return false;
+        }
+        // Player must exist and be in a loaded cell. parentCell is null on
+        // the main menu and during the load screen between saves.
+        auto* player = RE::PlayerCharacter::GetSingleton();
+        if (!player || !player->GetParentCell())
+            return false;
+        return true;
     }
 }

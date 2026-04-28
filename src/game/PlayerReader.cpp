@@ -211,4 +211,118 @@ namespace PlayerReader
 
         return result;
     }
+
+    nlohmann::json ReadGameStatus()
+    {
+        nlohmann::json out = {
+            { "paused",           false },
+            { "loading",          false },
+            { "inMainMenu",       false },
+            { "inDialogue",       false },
+            { "inCombat",         false },
+            { "dead",             false },
+            { "controlsEnabled",  true  },
+            { "canAct",           false },
+        };
+
+        bool paused     = false;
+        bool loading    = false;
+        bool inMainMenu = false;
+        bool inDialogue = false;
+
+        if (auto* ui = RE::UI::GetSingleton())
+        {
+            paused     = ui->GameIsPaused();
+            // NOTE: official menu names contain a space:
+            // LoadingMenu::MENU_NAME = "Loading Menu", MainMenu::MENU_NAME = "Main Menu",
+            // DialogueMenu::MENU_NAME = "Dialogue Menu".
+            loading    = ui->IsMenuOpen(RE::LoadingMenu::MENU_NAME);
+            inMainMenu = ui->IsMenuOpen(RE::MainMenu::MENU_NAME);
+            inDialogue = ui->IsMenuOpen(RE::DialogueMenu::MENU_NAME);
+
+            // Quick interior door transitions don't open the full LoadingMenu,
+            // they fade through FaderMenu instead. Treat that as loading too.
+            if (!loading && ui->IsMenuOpen("Fader Menu"))
+                loading = true;
+        }
+
+        // MenuTopicManager.speaker / lastSpeaker remain set while a conversation
+        // is active even after the dialogue menu has been torn down (e.g. the
+        // NPC is still speaking the last line). Treat any valid speaker handle
+        // as "in dialogue".
+        if (auto* mtm = RE::MenuTopicManager::GetSingleton())
+        {
+            if (mtm->speaker || mtm->lastSpeaker)
+                inDialogue = true;
+        }
+
+        bool inCombat        = false;
+        bool dead            = false;
+        bool inKillMove      = false;
+        bool inFurniture     = false;
+        bool inForcedAnim    = false;  // ragdoll, knock-down, sit/sleep, mount, getting on/off mount
+
+        if (auto* player = RE::PlayerCharacter::GetSingleton())
+        {
+            inCombat = player->IsInCombat();
+
+            // Use ActorState life-state so we catch the entire death sequence
+            // (dying animation -> ragdoll -> "you died" load screen), not just
+            // the final state.
+            switch (player->AsActorState()->GetLifeState())
+            {
+            case RE::ACTOR_LIFE_STATE::kAlive:
+                dead = false;
+                break;
+            default:
+                // kDying, kDead, kUnconcious, kReanimate, kRecycle,
+                // kRestrained, kEssentialDown, kBleedout
+                dead = true;
+                break;
+            }
+
+            inKillMove = player->IsInKillMove();
+
+            // Crafting (forge, workbench, alchemy, enchanting, cooking),
+            // sitting, sleeping, wait-menu — all set an occupied-furniture
+            // reference on the actor.
+            if (player->GetOccupiedFurniture())
+                inFurniture = true;
+
+            // Sit / sleep / mount transitions disable normal controls even
+            // while no UI menu is open (animation in progress).
+            const auto sitSleep = player->AsActorState()->GetSitSleepState();
+            if (sitSleep != RE::SIT_SLEEP_STATE::kNormal)
+                inForcedAnim = true;
+
+            // Knockdown / stagger / ragdoll
+            if (player->AsActorState()->GetKnockState() != RE::KNOCK_STATE_ENUM::kNormal)
+                inForcedAnim = true;
+        }
+
+        // PlayerControls::blockPlayerInput is set in cinematics / scripted
+        // sequences / cart intro / forced first-person scenes. Combined with
+        // the actor-state checks above, this gives a reliable
+        // "the engine has taken control away from the player" signal.
+        bool inputBlocked = false;
+        if (auto* pc = RE::PlayerControls::GetSingleton())
+        {
+            inputBlocked = pc->blockPlayerInput;
+        }
+
+        bool controlsEnabled =
+            !inputBlocked && !inKillMove && !inFurniture && !inForcedAnim && !dead;
+
+        out["paused"]          = paused;
+        out["loading"]         = loading;
+        out["inMainMenu"]      = inMainMenu;
+        out["inDialogue"]      = inDialogue;
+        out["inCombat"]        = inCombat;
+        out["dead"]            = dead;
+        out["controlsEnabled"] = controlsEnabled;
+        out["canAct"]          = !paused && !loading && !inMainMenu &&
+                                 !inDialogue && !dead && controlsEnabled;
+
+        return out;
+    }
 }
