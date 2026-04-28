@@ -1,5 +1,7 @@
 #include "PlayerReader.h"
 
+#include <unordered_set>
+
 namespace PlayerReader
 {
     nlohmann::json ReadLevel()
@@ -162,30 +164,33 @@ namespace PlayerReader
 
         nlohmann::json result = nlohmann::json::array();
 
-        // Iterate all persistent object references to find map markers.
-        // This approach works in SE/AE/VR and multi-targeting builds where
-        // PlayerCharacter::PLAYER_RUNTIME_DATA::currentMapMarkers is absent.
+        // Map markers are persistent refs attached to each worldspace, NOT
+        // members of TESDataHandler::GetFormArray<TESObjectREFR>() (that array
+        // does not store object references). We iterate every worldspace and
+        // walk its fixedPersistentRefMap + mobilePersistentRefs, looking for
+        // refs that carry an ExtraMapMarker.
         auto* handler = RE::TESDataHandler::GetSingleton();
         if (!handler)
             return result;
 
-        for (auto* form : handler->GetFormArray<RE::TESObjectREFR>()) {
+        std::unordered_set<RE::FormID> seen;
+
+        auto emit = [&](RE::TESObjectREFR* form) {
             if (!form)
-                continue;
+                return;
 
             auto* extra = form->extraList.GetByType<RE::ExtraMapMarker>();
             if (!extra || !extra->mapData)
-                continue;
+                return;
+
+            // Avoid duplicates if the same marker shows up in multiple containers.
+            if (!seen.insert(form->GetFormID()).second)
+                return;
 
             auto* data = extra->mapData;
 
             using Flag = RE::MapMarkerData::Flag;
             const bool isVisible     = data->flags.any(Flag::kVisible);
-
-            // Skip markers the player hasn't discovered yet
-            if (!isVisible)
-                continue;
-
             const bool canFastTravel = data->flags.any(Flag::kCanTravelTo);
 
             const auto typeId   = static_cast<uint32_t>(data->type.underlying());
@@ -207,6 +212,19 @@ namespace PlayerReader
             entry["canFastTravel"] = canFastTravel;
 
             result.push_back(std::move(entry));
+        };
+
+        for (auto* world : handler->GetFormArray<RE::TESWorldSpace>()) {
+            if (!world)
+                continue;
+
+            for (auto& [_, refs] : world->fixedPersistentRefMap) {
+                for (auto& ref : refs)
+                    emit(ref.get());
+            }
+
+            for (auto& ref : world->mobilePersistentRefs)
+                emit(ref.get());
         }
 
         return result;

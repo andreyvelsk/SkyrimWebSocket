@@ -305,7 +305,8 @@ namespace FieldRegistry
 
         // Map markers
         { "Map::Markers",
-          { "Array of all map markers the player has discovered. Each entry: { refId, name, type, typeId, x, y, isVisible, canFastTravel }.", "array",
+          { "Array of all map markers in every loaded worldspace (discovered and undiscovered). Each entry: { refId, name, type, typeId, x, y, isVisible, canFastTravel }.",
+            "array",
             &PlayerReader::ReadMapMarkers } },
     };
     // clang-format on

@@ -8,14 +8,16 @@ Map fields expose the player's discovered locations and their metadata.
 
 | Registry key | Value type | Description |
 |---|---|---|
-| `Map::Markers` | `array` | All map markers the player has discovered |
+| `Map::Markers` | `array` | All map markers in every loaded worldspace (discovered and undiscovered) |
 
 ---
 
 ## `Map::Markers`
 
-Returns an array of every map marker the player has already revealed. Each element
-is a JSON object describing one location.
+Returns an array of every map marker present in the loaded worldspaces. Each
+element is a JSON object describing one location. Use the `isVisible` flag to
+distinguish markers the player has already discovered from those that are still
+hidden on the in-game map.
 
 ### Entry shape
 
