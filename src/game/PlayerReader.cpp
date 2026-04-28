@@ -367,9 +367,9 @@ namespace PlayerReader
             }
 
             std::size_t visited = 0;
-            persist->ForEachReference([&](RE::TESObjectREFR* ref) {
+            persist->ForEachReference([&](RE::TESObjectREFR& ref) {
                 ++visited;
-                emit(ref);
+                emit(&ref);
                 return RE::BSContainer::ForEachResult::kContinue;
             });
             logger::info("[Map::Markers] world #{} done, refs visited = {}", idx, visited);
