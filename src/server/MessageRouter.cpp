@@ -10,7 +10,8 @@
 #include <nlohmann/json.hpp>
 #include <optional>
 
-namespace asio = boost::asio;
+namespace asio   = boost::asio;
+namespace logger = SKSE::log;
 
 namespace MessageRouter
 {
@@ -64,6 +65,8 @@ namespace MessageRouter
         resp["success"] = result.success;
         if (!result.success)
             resp["error"] = result.error;
+        if (!result.data.is_null())
+            resp["data"] = result.data;
         return resp.dump();
     }
 
@@ -78,16 +81,80 @@ namespace MessageRouter
             session->send(R"({"type":"error","message":"Missing 'command' field"})");
             return;
         }
+
+        const std::string cmdId   = msg["id"].get<std::string>();
+        const std::string command = msg["command"].get<std::string>();
+
+        // Hotkey commands have different argument shapes; dispatch them
+        // separately so we don't force a formId on clear/trigger.
+        if (command == "hotkey_set" || command == "hotkey_clear" ||
+            command == "hotkey_trigger")
+        {
+            const bool needsFormId = (command == "hotkey_set");
+
+            if (!msg.contains("slot") || !msg["slot"].is_number_integer()) {
+                nlohmann::json err;
+                err["type"]    = "commandResult";
+                err["id"]      = cmdId;
+                err["success"] = false;
+                err["error"]   = "Missing or invalid 'slot' (expected integer 1..8)";
+                session->send(err.dump());
+                return;
+            }
+            const int slot = msg["slot"].get<int>();
+
+            RE::FormID formId = 0;
+            if (needsFormId) {
+                if (!msg.contains("formId") || !msg["formId"].is_string()) {
+                    nlohmann::json err;
+                    err["type"]    = "commandResult";
+                    err["id"]      = cmdId;
+                    err["success"] = false;
+                    err["error"]   = "Missing 'formId' field";
+                    session->send(err.dump());
+                    return;
+                }
+                const std::string formIdStr = msg["formId"].get<std::string>();
+                const auto        parsed    = ParseFormId(formIdStr);
+                if (!parsed) {
+                    nlohmann::json err;
+                    err["type"]    = "commandResult";
+                    err["id"]      = cmdId;
+                    err["success"] = false;
+                    err["error"]   = "Invalid formId: '" + formIdStr + "'";
+                    session->send(err.dump());
+                    return;
+                }
+                formId = *parsed;
+            }
+
+            SKSE::GetTaskInterface()->AddTask([session, cmdId, command, slot, formId]() {
+                GameWriter::CommandResult result;
+                const auto slotU8 = static_cast<std::uint8_t>(slot);
+                if (command == "hotkey_set")
+                    result = GameWriter::SetHotkey(slotU8, formId);
+                else if (command == "hotkey_clear")
+                    result = GameWriter::ClearHotkey(slotU8);
+                else
+                    result = GameWriter::TriggerHotkey(slotU8);
+
+                std::string json = BuildCommandResultJson(cmdId, result);
+                asio::post(session->ioc(), [session, json] { session->send(json); });
+            });
+            return;
+        }
+
         if (!msg.contains("formId") || !msg["formId"].is_string()) {
             session->send(R"({"type":"error","message":"Missing 'formId' field"})");
             return;
         }
 
-        const std::string cmdId      = msg["id"].get<std::string>();
-        const std::string command    = msg["command"].get<std::string>();
         const std::string formIdStr  = msg["formId"].get<std::string>();
         const std::string hand       = msg.value("hand", "right");
         const int         count      = msg.value("count", 1);
+
+        logger::debug("command '{}' id='{}' formId={} hand={} count={}",
+                      command, cmdId, formIdStr, hand, count);
 
         const auto parsed = ParseFormId(formIdStr);
         if (!parsed) {
@@ -125,6 +192,11 @@ namespace MessageRouter
             else
                 result = {false, "Unknown command: '" + command + "'"};
 
+            if (result.success)
+                logger::debug("command '{}' id='{}' succeeded", command, cmdId);
+            else
+                logger::warn("command '{}' id='{}' failed: {}", command, cmdId, result.error);
+
             std::string json = BuildCommandResultJson(cmdId, result);
             asio::post(session->ioc(), [session, json] { session->send(json); });
         });
@@ -141,6 +213,10 @@ namespace MessageRouter
         }
 
         const std::string type = msg.value("type", "");
+
+        // Skip noisy heartbeat messages from debug log.
+        if (type != "heartbeat")
+            logger::debug("WS message: type='{}'", type);
 
         if (type == "subscribe") {
             if (!msg.contains("id") || !msg["id"].is_string()) {
@@ -162,6 +238,8 @@ namespace MessageRouter
                     return;
             }
 
+            logger::debug("subscribe id='{}' freq={}ms sendOnChange={} fields={}",
+                          state.id, state.frequencyMs, state.sendOnChange, state.fields.size());
             session->SetSubscription(std::move(state));
 
         } else if (type == "unsubscribe") {

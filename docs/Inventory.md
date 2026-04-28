@@ -110,7 +110,7 @@ Every item includes a `categoryType` field that identifies its category. The pos
 
 Additional fields:
 - `isEquipped` (bool) — Currently equipped on character
-- `weaponType` (string) — Weapon category: `"OneHandSword"`, `"OneHandDagger"`, `"OneHandAxe"`, `"OneHandMace"`, `"TwoHandSword"`, `"TwoHandAxe"`, `"Bow"`, `"Staff"`, `"Crossbow"`, `"HandToHand"`, or `null`
+- `weaponType` (string) — Weapon category: `"OneHandSword"`, `"OneHandDagger"`, `"OneHandAxe"`, `"OneHandMace"`, `"TwoHandSword"`, `"TwoHandAxe"`, `"Bow"`, `"Staff"`, `"Crossbow"`, `"HandToHandMelee"`, or `null`
 - `isTwoHanded` (bool) — `true` for two-handed melee weapons, bows, and crossbows (occupies both hand slots)
 - `equipSlots` (array of strings) — Valid equip targets: `["right", "left"]` for one-handed, `["right"]` for two-handed
 - `equippedHand` (string or null) — Current equip hand: `"right"`, `"left"`, `"both"` (same weapon dual-wielded), or `null` if not equipped

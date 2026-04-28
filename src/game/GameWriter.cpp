@@ -2,6 +2,9 @@
 #include "../Utils.h"
 
 #include <algorithm>
+#include <format>
+
+namespace logger = SKSE::log;
 
 namespace GameWriter
 {
@@ -61,7 +64,7 @@ namespace GameWriter
 
     // Returns the ExtraDataList that carries the kWorn or kWornLeft flag
     // for unequipping from a specific hand.
-    static RE::ExtraDataList* FindWornExtraDataList(RE::InventoryEntryData* entry, bool leftHand)
+    [[maybe_unused]] static RE::ExtraDataList* FindWornExtraDataList(RE::InventoryEntryData* entry, bool leftHand)
     {
         if (!entry || !entry->extraLists)
             return nullptr;
@@ -100,7 +103,7 @@ namespace GameWriter
 
     // Returns the first ExtraDataList that is NOT worn in either hand.
     // Used to obtain a "clean" xList to pass to EquipObject.
-    static RE::ExtraDataList* FindUnwornExtraDataList(RE::InventoryEntryData* entry)
+    [[maybe_unused]] static RE::ExtraDataList* FindUnwornExtraDataList(RE::InventoryEntryData* entry)
     {
         if (!entry || !entry->extraLists)
             return nullptr;
@@ -116,7 +119,7 @@ namespace GameWriter
 
     // Unequips a weapon from a specific hand.  Used internally before
     // equipping to the opposite hand (hand swap).
-    static void DoUnequipWeapon(RE::ActorEquipManager* equipMgr,
+    [[maybe_unused]] static void DoUnequipWeapon(RE::ActorEquipManager* equipMgr,
                                 RE::PlayerCharacter*   player,
                                 RE::TESBoundObject*    form,
                                 RE::ExtraDataList*     xList,
@@ -130,10 +133,52 @@ namespace GameWriter
                                 /*a_applyNow=*/false);
     }
 
+    // Dispatches a Papyrus method call on the player.  Returns true when the
+    // call was queued on the VM.  Delegating to Papyrus lets the engine run
+    // the same equip/unequip/drop logic that the vanilla UI uses — no more
+    // hand-rolled hand-swapping, ExtraDataList hunting, or 2H↔1H corner cases.
+    template <typename... Args>
+    static bool DispatchPlayerMethod(RE::PlayerCharacter* player,
+                                     const char*          className,
+                                     const char*          methodName,
+                                     Args...              args)
+    {
+        auto* vm = RE::BSScript::Internal::VirtualMachine::GetSingleton();
+        if (!vm) {
+            logger::error("Papyrus VM unavailable");
+            return false;
+        }
+        auto* policy = vm->GetObjectHandlePolicy();
+        if (!policy) {
+            logger::error("Papyrus VM handle policy unavailable");
+            return false;
+        }
+        const auto handle = policy->GetHandleForObject(
+            static_cast<RE::VMTypeID>(player->GetFormType()), player);
+
+        auto* fnArgs = RE::MakeFunctionArguments(std::move(args)...);
+        RE::BSTSmartPointer<RE::BSScript::IStackCallbackFunctor> callback;
+        return vm->DispatchMethodCall(handle,
+                                      RE::BSFixedString(className),
+                                      RE::BSFixedString(methodName),
+                                      fnArgs,
+                                      callback);
+    }
+
+    // Papyrus Actor.EquipItemEx / UnequipItemEx aiEquipSlot values.
+    // See https://ck.uesp.net/wiki/EquipItemEx_-_Actor
+    //   0 = Default (engine picks; right for 1H, both for 2H, body slot for armor)
+    //   1 = Right Hand
+    //   2 = Left Hand
+    static constexpr std::int32_t kEquipSlotDefault   = 0;
+    static constexpr std::int32_t kEquipSlotRightHand = 1;
+    static constexpr std::int32_t kEquipSlotLeftHand  = 2;
+
     // ─── Commands ─────────────────────────────────────────────────────────
 
     CommandResult EquipItem(RE::FormID formId, const std::string& hand)
     {
+        logger::trace("EquipItem enter: formId=0x{:08X} hand='{}'", formId, hand);
         auto* player = RE::PlayerCharacter::GetSingleton();
         if (!player)
             return {false, "Player not available"};
@@ -143,6 +188,8 @@ namespace GameWriter
             return {false, "Form not found"};
 
         const int32_t itemCount = GetInventoryCount(player, formId);
+        logger::trace("EquipItem 0x{:08X} ('{}') invCount={} formType={}",
+                      formId, form->GetName(), itemCount, static_cast<int>(form->GetFormType()));
         if (itemCount <= 0)
             return {false, "Item not in inventory"};
 
@@ -150,57 +197,45 @@ namespace GameWriter
         if (!IsEquippable(ft))
             return {false, "Item is not equippable (use 'use' for consumables)"};
 
-        auto* equipMgr = RE::ActorEquipManager::GetSingleton();
-        if (!equipMgr)
-            return {false, "Equipment manager not available"};
-
-        const RE::BGSEquipSlot* slot  = nullptr;
-        RE::ExtraDataList*      xData = nullptr;
-
+        // Determine the Papyrus aiEquipSlot parameter.  The engine's
+        // Actor.EquipItemEx handles all the 2H↔1H swapping, ExtraDataList
+        // allocation and inventory bookkeeping that we previously did by hand.
+        std::int32_t slotArg = kEquipSlotDefault;
         if (ft == RE::FormType::Weapon) {
             const auto* weap = form->As<RE::TESObjectWEAP>();
-            if (weap && IsWeaponTwoHanded(weap->GetWeaponType()) && hand == "left")
+            const bool  twoHanded = weap && IsWeaponTwoHanded(weap->GetWeaponType());
+            if (twoHanded && hand == "left")
                 return {false, "Two-handed weapon can only be equipped in the right hand"};
-
-            slot = GetHandSlot(hand);
-
-            const bool leftHand = (hand == "left");
-
-            auto* liveEntry = FindLiveEntry(player, formId);
-            if (liveEntry) {
-                RE::ExtraDataList* wornRight = FindWornExtraDataList(liveEntry, false);
-                RE::ExtraDataList* wornLeft  = FindWornExtraDataList(liveEntry, true);
-
-                const bool inTarget = leftHand ? (wornLeft != nullptr)
-                                               : (wornRight != nullptr);
-                const bool inOther  = leftHand ? (wornRight != nullptr)
-                                               : (wornLeft != nullptr);
-
-                if (inTarget)
-                    return {true, ""};
-
-                if (inOther && itemCount < 2) {
-                    RE::ExtraDataList* otherXList = leftHand ? wornRight : wornLeft;
-                    DoUnequipWeapon(equipMgr, player, form, otherXList, !leftHand);
-                }
-
-                xData = FindUnwornExtraDataList(liveEntry);
-            }
+            if (twoHanded)
+                slotArg = kEquipSlotDefault;  // engine auto-grips 2H with both hands
+            else if (hand == "left")
+                slotArg = kEquipSlotLeftHand;
+            else
+                slotArg = kEquipSlotRightHand;
         }
-        // For armor and ammo: slot = nullptr, xData = nullptr → engine auto-selects.
+        // For armor and ammo aiEquipSlot is ignored by the engine, so leave
+        // it at the right-hand default.
 
-        equipMgr->EquipObject(player, form, xData, 1, slot,
-                              /*a_queueEquip=*/true,
-                              /*a_forceEquip=*/false,
-                              /*a_playSounds=*/true,
-                              /*a_applyNow=*/false);
+        logger::trace("EquipItem 0x{:08X}: dispatching Actor.EquipItemEx slot={}", formId, slotArg);
+        const bool ok = DispatchPlayerMethod(
+            player, "Actor", "EquipItemEx",
+            static_cast<RE::TESForm*>(form),
+            slotArg,
+            /*abPreventRemoval=*/false,
+            /*abSilent=*/false);
+        if (!ok)
+            return {false, "Papyrus dispatch failed"};
 
-        PrintConsole("[WS] Equip " + std::string(form->GetName()) + (slot ? " → " + hand : ""));
+        logger::debug("equip 0x{:08X} ('{}') hand='{}' type={} slot={}",
+                      formId, form->GetName(), hand, static_cast<int>(ft), slotArg);
+        PrintConsole("[WS] Equip " + std::string(form->GetName()) +
+                     (ft == RE::FormType::Weapon ? " → " + hand : ""));
         return {true, ""};
     }
 
     CommandResult UnequipItem(RE::FormID formId, const std::string& hand)
     {
+        logger::trace("UnequipItem enter: formId=0x{:08X} hand='{}'", formId, hand);
         auto* player = RE::PlayerCharacter::GetSingleton();
         if (!player)
             return {false, "Player not available"};
@@ -212,47 +247,38 @@ namespace GameWriter
         if (GetInventoryCount(player, formId) <= 0)
             return {false, "Item not in inventory"};
 
-        auto* liveEntry = FindLiveEntry(player, formId);
-        if (!liveEntry || !liveEntry->IsWorn())
-            return {false, "Item is not equipped"};
-
-        auto* equipMgr = RE::ActorEquipManager::GetSingleton();
-        if (!equipMgr)
-            return {false, "Equipment manager not available"};
-
+        // For weapons we select the specific hand slot via UnequipItemEx.
+        // For everything else we call UnequipItem (slot is irrelevant and
+        // the engine will unequip wherever the item is currently worn).
         const auto ft = form->GetFormType();
-
+        bool ok = false;
         if (ft == RE::FormType::Weapon) {
-            const bool leftHand = (hand == "left");
-
-            RE::ExtraDataList* wornRight = FindWornExtraDataList(liveEntry, false);
-            RE::ExtraDataList* wornLeft  = FindWornExtraDataList(liveEntry, true);
-
-            bool doRight = !leftHand && wornRight;
-            bool doLeft  = leftHand && wornLeft;
-
-            if (!doRight && !doLeft) {
-                doRight = wornRight != nullptr;
-                doLeft  = wornLeft != nullptr;
-            }
-
-            if (!doRight && !doLeft)
-                return {false, "Weapon not found in any hand"};
-
-            if (doRight && wornRight)
-                DoUnequipWeapon(equipMgr, player, form, wornRight, false);
-            if (doLeft && wornLeft)
-                DoUnequipWeapon(equipMgr, player, form, wornLeft, true);
+            std::int32_t slotArg = (hand == "left") ? kEquipSlotLeftHand : kEquipSlotRightHand;
+            logger::trace("UnequipItem 0x{:08X}: dispatching Actor.UnequipItemEx slot={}", formId, slotArg);
+            ok = DispatchPlayerMethod(
+                player, "Actor", "UnequipItemEx",
+                static_cast<RE::TESForm*>(form),
+                slotArg,
+                /*abPreventEquipping=*/false);
         } else {
-            equipMgr->UnequipObject(player, form);
+            logger::trace("UnequipItem 0x{:08X}: dispatching Actor.UnequipItem", formId);
+            ok = DispatchPlayerMethod(
+                player, "Actor", "UnequipItem",
+                static_cast<RE::TESForm*>(form),
+                /*abPreventEquipping=*/false,
+                /*abSilent=*/false);
         }
+        if (!ok)
+            return {false, "Papyrus dispatch failed"};
 
+        logger::debug("unequip 0x{:08X} ('{}') hand='{}'", formId, form->GetName(), hand);
         PrintConsole("[WS] Unequip " + std::string(form->GetName()));
         return {true, ""};
     }
 
     CommandResult UseItem(RE::FormID formId)
     {
+        logger::trace("UseItem enter: formId=0x{:08X}", formId);
         auto* player = RE::PlayerCharacter::GetSingleton();
         if (!player)
             return {false, "Player not available"};
@@ -261,26 +287,36 @@ namespace GameWriter
         if (!form)
             return {false, "Form not found"};
 
-        if (GetInventoryCount(player, formId) <= 0)
+        const int32_t invCnt = GetInventoryCount(player, formId);
+        logger::trace("UseItem 0x{:08X} ('{}') invCount={} formType={}",
+                      formId, form->GetName(), invCnt, static_cast<int>(form->GetFormType()));
+        if (invCnt <= 0)
             return {false, "Item not in inventory"};
 
         if (!IsConsumable(form->GetFormType()))
             return {false, "Item is not consumable (use 'equip' for weapons/apparel)"};
 
-        auto* equipMgr = RE::ActorEquipManager::GetSingleton();
-        if (!equipMgr)
-            return {false, "Equipment manager not available"};
+        // Actor.EquipItem on a potion/food/scroll triggers consumption (or
+        // equip-for-casting for scrolls), mirroring vanilla UI behaviour.
+        // abSilent=true suppresses the "<item> equipped" HUD message that
+        // Skyrim does not show when the player consumes the item from the
+        // inventory menu.
+        const bool ok = DispatchPlayerMethod(
+            player, "Actor", "EquipItem",
+            static_cast<RE::TESForm*>(form),
+            /*abPreventRemoval=*/false,
+            /*abSilent=*/true);
+        if (!ok)
+            return {false, "Papyrus dispatch failed"};
 
-        // EquipObject on consumables triggers consumption (potions, food,
-        // ingredients) or equips for casting (scrolls).
-        equipMgr->EquipObject(player, form);
-
+        logger::debug("use 0x{:08X} ('{}')", formId, form->GetName());
         PrintConsole("[WS] Use " + std::string(form->GetName()));
         return {true, ""};
     }
 
     CommandResult DropItem(RE::FormID formId, int count)
     {
+        logger::trace("DropItem enter: formId=0x{:08X} count={}", formId, count);
         auto* player = RE::PlayerCharacter::GetSingleton();
         if (!player)
             return {false, "Player not available"};
@@ -298,8 +334,16 @@ namespace GameWriter
         if (count > have)
             return {false, "Not enough items (have " + std::to_string(have) + ")"};
 
-        player->RemoveItem(form, count, RE::ITEM_REMOVE_REASON::kDropping, nullptr, nullptr);
+        // ObjectReference.DropObject is the Papyrus equivalent of the vanilla
+        // drop-from-inventory action (animation, sound, physics).
+        const bool ok = DispatchPlayerMethod(
+            player, "ObjectReference", "DropObject",
+            static_cast<RE::TESForm*>(form),
+            static_cast<std::int32_t>(count));
+        if (!ok)
+            return {false, "Papyrus dispatch failed"};
 
+        logger::debug("drop 0x{:08X} ('{}') count={}", formId, form->GetName(), count);
         PrintConsole("[WS] Drop " + std::to_string(count) + "x " + std::string(form->GetName()));
         return {true, ""};
     }
@@ -310,18 +354,48 @@ namespace GameWriter
         if (!player)
             return {false, "Player not available"};
 
-        if (GetInventoryCount(player, formId) <= 0)
+        auto* form = RE::TESForm::LookupByID<RE::TESBoundObject>(formId);
+        if (!form)
+            return {false, "Form not found"};
+
+        const int32_t count = GetInventoryCount(player, formId);
+        logger::debug("favorite 0x{:08X} ('{}') invCount={}", formId, form->GetName(), count);
+
+        if (count <= 0)
             return {false, "Item not in inventory"};
 
-        auto* liveEntry = FindLiveEntry(player, formId);
-        if (!liveEntry)
-            return {false, "Item not found in inventory changes"};
-
         auto* invChanges = player->GetInventoryChanges();
+        logger::trace("favorite 0x{:08X}: invChanges={}", formId, static_cast<const void*>(invChanges));
         if (!invChanges)
             return {false, "Inventory changes not available"};
 
-        // Get the first available ExtraDataList (may be nullptr for basic items).
+        // Items that live only in the player's base TESContainer (e.g. starting
+        // iron dagger, freshly levelled gear) are visible via GetInventory() but
+        // have no live InventoryEntryData in InventoryChanges::entryList — the
+        // engine lazily allocates entries only on mutation.  Force the engine
+        // to create a proper entry (with its own ExtraDataList managed by the
+        // engine) by doing a neutral +1/-1 container transaction.  This way we
+        // never hand a hand-rolled ExtraDataList to the engine, which avoids
+        // crashes on AE 1.6.629+ where BaseExtraList has a virtual destructor
+        // and non-trivial layout.
+        auto* liveEntry = FindLiveEntry(player, formId);
+        logger::trace("favorite 0x{:08X}: initial FindLiveEntry={}", formId,
+                      static_cast<const void*>(liveEntry));
+        if (!liveEntry) {
+            logger::trace("favorite 0x{:08X}: forcing entry creation via AddObjectToContainer/RemoveItem", formId);
+            player->AddObjectToContainer(form, nullptr, 1, nullptr);
+            player->RemoveItem(form, 1, RE::ITEM_REMOVE_REASON::kRemove, nullptr, nullptr);
+
+            liveEntry = FindLiveEntry(player, formId);
+            logger::trace("favorite 0x{:08X}: after force, FindLiveEntry={}", formId,
+                          static_cast<const void*>(liveEntry));
+            if (!liveEntry)
+                return {false, "Failed to materialize inventory entry for item"};
+        }
+
+        // Pick an ExtraDataList owned by the engine, if any.  SetFavorite
+        // attaches an ExtraHotkey to it; when xList is null the engine
+        // allocates one itself (safe path — never pass a hand-rolled xList).
         RE::ExtraDataList* xList = nullptr;
         if (liveEntry->extraLists) {
             for (auto* xl : *liveEntry->extraLists) {
@@ -331,12 +405,21 @@ namespace GameWriter
                 }
             }
         }
+        logger::trace("favorite 0x{:08X}: selected xList={} extraListsPtr={}",
+                      formId,
+                      static_cast<const void*>(xList),
+                      static_cast<const void*>(liveEntry->extraLists));
 
-        if (liveEntry->IsFavorited()) {
+        const bool wasFavorited = liveEntry->IsFavorited();
+        logger::trace("favorite 0x{:08X}: wasFavorited={}", formId, wasFavorited);
+
+        if (wasFavorited) {
             invChanges->RemoveFavorite(liveEntry, xList);
+            logger::debug("favorite 0x{:08X}: removed from favorites", formId);
             PrintConsole("[WS] Unfavorite " + std::string(liveEntry->object->GetName()));
         } else {
             invChanges->SetFavorite(liveEntry, xList);
+            logger::debug("favorite 0x{:08X}: added to favorites", formId);
             PrintConsole("[WS] Favorite " + std::string(liveEntry->object->GetName()));
         }
         return {true, ""};
@@ -344,6 +427,7 @@ namespace GameWriter
 
     CommandResult EquipSpell(RE::FormID formId, const std::string& hand)
     {
+        logger::trace("EquipSpell enter: formId=0x{:08X} hand='{}'", formId, hand);
         auto* player = RE::PlayerCharacter::GetSingleton();
         if (!player)
             return {false, "Player not available"};
@@ -387,12 +471,14 @@ namespace GameWriter
         const auto* slot = GetHandSlot(hand);
         equipMgr->EquipSpell(player, spell, slot);
 
+        logger::debug("equip_spell 0x{:08X} ('{}') hand='{}'", formId, spell->GetName(), hand);
         PrintConsole("[WS] Equip spell " + std::string(spell->GetName()) + " \xe2\x86\x92 " + hand);
         return {true, ""};
     }
 
     CommandResult UnequipSpell(RE::FormID formId, const std::string& hand)
     {
+        logger::trace("UnequipSpell enter: formId=0x{:08X} hand='{}'", formId, hand);
         auto* player = RE::PlayerCharacter::GetSingleton();
         if (!player)
             return {false, "Player not available"};
@@ -444,12 +530,15 @@ namespace GameWriter
             }
         }
 
+        logger::debug("unequip_spell 0x{:08X} ('{}') hand='{}' inBothHands={} isMaster={}",
+                      formId, spell->GetName(), hand, spellInBothHands, isMasterSpell);
         PrintConsole("[WS] Unequip spell " + std::string(spell->GetName()) + " \xe2\x86\x90 " + hand);
         return {true, ""};
     }
 
     CommandResult FavoriteSpell(RE::FormID formId)
     {
+        logger::trace("FavoriteSpell enter: formId=0x{:08X}", formId);
         auto* player = RE::PlayerCharacter::GetSingleton();
         if (!player)
             return {false, "Player not available"};
@@ -541,6 +630,324 @@ namespace GameWriter
         target->AddChange(RE::TESQuest::ChangeFlags::kQuestFlags);
 
         PrintConsole("[WS] Set active quest " + std::string(target->GetName() ? target->GetName() : ""));
+        return {true, ""};
+    }
+
+    // ─── Hotkeys ──────────────────────────────────────────────────────────
+
+    // True when a spell form can be placed on a hotkey slot (same categories
+    // that the vanilla magic favorites menu accepts: spells, powers, lesser
+    // powers, shouts).  Diseases, abilities, scrolls etc. are not eligible.
+    static bool IsHotkeyableSpell(RE::SpellItem* spell)
+    {
+        if (!spell)
+            return false;
+        switch (spell->GetSpellType()) {
+            case RE::MagicSystem::SpellType::kSpell:
+            case RE::MagicSystem::SpellType::kPower:
+            case RE::MagicSystem::SpellType::kLesserPower:
+            case RE::MagicSystem::SpellType::kVoicePower:
+                return true;
+            default:
+                return false;
+        }
+    }
+
+    // Returns true if the player currently knows the given spell/shout/power.
+    static bool PlayerKnowsSpell(RE::PlayerCharacter* player, RE::SpellItem* spell)
+    {
+        if (!player || !spell)
+            return false;
+
+        // Base NPC spell list (racial abilities etc.)
+        if (auto* npc = player->GetActorBase()) {
+            if (auto* spellData = npc->GetSpellList()) {
+                for (std::uint32_t i = 0; i < spellData->numSpells; ++i) {
+                    if (spellData->spells[i] == spell)
+                        return true;
+                }
+            }
+        }
+        // Spells added at runtime (tomes, AddSpell, powers).
+        for (auto* s : player->GetActorRuntimeData().addedSpells) {
+            if (s == spell)
+                return true;
+        }
+        return false;
+    }
+
+    // Ensures MagicFavorites::hotkeys has exactly 8 slots.  The game usually
+    // keeps this array sized at 8, but saves from other mods may leave it
+    // shorter — resize defensively so that direct indexing is always safe.
+    static void EnsureHotkeySlots(RE::MagicFavorites* favorites)
+    {
+        if (!favorites)
+            return;
+        while (favorites->hotkeys.size() < 8)
+            favorites->hotkeys.push_back(nullptr);
+    }
+
+    // Returns the magic favorite currently bound to a slot (0..7), or nullptr.
+    static RE::TESForm* GetMagicHotkey(RE::MagicFavorites* favorites, std::uint8_t slotIdx)
+    {
+        if (!favorites || slotIdx >= favorites->hotkeys.size())
+            return nullptr;
+        return favorites->hotkeys[slotIdx];
+    }
+
+    // Result of scanning the inventory for a hotkey binding.
+    struct ItemHotkeyRef
+    {
+        RE::InventoryEntryData* entry   = nullptr;
+        RE::ExtraDataList*      xList   = nullptr;
+        RE::ExtraHotkey*        extra   = nullptr;
+    };
+
+    // Find the inventory entry + extra-data list carrying ExtraHotkey with the
+    // given slot index.  Returns an empty struct when no match is found.
+    static ItemHotkeyRef FindItemHotkey(RE::PlayerCharacter* player, std::uint8_t slotIdx)
+    {
+        ItemHotkeyRef ref{};
+        if (!player)
+            return ref;
+        auto* invChanges = player->GetInventoryChanges();
+        if (!invChanges || !invChanges->entryList)
+            return ref;
+
+        for (auto* entry : *invChanges->entryList) {
+            if (!entry || !entry->extraLists)
+                continue;
+            for (auto* xList : *entry->extraLists) {
+                if (!xList)
+                    continue;
+                auto* xHotkey = xList->GetByType<RE::ExtraHotkey>();
+                if (xHotkey && xHotkey->hotkey.underlying() == slotIdx) {
+                    ref.entry = entry;
+                    ref.xList = xList;
+                    ref.extra = xHotkey;
+                    return ref;
+                }
+            }
+        }
+        return ref;
+    }
+
+    // Remove any existing binding for slot `slotIdx` from both magic and item stores.
+    static void ClearSlotBinding(RE::PlayerCharacter* player,
+                                 RE::MagicFavorites*  favorites,
+                                 std::uint8_t         slotIdx)
+    {
+        if (favorites && slotIdx < favorites->hotkeys.size())
+            favorites->hotkeys[slotIdx] = nullptr;
+
+        auto itemRef = FindItemHotkey(player, slotIdx);
+        if (itemRef.xList && itemRef.extra)
+            itemRef.xList->Remove<RE::ExtraHotkey>(itemRef.extra);
+    }
+
+    // Validates user-facing slot number (1..8) and stores the 0-based index.
+    static bool ValidateSlot(std::uint8_t slot, std::uint8_t& outIdx)
+    {
+        if (slot < 1 || slot > 8)
+            return false;
+        outIdx = static_cast<std::uint8_t>(slot - 1);
+        return true;
+    }
+
+    CommandResult SetHotkey(std::uint8_t slot, RE::FormID formId)
+    {
+        std::uint8_t slotIdx;
+        if (!ValidateSlot(slot, slotIdx))
+            return {false, "Slot must be in range 1..8"};
+
+        auto* player = RE::PlayerCharacter::GetSingleton();
+        if (!player)
+            return {false, "Player not available"};
+
+        auto* favorites = RE::MagicFavorites::GetSingleton();
+        if (!favorites)
+            return {false, "Magic favorites not available"};
+        EnsureHotkeySlots(favorites);
+
+        auto* form = RE::TESForm::LookupByID(formId);
+        if (!form)
+            return {false, "Form not found"};
+
+        // Path A: spell/shout/power hotkey.
+        if (auto* spell = form->As<RE::SpellItem>()) {
+            if (!IsHotkeyableSpell(spell))
+                return {false, "Spell type cannot be hotkeyed"};
+            if (!PlayerKnowsSpell(player, spell))
+                return {false, "Spell not known by player"};
+
+            // Clear any previous binding for this slot (magic or item).
+            ClearSlotBinding(player, favorites, slotIdx);
+
+            // The game shows only favorited forms in the hotkey overlay, so
+            // ensure it is favorited first.  SetFavorite is idempotent.
+            if (std::find(favorites->spells.begin(), favorites->spells.end(),
+                          static_cast<RE::TESForm*>(spell)) == favorites->spells.end()) {
+                favorites->SetFavorite(spell);
+            }
+            favorites->hotkeys[slotIdx] = spell;
+
+            PrintConsole(std::format("[WS] Hotkey {} <- spell {}", slot, spell->GetName()));
+            return {true, ""};
+        }
+
+        // Path B: inventory item hotkey.
+        auto* bound = form->As<RE::TESBoundObject>();
+        if (!bound)
+            return {false, "Form is neither a spell nor a bound object"};
+
+        if (GetInventoryCount(player, formId) <= 0)
+            return {false, "Item not in inventory"};
+
+        auto* invChanges = player->GetInventoryChanges();
+        if (!invChanges)
+            return {false, "Inventory changes not available"};
+
+        // Items that live only in the player's base TESContainer (e.g. starting
+        // gear, freshly levelled items) are visible via GetInventory() but
+        // have no live InventoryEntryData in InventoryChanges::entryList — the
+        // engine lazily allocates entries only on mutation.  Force the engine
+        // to create a proper entry by doing a neutral +1/-1 container
+        // transaction (mirrors the FavoriteItem code path).  Without this
+        // step, hotkey assignment fails with "Item not in inventory" for any
+        // item that has never been equipped, dropped, or favorited.
+        auto* liveEntry = FindLiveEntry(player, formId);
+        if (!liveEntry) {
+            logger::trace("SetHotkey 0x{:08X}: forcing entry creation via AddObjectToContainer/RemoveItem", formId);
+            player->AddObjectToContainer(bound, nullptr, 1, nullptr);
+            player->RemoveItem(bound, 1, RE::ITEM_REMOVE_REASON::kRemove, nullptr, nullptr);
+            liveEntry = FindLiveEntry(player, formId);
+            if (!liveEntry)
+                return {false, "Failed to materialize inventory entry for item"};
+        }
+
+        // Clear any previous binding for this slot (magic or different item).
+        ClearSlotBinding(player, favorites, slotIdx);
+
+        // Locate any existing ExtraHotkey on this item so we can mutate it
+        // in place (items can only carry one ExtraHotkey).
+        RE::ExtraDataList* targetXList = nullptr;
+        RE::ExtraHotkey*   targetExtra = nullptr;
+        if (liveEntry->extraLists) {
+            for (auto* xl : *liveEntry->extraLists) {
+                if (!xl) continue;
+                if (auto* xh = xl->GetByType<RE::ExtraHotkey>()) {
+                    targetXList = xl;
+                    targetExtra = xh;
+                    break;
+                }
+            }
+        }
+
+        // If the item is not favorited yet, call SetFavorite to allocate an
+        // ExtraDataList with a fresh ExtraHotkey (kUnbound) attached.
+        if (!targetExtra) {
+            RE::ExtraDataList* xList = nullptr;
+            if (liveEntry->extraLists) {
+                for (auto* xl : *liveEntry->extraLists) {
+                    if (xl) { xList = xl; break; }
+                }
+            }
+            invChanges->SetFavorite(liveEntry, xList);
+
+            // Re-scan after SetFavorite — it may have created a new xList.
+            if (liveEntry->extraLists) {
+                for (auto* xl : *liveEntry->extraLists) {
+                    if (!xl) continue;
+                    if (auto* xh = xl->GetByType<RE::ExtraHotkey>()) {
+                        targetXList = xl;
+                        targetExtra = xh;
+                        break;
+                    }
+                }
+            }
+        }
+
+        if (!targetExtra)
+            return {false, "Failed to attach ExtraHotkey to item"};
+
+        targetExtra->hotkey = static_cast<RE::ExtraHotkey::Hotkey>(slotIdx);
+
+        PrintConsole(std::format("[WS] Hotkey {} <- item {}", slot, bound->GetName()));
+        return {true, ""};
+    }
+
+    CommandResult ClearHotkey(std::uint8_t slot)
+    {
+        std::uint8_t slotIdx;
+        if (!ValidateSlot(slot, slotIdx))
+            return {false, "Slot must be in range 1..8"};
+
+        auto* player    = RE::PlayerCharacter::GetSingleton();
+        auto* favorites = RE::MagicFavorites::GetSingleton();
+        if (!player || !favorites)
+            return {false, "Player or favorites not available"};
+        EnsureHotkeySlots(favorites);
+
+        ClearSlotBinding(player, favorites, slotIdx);
+        PrintConsole(std::format("[WS] Hotkey {} cleared", slot));
+        return {true, ""};
+    }
+
+    CommandResult TriggerHotkey(std::uint8_t slot)
+    {
+        std::uint8_t slotIdx;
+        if (!ValidateSlot(slot, slotIdx))
+            return {false, "Slot must be in range 1..8"};
+
+        // Native engine path: synthesize a keyboard ButtonEvent with the
+        // appropriate "HotkeyN" user-event name and feed it directly to
+        // FavoritesHandler::ProcessButton — the same call the game itself
+        // performs when the player presses 1..8 in gameplay.  This ensures
+        // 100% vanilla behavior, including:
+        //   * spells: right-hand → left-hand → no-op toggle,
+        //   * shouts/powers: voice slot equip,
+        //   * weapons: equip ↔ unequip toggle,
+        //   * 1H weapon with 2+ copies: right → other-hand → no-op,
+        //   * armor / ammo / consumables handled identically to vanilla,
+        //   * any third-party MCM tweaks of FavoritesHandler are honored.
+
+        auto* mc = RE::MenuControls::GetSingleton();
+        if (!mc || !mc->favoritesHandler)
+            return {false, "MenuControls/FavoritesHandler not available"};
+
+        auto* userEvents = RE::UserEvents::GetSingleton();
+        if (!userEvents)
+            return {false, "UserEvents singleton not available"};
+
+        // Pick the BSFixedString that the engine uses for this hotkey slot
+        // (matches what UserEvents stores: "Hotkey1".."Hotkey8").
+        const RE::BSFixedString* hotkeyNames[8] = {
+            &userEvents->hotkey1, &userEvents->hotkey2,
+            &userEvents->hotkey3, &userEvents->hotkey4,
+            &userEvents->hotkey5, &userEvents->hotkey6,
+            &userEvents->hotkey7, &userEvents->hotkey8,
+        };
+        const RE::BSFixedString& userEvent = *hotkeyNames[slotIdx];
+
+        // DIK_1..DIK_8 are 0x02..0x09 — what the keyboard input layer would
+        // report.  Value=1.0 + heldDownSecs=0.0 represents a fresh key-down
+        // (ButtonEvent::IsDown() == true), which is what FavoritesHandler
+        // acts on.
+        const std::uint32_t idCode = 0x02u + slotIdx;
+
+        auto* event = RE::ButtonEvent::Create(
+            RE::INPUT_DEVICE::kKeyboard, userEvent, idCode, 1.0f, 0.0f);
+        if (!event)
+            return {false, "Failed to allocate ButtonEvent"};
+
+        auto* handler = mc->favoritesHandler.get();
+        const bool handled = handler->ProcessButton(event);
+
+        // ButtonEvent::Create allocates via the game's heap; release it.
+        RE::free(event);
+
+        PrintConsole(std::format("[WS] Hotkey {} triggered (handled={})",
+                                 slot, handled ? "true" : "false"));
         return {true, ""};
     }
 }

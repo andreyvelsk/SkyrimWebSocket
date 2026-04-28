@@ -1,10 +1,13 @@
 # SkyrimWebSocket
+> 📜 based on template by https://github.com/SkyrimScripting/SKSE_Templates
 
 - [SkyrimWebSocket](#skyrimwebsocket)
   - [What does it do?](#what-does-it-do)
-  - [Requirements](#requirements)
+  - [Installation](#installation)
+  - [Build requirements](#build-requirements)
   - [Project setup](#project-setup)
   - [Configuration](#configuration)
+  - [Bug reports](#bug-reports)
 
 ---
 
@@ -28,7 +31,22 @@ SkyrimWebSocket runs a WebSocket server that allows external clients to:
 
 See [PROTOCOL.md](PROTOCOL.md) for detailed message specifications and examples.
 
-## Requirements
+## Installation
+
+1. **Install SKSE64** — [skse.silverlock.org](https://skse.silverlock.org/)  
+   > After installation, always launch Skyrim through `skse64_loader.exe`, not through Steam.
+
+2. **Install Address Library for SKSE Plugins** — [Nexus Mods](https://www.nexusmods.com/skyrimspecialedition/mods/32444)  
+   The recommended variant is **All in one (all game versions)**.
+
+3. **Copy the plugin** — download `SkyrimWebSocket.dll` from the [latest release](https://github.com/andreyvelsk/SkyrimWebSocket/releases/latest) and place it in:
+   ```
+   Data/SKSE/Plugins/SkyrimWebSocket.dll
+   ```
+
+Optionally, place `SkyrimWebSocket.ini` next to the DLL to customize the server address and port (see [Configuration](#configuration)).
+
+## Build requirements
 
 - [Visual Studio 2022](https://visualstudio.microsoft.com/) (Community edition is fine)
 - [CMake](https://cmake.org/download/) 3.25.1+
@@ -67,7 +85,37 @@ If the file is absent, the plugin uses safe defaults (`127.0.0.1:8765`).
 |---|---|---|
 | `[Server] ListenAddress` | `127.0.0.1` | Bind address. Use `0.0.0.0` to accept remote connections (e.g. for debugging). |
 | `[Server] Port` | `8765` | TCP port the WebSocket server listens on. |
+| `[Debug] LogLevel` | `off` | Log verbosity: `off`, `info`, `debug`, `trace`. |
+
+### Log levels
+
+| Level | What is logged |
+|---|---|
+| `off` | Nothing (default, recommended for normal use) |
+| `info` | Server start/stop, client connect/disconnect, command results |
+| `debug` | All of the above + every received message, subscription details |
+| `trace` | Maximum verbosity, including every subscription poll cycle |
+
+When any level other than `off` is set, the plugin also installs a crash handler that writes a minidump (`.dmp`) next to the log file on game crash.
+
+Log file location:
+```
+%USERPROFILE%\Documents\My Games\Skyrim Special Edition\SKSE\SkyrimWebSocket.log
+```
 
 An annotated template is available in the repository as `SkyrimWebSocket.ini.example`.
 
-> 📜 based on template by https://github.com/SkyrimScripting/SKSE_Templates
+## Bug reports
+
+If you encounter a bug, please [open a GitHub issue](https://github.com/andreyvelsk/SkyrimWebSocket/issues/new) and include:
+
+1. A description of the problem and steps to reproduce it.
+2. A **trace-level log** captured during reproduction — set `LogLevel=trace` in your INI file, reproduce the issue, then attach the log file:
+   ```
+   %USERPROFILE%\Documents\My Games\Skyrim Special Edition\SKSE\SkyrimWebSocket.log
+   ```
+3. If the game crashed, also attach the `.dmp` file found in the same folder.
+
+## Credits
+
+- *The Elder Scrolls V: Skyrim* is © Bethesda Softworks / ZeniMax. This is an unofficial fan-made plugin and is not affiliated with or endorsed by Bethesda.

@@ -3,7 +3,7 @@
 cmake_minimum_required(VERSION 3.21)
 
 # Set your project name. This will be the name of your SKSE .dll file.
-project(SkyrimWebSocket VERSION 1.6.0 LANGUAGES CXX)
+project(SkyrimWebSocket VERSION 1.11.1 LANGUAGES CXX)
 
 #
 # YOU DO NOT NEED TO EDIT ANYTHING BELOW HERE
@@ -41,6 +41,7 @@ add_commonlibsse_plugin(${PROJECT_NAME} SOURCES
     src/game/FieldRegistry.cpp
     src/game/GameReader.cpp
     src/game/GameWriter.cpp
+    src/game/HotkeyReader.cpp
     src/game/InventoryReader.cpp
     src/game/MagicReader.cpp
     src/game/PlayerReader.cpp
@@ -51,7 +52,7 @@ add_commonlibsse_plugin(${PROJECT_NAME} SOURCES
 ) # <--- specifies all source files
 target_compile_features(${PROJECT_NAME} PRIVATE cxx_std_23) # <--- use C++23 standard
 target_precompile_headers(${PROJECT_NAME} PRIVATE PCH.h) # <--- PCH.h is required!
-target_link_libraries(${PROJECT_NAME} PRIVATE Boost::system nlohmann_json::nlohmann_json)
+target_link_libraries(${PROJECT_NAME} PRIVATE Boost::system nlohmann_json::nlohmann_json dbghelp)
 
 # When your SKSE .dll is compiled, this will automatically copy the .dll into your mods folder.
 # Only works if you configure DEPLOY_ROOT above (or set the SKYRIM_MODS_FOLDER environment variable)
