@@ -340,6 +340,12 @@ namespace PlayerReader
         const auto& worlds = handler->GetFormArray<RE::TESWorldSpace>();
         logger::info("[Map::Markers] worldspace count = {}", worlds.size());
 
+        // We avoid touching world->fixedPersistentRefMap / mobilePersistentRefs
+        // directly: in multi-targeting builds the BSTHashMap layout mismatches
+        // the header, which produces garbage iterators and crashes. Instead we
+        // walk every worldspace's persistent cell using the public, safe API
+        // TESObjectCELL::ForEachReference. Map markers live in the persistent
+        // cell of each worldspace.
         std::size_t worldIdx = 0;
         for (auto* world : worlds) {
             const auto idx = worldIdx++;
@@ -347,54 +353,26 @@ namespace PlayerReader
                 logger::info("[Map::Markers] world #{}: null, skip", idx);
                 continue;
             }
-            const auto wid = world->GetFormID();
+            const auto  wid   = world->GetFormID();
             const char* wedid = world->GetFormEditorID();
             logger::info("[Map::Markers] world #{}: 0x{:08X} edid='{}'",
                          idx, wid, wedid ? wedid : "(null)");
 
-            logger::info("[Map::Markers]   - access fixedPersistentRefMap");
-            try {
-                const auto& fixedMap = world->fixedPersistentRefMap;
-                logger::info("[Map::Markers]   - fixedPersistentRefMap.size={}",
-                             fixedMap.size());
-
-                std::size_t bucketIdx = 0;
-                for (auto& kv : fixedMap) {
-                    const auto bi = bucketIdx++;
-                    auto& refs = kv.second;
-                    logger::info("[Map::Markers]   - fixed bucket #{} key=0x{:08X} refs.size={}",
-                                 bi, kv.first, refs.size());
-                    std::size_t ri = 0;
-                    for (auto& ref : refs) {
-                        logger::info("[Map::Markers]     - ref #{} ptr={}",
-                                     ri++, static_cast<const void*>(ref.get()));
-                        emit(ref.get());
-                    }
-                }
-            } catch (const std::exception& e) {
-                logger::info("[Map::Markers]   ! exception in fixed: {}", e.what());
-            } catch (...) {
-                logger::info("[Map::Markers]   ! unknown exception in fixed");
+            auto* persist = world->persistentCell;
+            logger::info("[Map::Markers]   - persistentCell={}",
+                         static_cast<const void*>(persist));
+            if (!persist) {
+                logger::info("[Map::Markers] world #{} no persistent cell, skip", idx);
+                continue;
             }
 
-            logger::info("[Map::Markers]   - access mobilePersistentRefs");
-            try {
-                auto& mobile = world->mobilePersistentRefs;
-                logger::info("[Map::Markers]   - mobilePersistentRefs.size={}",
-                             mobile.size());
-                std::size_t mi = 0;
-                for (auto& ref : mobile) {
-                    logger::info("[Map::Markers]     - mobile ref #{} ptr={}",
-                                 mi++, static_cast<const void*>(ref.get()));
-                    emit(ref.get());
-                }
-            } catch (const std::exception& e) {
-                logger::info("[Map::Markers]   ! exception in mobile: {}", e.what());
-            } catch (...) {
-                logger::info("[Map::Markers]   ! unknown exception in mobile");
-            }
-
-            logger::info("[Map::Markers] world #{} done", idx);
+            std::size_t visited = 0;
+            persist->ForEachReference([&](RE::TESObjectREFR* ref) {
+                ++visited;
+                emit(ref);
+                return RE::BSContainer::ForEachResult::kContinue;
+            });
+            logger::info("[Map::Markers] world #{} done, refs visited = {}", idx, visited);
         }
 
         logger::info("[Map::Markers] finished, total markers = {}", result.size());
