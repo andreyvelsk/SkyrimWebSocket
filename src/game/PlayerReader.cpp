@@ -82,7 +82,78 @@ namespace PlayerReader
         pos["y"]     = player->GetPositionY();
         pos["z"]     = player->GetPositionZ();
         pos["angle"] = player->GetAngleZ();
+
+        auto formIdStr = [](RE::FormID id) {
+            return std::format("0x{:08X}", id);
+        };
+
+        auto* world = player->GetWorldspace();
+        if (world) {
+            const char* edid = world->GetFormEditorID();
+            pos["worldspace"]       = edid ? std::string(edid) : std::string();
+            pos["worldspaceFormId"] = formIdStr(world->GetFormID());
+
+            auto* root = world;
+            while (root->parentWorld)
+                root = root->parentWorld;
+            const char* rootEdid = root->GetFormEditorID();
+            pos["parentWorldspace"]       = rootEdid ? std::string(rootEdid) : std::string();
+            pos["parentWorldspaceFormId"] = formIdStr(root->GetFormID());
+        } else {
+            pos["worldspace"]             = nullptr;
+            pos["worldspaceFormId"]       = nullptr;
+            pos["parentWorldspace"]       = nullptr;
+            pos["parentWorldspaceFormId"] = nullptr;
+        }
+
+        auto* cell = player->GetParentCell();
+        if (cell) {
+            const char* cedid = cell->GetFormEditorID();
+            pos["cell"]       = cedid ? std::string(cedid) : std::string();
+            pos["cellFormId"] = formIdStr(cell->GetFormID());
+            pos["isInterior"] = cell->IsInteriorCell();
+        } else {
+            pos["cell"]       = nullptr;
+            pos["cellFormId"] = nullptr;
+            pos["isInterior"] = false;
+        }
+
         return pos;
+    }
+
+    nlohmann::json ReadExteriorPosition()
+    {
+        auto* player = RE::PlayerCharacter::GetSingleton();
+        if (!player)
+            return nlohmann::json::object();
+
+        auto& rt = player->GetPlayerRuntimeData();
+
+        nlohmann::json out;
+        out["x"] = rt.exteriorPosition.x;
+        out["y"] = rt.exteriorPosition.y;
+        out["z"] = rt.exteriorPosition.z;
+
+        auto* world = rt.cachedWorldSpace;
+        if (world) {
+            const char* edid = world->GetFormEditorID();
+            out["worldspace"]       = edid ? std::string(edid) : std::string();
+            out["worldspaceFormId"] = std::format("0x{:08X}", world->GetFormID());
+
+            auto* root = world;
+            while (root->parentWorld)
+                root = root->parentWorld;
+            const char* rootEdid = root->GetFormEditorID();
+            out["parentWorldspace"]       = rootEdid ? std::string(rootEdid) : std::string();
+            out["parentWorldspaceFormId"] = std::format("0x{:08X}", root->GetFormID());
+        } else {
+            out["worldspace"]             = nullptr;
+            out["worldspaceFormId"]       = nullptr;
+            out["parentWorldspace"]       = nullptr;
+            out["parentWorldspaceFormId"] = nullptr;
+        }
+
+        return out;
     }
 
     nlohmann::json ReadMapMarkers()

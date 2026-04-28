@@ -300,8 +300,14 @@ namespace FieldRegistry
 
         // Player position and heading
         { "Player::Position",
-          { "Player world position and heading: { x, y, z, angle }. x/y/z are world-space coordinates; angle is Z-axis yaw in radians.", "object",
+          { "Player position and heading in the current worldspace/cell: { x, y, z, angle, worldspace, worldspaceFormId, parentWorldspace, parentWorldspaceFormId, cell, cellFormId, isInterior }. x/y/z are local to the current worldspace (or interior); worldspace fields are null in interiors. parentWorldspace walks up to the root world (e.g. Tamriel for city sub-worlds).", "object",
             &PlayerReader::ReadPosition } },
+
+        // Last known exterior position (for placing the player on the global
+        // map while inside an interior or a city sub-worldspace)
+        { "Player::ExteriorPosition",
+          { "Last known exterior position cached by the game: { x, y, z, worldspace, worldspaceFormId, parentWorldspace, parentWorldspaceFormId }. Updated whenever the player is in an exterior cell; remains valid while in interiors. Useful for showing the player on a global (parent) worldspace map.", "object",
+            &PlayerReader::ReadExteriorPosition } },
 
         // Map markers
         { "Map::Markers",

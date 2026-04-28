@@ -35,10 +35,27 @@ namespace PlayerReader
     nlohmann::json ReadLanguage();
 
     // Returns the player's current world position and heading as a JSON object:
-    // { "x": float, "y": float, "z": float, "angle": float }
-    // x/y/z are world-space coordinates; angle is the Z-axis rotation (yaw) in radians.
+    // { "x", "y", "z", "angle",
+    //   "worldspace", "worldspaceFormId",
+    //   "parentWorldspace", "parentWorldspaceFormId",
+    //   "cell", "cellFormId", "isInterior" }
+    // x/y/z are local to the current worldspace (or interior cell); angle is the
+    // Z-axis rotation (yaw) in radians. worldspace fields are null in interiors.
+    // parentWorldspace walks up TESWorldSpace::parentWorld to the root (e.g. Tamriel
+    // for city sub-worlds); equals worldspace for top-level worlds (Tamriel,
+    // Solstheim).
     // Must be called on the game thread.
     nlohmann::json ReadPosition();
+
+    // Returns the last known exterior position cached by the game (used by the
+    // compass / world map). Useful for placing the player on the global map while
+    // they are inside an interior cell or a city sub-worldspace.
+    // Shape: { "x", "y", "z",
+    //          "worldspace", "worldspaceFormId",
+    //          "parentWorldspace", "parentWorldspaceFormId" }
+    // worldspace fields are null until the game has cached an exterior location.
+    // Must be called on the game thread.
+    nlohmann::json ReadExteriorPosition();
 
     // Returns an array of all map markers the player has discovered.
     // Each entry: { "refId", "name", "type", "typeId", "x", "y", "isVisible", "canFastTravel" }
