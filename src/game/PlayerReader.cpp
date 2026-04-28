@@ -127,14 +127,34 @@ namespace PlayerReader
         if (!player)
             return nlohmann::json::object();
 
-        auto& rt = player->GetPlayerRuntimeData();
+        // PLAYER_RUNTIME_DATA fields are not exposed as struct members in
+        // multi-targeting builds (HAS_SKYRIM_MULTI_TARGETING=1), so we resolve
+        // them by absolute offsets from the PlayerCharacter base. Offsets are
+        // taken from CommonLibSSE-NG's PlayerCharacter.h:
+        //   cachedWorldSpace : SE 0x628, AE 0x630, VR 0xC18
+        //   exteriorPosition : SE 0x630, AE 0x638, VR 0xC20
+        std::size_t worldOff = 0;
+        std::size_t posOff   = 0;
+        if (REL::Module::IsVR()) {
+            worldOff = 0xC18;
+            posOff   = 0xC20;
+        } else if (REL::Module::IsAE()) {
+            worldOff = 0x630;
+            posOff   = 0x638;
+        } else {  // SE
+            worldOff = 0x628;
+            posOff   = 0x630;
+        }
+
+        const auto base    = reinterpret_cast<std::uintptr_t>(player);
+        auto*       world  = *reinterpret_cast<RE::TESWorldSpace**>(base + worldOff);
+        const auto& extPos = *reinterpret_cast<const RE::NiPoint3*>(base + posOff);
 
         nlohmann::json out;
-        out["x"] = rt.exteriorPosition.x;
-        out["y"] = rt.exteriorPosition.y;
-        out["z"] = rt.exteriorPosition.z;
+        out["x"] = extPos.x;
+        out["y"] = extPos.y;
+        out["z"] = extPos.z;
 
-        auto* world = rt.cachedWorldSpace;
         if (world) {
             const char* edid = world->GetFormEditorID();
             out["worldspace"]       = edid ? std::string(edid) : std::string();
