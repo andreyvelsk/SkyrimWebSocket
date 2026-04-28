@@ -1,5 +1,7 @@
 #include "PlayerReader.h"
 
+#include "../../logger.h"
+
 #include <unordered_set>
 
 namespace PlayerReader
@@ -260,64 +262,142 @@ namespace PlayerReader
         // does not store object references). We iterate every worldspace and
         // walk its fixedPersistentRefMap + mobilePersistentRefs, looking for
         // refs that carry an ExtraMapMarker.
+        logger::info("[Map::Markers] start");
+
         auto* handler = RE::TESDataHandler::GetSingleton();
-        if (!handler)
+        if (!handler) {
+            logger::info("[Map::Markers] no TESDataHandler");
             return result;
+        }
+        logger::info("[Map::Markers] handler ok");
 
         std::unordered_set<RE::FormID> seen;
 
         auto emit = [&](RE::TESObjectREFR* form) {
-            if (!form)
+            if (!form) {
+                logger::info("[Map::Markers]   emit: form=null, skip");
                 return;
+            }
+            const auto formId = form->GetFormID();
+            logger::info("[Map::Markers]   emit: form=0x{:08X}", formId);
 
+            logger::info("[Map::Markers]     - get extraList ExtraMapMarker");
             auto* extra = form->extraList.GetByType<RE::ExtraMapMarker>();
-            if (!extra || !extra->mapData)
+            if (!extra) {
+                logger::info("[Map::Markers]     -> no ExtraMapMarker, skip");
                 return;
+            }
+            logger::info("[Map::Markers]     - extra ok, mapData={}",
+                         static_cast<const void*>(extra->mapData));
+            if (!extra->mapData) {
+                logger::info("[Map::Markers]     -> mapData null, skip");
+                return;
+            }
 
-            // Avoid duplicates if the same marker shows up in multiple containers.
-            if (!seen.insert(form->GetFormID()).second)
+            if (!seen.insert(formId).second) {
+                logger::info("[Map::Markers]     -> dup, skip");
                 return;
+            }
 
             auto* data = extra->mapData;
 
             using Flag = RE::MapMarkerData::Flag;
+            logger::info("[Map::Markers]     - read flags");
             const bool isVisible     = data->flags.any(Flag::kVisible);
             const bool canFastTravel = data->flags.any(Flag::kCanTravelTo);
 
+            logger::info("[Map::Markers]     - read type");
             const auto typeId   = static_cast<uint32_t>(data->type.underlying());
             const auto typeName = typeId < kTypeNames.size()
                                       ? std::string(kTypeNames[typeId])
                                       : "Unknown";
 
+            logger::info("[Map::Markers]     - read locationName.GetFullName");
             const char* fullName = data->locationName.GetFullName();
             std::string name     = fullName ? fullName : "";
+            logger::info("[Map::Markers]     - name='{}' typeId={} vis={} ft={}",
+                         name, typeId, isVisible, canFastTravel);
+
+            logger::info("[Map::Markers]     - read position");
+            const float x = form->GetPositionX();
+            const float y = form->GetPositionY();
 
             nlohmann::json entry;
-            entry["refId"]         = std::format("0x{:08X}", form->GetFormID());
+            entry["refId"]         = std::format("0x{:08X}", formId);
             entry["name"]          = name;
             entry["type"]          = typeName;
             entry["typeId"]        = typeId;
-            entry["x"]             = form->GetPositionX();
-            entry["y"]             = form->GetPositionY();
+            entry["x"]             = x;
+            entry["y"]             = y;
             entry["isVisible"]     = isVisible;
             entry["canFastTravel"] = canFastTravel;
 
             result.push_back(std::move(entry));
+            logger::info("[Map::Markers]     -> pushed");
         };
 
-        for (auto* world : handler->GetFormArray<RE::TESWorldSpace>()) {
-            if (!world)
-                continue;
+        logger::info("[Map::Markers] get worldspace form array");
+        const auto& worlds = handler->GetFormArray<RE::TESWorldSpace>();
+        logger::info("[Map::Markers] worldspace count = {}", worlds.size());
 
-            for (auto& [_, refs] : world->fixedPersistentRefMap) {
-                for (auto& ref : refs)
-                    emit(ref.get());
+        std::size_t worldIdx = 0;
+        for (auto* world : worlds) {
+            const auto idx = worldIdx++;
+            if (!world) {
+                logger::info("[Map::Markers] world #{}: null, skip", idx);
+                continue;
+            }
+            const auto wid = world->GetFormID();
+            const char* wedid = world->GetFormEditorID();
+            logger::info("[Map::Markers] world #{}: 0x{:08X} edid='{}'",
+                         idx, wid, wedid ? wedid : "(null)");
+
+            logger::info("[Map::Markers]   - access fixedPersistentRefMap");
+            try {
+                const auto& fixedMap = world->fixedPersistentRefMap;
+                logger::info("[Map::Markers]   - fixedPersistentRefMap.size={}",
+                             fixedMap.size());
+
+                std::size_t bucketIdx = 0;
+                for (auto& kv : fixedMap) {
+                    const auto bi = bucketIdx++;
+                    auto& refs = kv.second;
+                    logger::info("[Map::Markers]   - fixed bucket #{} key=0x{:08X} refs.size={}",
+                                 bi, kv.first, refs.size());
+                    std::size_t ri = 0;
+                    for (auto& ref : refs) {
+                        logger::info("[Map::Markers]     - ref #{} ptr={}",
+                                     ri++, static_cast<const void*>(ref.get()));
+                        emit(ref.get());
+                    }
+                }
+            } catch (const std::exception& e) {
+                logger::info("[Map::Markers]   ! exception in fixed: {}", e.what());
+            } catch (...) {
+                logger::info("[Map::Markers]   ! unknown exception in fixed");
             }
 
-            for (auto& ref : world->mobilePersistentRefs)
-                emit(ref.get());
+            logger::info("[Map::Markers]   - access mobilePersistentRefs");
+            try {
+                auto& mobile = world->mobilePersistentRefs;
+                logger::info("[Map::Markers]   - mobilePersistentRefs.size={}",
+                             mobile.size());
+                std::size_t mi = 0;
+                for (auto& ref : mobile) {
+                    logger::info("[Map::Markers]     - mobile ref #{} ptr={}",
+                                 mi++, static_cast<const void*>(ref.get()));
+                    emit(ref.get());
+                }
+            } catch (const std::exception& e) {
+                logger::info("[Map::Markers]   ! exception in mobile: {}", e.what());
+            } catch (...) {
+                logger::info("[Map::Markers]   ! unknown exception in mobile");
+            }
+
+            logger::info("[Map::Markers] world #{} done", idx);
         }
 
+        logger::info("[Map::Markers] finished, total markers = {}", result.size());
         return result;
     }
 
