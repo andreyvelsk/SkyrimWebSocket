@@ -1,4 +1,5 @@
 #include "GameReader.h"
+#include "EventBus.h"
 #include "FieldRegistry.h"
 
 #include <chrono>
@@ -78,6 +79,28 @@ namespace GameReader
             // --- JSON fields (inventory, etc.) ---
             auto jsonEntryOpt = FieldRegistry::ResolveJson(registryKey);
             if (jsonEntryOpt) {
+                // Event-driven fast path: if the registry key is wired to
+                // EventBus and its version has not advanced since we last
+                // resolved this alias, skip the resolve+serialise entirely.
+                // Only valid in sendOnChange mode (otherwise we have to emit
+                // the cached value every tick, which defeats the purpose).
+                if (state.sendOnChange && EventBus::IsEventDriven(registryKey)) {
+                    const auto currentVersion = EventBus::GetVersion(registryKey);
+                    auto       lvIt           = state.lastVersions.find(alias);
+                    auto       cacheIt        = state.lastValues.find(alias);
+                    if (lvIt != state.lastVersions.end() &&
+                        lvIt->second == currentVersion &&
+                        cacheIt != state.lastValues.end()) {
+                        // No event since last resolve — value is guaranteed
+                        // unchanged from our perspective; skip.
+                        continue;
+                    }
+                    // Record the version we are about to read at; if an
+                    // event fires between this read and the next tick the
+                    // counter will have advanced and we'll resolve again.
+                    state.lastVersions[alias] = currentVersion;
+                }
+
                 nlohmann::json val;
                 if (jsonEntryOpt->requiresInGame && !inGame) {
                     val = nullptr;

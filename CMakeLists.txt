@@ -38,6 +38,7 @@ find_package(Boost REQUIRED COMPONENTS system)
 find_package(nlohmann_json CONFIG REQUIRED)
 add_commonlibsse_plugin(${PROJECT_NAME} SOURCES
     plugin.cpp
+    src/game/EventBus.cpp
     src/game/FieldRegistry.cpp
     src/game/GameReader.cpp
     src/game/GameWriter.cpp

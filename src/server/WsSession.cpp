@@ -145,7 +145,9 @@ void WsSession::doPush(const std::string& id)
         std::string json = GameReader::BuildSubscriptionJson(snapshot);
 
         asio::post(self->ioc_, [self, json, id = snapshot.id,
-                                lastValues = snapshot.lastValues, generation] {
+                                lastValues   = snapshot.lastValues,
+                                lastVersions = snapshot.lastVersions,
+                                generation] {
             auto it = self->subscriptions_.find(id);
             if (it == self->subscriptions_.end())
                 return;
@@ -153,7 +155,8 @@ void WsSession::doPush(const std::string& id)
                 return;  // subscription was replaced while push was in flight
 
             // Propagate updated lastValues back to the live subscription.
-            it->second.state.lastValues = lastValues;
+            it->second.state.lastValues   = lastValues;
+            it->second.state.lastVersions = lastVersions;
 
             if (!json.empty())
                 self->send(json);
