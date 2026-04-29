@@ -318,6 +318,13 @@ namespace FieldRegistry
           { "Array of ALL map markers in every loaded worldspace, including undiscovered/hidden ones. Same entry shape as Map::Markers.",
             "array",
             &PlayerReader::ReadMapMarkersAll } },
+
+        // Player-placed custom map marker (the marker the player drops on
+        // the world map by clicking on it).
+        { "Player::Marker",
+          { "Player-placed custom map marker state: { isSet, x, y, z, worldspace, worldspaceFormId, parentWorldspace, parentWorldspaceFormId }. When the player has not placed a marker (or has cleared it), isSet=false and spatial fields are null. Use the player_marker_set / player_marker_clear commands to modify it.",
+            "object",
+            &PlayerReader::ReadPlayerMarker } },
     };
     // clang-format on
 

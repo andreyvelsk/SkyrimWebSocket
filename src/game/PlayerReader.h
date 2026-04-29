@@ -71,6 +71,29 @@ namespace PlayerReader
     // Must be called on the game thread.
     nlohmann::json ReadMapMarkersAll();
 
+    // Returns a JSON object describing the player-placed custom map marker
+    // (the marker the player can drop on the world map by clicking on it):
+    // { "isSet", "x", "y", "z",
+    //   "worldspace", "worldspaceFormId",
+    //   "parentWorldspace", "parentWorldspaceFormId" }
+    // When the marker is not set (or never placed in this save), `isSet` is
+    // false and the coordinate / worldspace fields are null.
+    // Must be called on the game thread.
+    nlohmann::json ReadPlayerMarker();
+
+    // Returns the live TESObjectREFR* for the player-placed custom map
+    // marker, or nullptr if the player has never opened the map menu in this
+    // save (the engine creates the ref on demand).
+    // Used by both PlayerReader::ReadPlayerMarker and the GameWriter set/clear
+    // commands so they share a single resolution path.
+    // Must be called on the game thread.
+    RE::TESObjectREFR* GetPlayerMarkerRef();
+
+    // Builds the same JSON payload as ReadPlayerMarker but for an explicit
+    // ref pointer. Pass nullptr to get the "not set" payload. Used by the
+    // GameWriter set/clear commands so their result shape matches the reader.
+    nlohmann::json BuildPlayerMarkerJson(RE::TESObjectREFR* ref);
+
     // Returns a JSON object describing the current game / player state.
     // Lets clients tell whether the player can act right now (paused, loading,
     // dialogue, combat, controls disabled, etc.).

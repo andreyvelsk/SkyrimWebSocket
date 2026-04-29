@@ -178,6 +178,81 @@ namespace PlayerReader
         return out;
     }
 
+    RE::TESObjectREFR* GetPlayerMarkerRef()
+    {
+        auto* player = RE::PlayerCharacter::GetSingleton();
+        if (!player)
+            return nullptr;
+
+        // INFO_RUNTIME_DATA is exposed via the public GetInfoRuntimeData()
+        // accessor in every targeting mode (SE/AE/VR), so we don't need
+        // offset hacks here.
+        auto& info = player->GetInfoRuntimeData();
+        return info.playerMapMarker.get().get();
+    }
+
+    nlohmann::json BuildPlayerMarkerJson(RE::TESObjectREFR* ref)
+    {
+        nlohmann::json out;
+
+        const auto setNullSpatial = [&]() {
+            out["x"]                      = nullptr;
+            out["y"]                      = nullptr;
+            out["z"]                      = nullptr;
+            out["worldspace"]             = nullptr;
+            out["worldspaceFormId"]       = nullptr;
+            out["parentWorldspace"]       = nullptr;
+            out["parentWorldspaceFormId"] = nullptr;
+        };
+
+        if (!ref) {
+            out["isSet"] = false;
+            setNullSpatial();
+            return out;
+        }
+
+        // The marker ref always exists once the engine has touched the map
+        // menu; the *visibility* of its ExtraMapMarker is what tells whether
+        // the player has a marker placed right now.
+        auto*      extra     = ref->extraList.GetByType<RE::ExtraMapMarker>();
+        const bool hasData   = extra && extra->mapData;
+        const bool isVisible = hasData && extra->mapData->flags.any(RE::MapMarkerData::Flag::kVisible);
+
+        out["isSet"] = isVisible;
+        out["x"]     = ref->GetPositionX();
+        out["y"]     = ref->GetPositionY();
+        out["z"]     = ref->GetPositionZ();
+
+        const auto formIdStr = [](RE::FormID id) {
+            return std::format("0x{:08X}", id);
+        };
+
+        if (auto* world = ref->GetWorldspace()) {
+            const char* edid = world->GetFormEditorID();
+            out["worldspace"]       = edid ? std::string(edid) : std::string();
+            out["worldspaceFormId"] = formIdStr(world->GetFormID());
+
+            auto* root = world;
+            while (root->parentWorld)
+                root = root->parentWorld;
+            const char* rootEdid = root->GetFormEditorID();
+            out["parentWorldspace"]       = rootEdid ? std::string(rootEdid) : std::string();
+            out["parentWorldspaceFormId"] = formIdStr(root->GetFormID());
+        } else {
+            out["worldspace"]             = nullptr;
+            out["worldspaceFormId"]       = nullptr;
+            out["parentWorldspace"]       = nullptr;
+            out["parentWorldspaceFormId"] = nullptr;
+        }
+
+        return out;
+    }
+
+    nlohmann::json ReadPlayerMarker()
+    {
+        return BuildPlayerMarkerJson(GetPlayerMarkerRef());
+    }
+
     static nlohmann::json ReadMapMarkersImpl(bool visibleOnly)
     {
         auto* player = RE::PlayerCharacter::GetSingleton();

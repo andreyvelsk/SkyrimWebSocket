@@ -1,5 +1,6 @@
 #include "GameWriter.h"
 #include "../Utils.h"
+#include "PlayerReader.h"
 
 #include <algorithm>
 #include <format>
@@ -913,5 +914,60 @@ namespace GameWriter
         PrintConsole(std::format("[WS] Hotkey {} triggered (handled={})",
                                  slot, handled ? "true" : "false"));
         return {true, ""};
+    }
+
+    // ─── Player-placed map marker ─────────────────────────────────────────
+
+    CommandResult SetPlayerMarker(float a_x, float a_y, float a_z)
+    {
+        auto* ref = PlayerReader::GetPlayerMarkerRef();
+        if (!ref) {
+            return {false,
+                    "Player marker ref not initialized — open the world map at least once before placing a marker"};
+        }
+
+        // Make the marker visible (and fast-travel-enabled, which matches
+        // vanilla behavior when the player drops a marker on the world map).
+        // The ref + its ExtraMapMarker / MapMarkerData are pre-created by
+        // the engine; we just toggle the bits and move the ref.
+        if (auto* extra = ref->extraList.GetByType<RE::ExtraMapMarker>(); extra && extra->mapData) {
+            using Flag = RE::MapMarkerData::Flag;
+            extra->mapData->flags.set(Flag::kVisible);
+            extra->mapData->flags.set(Flag::kCanTravelTo);
+        }
+
+        ref->SetPosition(a_x, a_y, a_z);
+
+        CommandResult result;
+        result.success = true;
+        result.data    = PlayerReader::BuildPlayerMarkerJson(ref);
+        PrintConsole(std::format("[WS] Player marker set to ({:.1f}, {:.1f}, {:.1f})",
+                                 a_x, a_y, a_z));
+        return result;
+    }
+
+    CommandResult ClearPlayerMarker()
+    {
+        auto* ref = PlayerReader::GetPlayerMarkerRef();
+        if (!ref) {
+            // No ref means there is no marker to clear — return the
+            // canonical "not set" payload as a successful no-op.
+            CommandResult result;
+            result.success = true;
+            result.data    = PlayerReader::BuildPlayerMarkerJson(nullptr);
+            return result;
+        }
+
+        if (auto* extra = ref->extraList.GetByType<RE::ExtraMapMarker>(); extra && extra->mapData) {
+            using Flag = RE::MapMarkerData::Flag;
+            extra->mapData->flags.reset(Flag::kVisible);
+            extra->mapData->flags.reset(Flag::kCanTravelTo);
+        }
+
+        CommandResult result;
+        result.success = true;
+        result.data    = PlayerReader::BuildPlayerMarkerJson(ref);
+        PrintConsole("[WS] Player marker cleared");
+        return result;
     }
 }

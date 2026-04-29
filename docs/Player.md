@@ -18,6 +18,7 @@ All values are returned as `float`, `integer`, or `object` as noted.
 | `Player::CarryWeight` | `float` | Maximum carry weight (same value as `ActorValue::kCarryWeight`) |
 | `Player::Position` | `object` | Player position, heading, current worldspace and cell — see below |
 | `Player::ExteriorPosition` | `object` | Last known exterior position (for global-map rendering while in interiors / city sub-worlds) — see below |
+| `Player::Marker` | `object` | Player-placed custom map marker state (the marker dropped by clicking on the world map) — see below |
 
 ---
 
@@ -204,5 +205,108 @@ if (pos.parentWorldspace === "Tamriel" && !pos.isInterior
   y = extPos.y;
 } else {
   // Solstheim or another top-level world — switch maps or hide marker.
+}
+```
+
+---
+
+## `Player::Marker`
+
+Returns the state of the **player-placed custom map marker** — the marker the
+player can drop on the world map by clicking on a spot. The engine maintains a
+single dedicated reference for it and toggles its visibility on/off rather than
+creating new objects, so reading and writing always operate on the same marker.
+
+### Object shape
+
+| Field | Type | Description |
+|---|---|---|
+| `isSet` | `bool` | `true` when the marker is currently visible on the map (i.e. the player has placed one and not cleared it). |
+| `x` | `float \| null` | X coordinate of the marker, in its worldspace's coordinate system. `null` when the marker reference has not been initialized yet (player has never opened the map menu in this save). |
+| `y` | `float \| null` | Y coordinate. |
+| `z` | `float \| null` | Z coordinate. |
+| `worldspace` | `string \| null` | EditorID of the marker's worldspace (in vanilla play this is always `"Tamriel"`). |
+| `worldspaceFormId` | `string \| null` | Hex form ID of the marker's worldspace. |
+| `parentWorldspace` | `string \| null` | EditorID of the root worldspace (`worldspace`'s `parentWorld` chain root). |
+| `parentWorldspaceFormId` | `string \| null` | Hex form ID of the root worldspace. |
+
+> **Note on `isSet=false`:** the spatial fields may still hold the *previous*
+> coordinates of the marker (the engine just hides the ref on clear). Treat
+> them as undefined when `isSet` is `false`.
+
+### Modifying the marker
+
+Use the `command` message type. Both commands respond with a `commandResult`
+whose `data` payload has the same shape as the field above, reflecting the
+marker's state **after** the operation:
+
+| Command | Required arguments | Effect |
+|---|---|---|
+| `player_marker_set` | `x` (number), `y` (number), `z` (number, optional, default `0`) | Places or moves the marker to those coordinates in its current worldspace and makes it visible. Fails if the marker reference is not yet initialized — open the world map at least once in the save first. |
+| `player_marker_clear` | — | Hides the marker. Always succeeds. The underlying ref is preserved and will be reused on the next `player_marker_set`. |
+
+Coordinates passed to `player_marker_set` are in the marker's own worldspace.
+In vanilla Skyrim that worldspace is the global parent map (Tamriel), so a
+client mirroring the in-game map UI should pass Tamriel-space `(x, y)`.
+
+### Example — place the marker
+
+```json
+{
+  "type": "command",
+  "id": "cmd-marker-set",
+  "command": "player_marker_set",
+  "x": 18000.0,
+  "y": -15200.0
+}
+```
+
+**Server reply:**
+```json
+{
+  "type": "commandResult",
+  "id": "cmd-marker-set",
+  "success": true,
+  "data": {
+    "isSet": true,
+    "x": 18000.0, "y": -15200.0, "z": 0.0,
+    "worldspace": "Tamriel", "worldspaceFormId": "0x0000003C",
+    "parentWorldspace": "Tamriel", "parentWorldspaceFormId": "0x0000003C"
+  }
+}
+```
+
+### Example — clear the marker
+
+```json
+{
+  "type": "command",
+  "id": "cmd-marker-clear",
+  "command": "player_marker_clear"
+}
+```
+
+**Server reply:**
+```json
+{
+  "type": "commandResult",
+  "id": "cmd-marker-clear",
+  "success": true,
+  "data": {
+    "isSet": false,
+    "x": 18000.0, "y": -15200.0, "z": 0.0,
+    "worldspace": "Tamriel", "worldspaceFormId": "0x0000003C",
+    "parentWorldspace": "Tamriel", "parentWorldspaceFormId": "0x0000003C"
+  }
+}
+```
+
+### Example — query the marker
+
+```json
+{
+  "type": "query",
+  "id": "q-marker",
+  "fields": { "marker": "Player::Marker" }
 }
 ```
