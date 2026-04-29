@@ -118,7 +118,7 @@ validates the request and executes it on the game thread, then replies with a
 {
   "type": "command",
   "id": "cmd-1",            // unique request identifier (required)
-  "command": "equip",       // command name (required): equip | unequip | use | drop | favorite | equip_spell | unequip_spell | favorite_spell | hotkey_set | hotkey_clear | hotkey_trigger | player_marker_set | player_marker_clear
+  "command": "equip",       // command name (required): equip | unequip | use | drop | favorite | equip_spell | unequip_spell | favorite_spell | hotkey_set | hotkey_clear | hotkey_trigger | player_marker_set | player_marker_clear | fast_travel
   "formId": "0x00012EB7",  // item or spell form ID as hex string (required for most commands, plus hotkey_set)
   "hand": "right",          // equip/unequip hand: "right" or "left" (optional, default: "right")
   "count": 1,               // drop count (optional, default: 1, only used by "drop")
@@ -132,8 +132,8 @@ validates the request and executes it on the game thread, then replies with a
 | Field | Required | Default | Description |
 |---|---|---|---|
 | `id` | **yes** | — | Unique identifier echoed back in the `"commandResult"` response. |
-| `command` | **yes** | — | One of: `equip`, `unequip`, `use`, `drop`, `favorite`, `equip_spell`, `unequip_spell`, `favorite_spell`, `hotkey_set`, `hotkey_clear`, `hotkey_trigger`, `player_marker_set`, `player_marker_clear`. |
-| `formId` | conditional | — | Hex form ID of the target item/spell. Required for all commands **except** `hotkey_clear`, `hotkey_trigger`, `player_marker_set`, and `player_marker_clear`. |
+| `command` | **yes** | — | One of: `equip`, `unequip`, `use`, `drop`, `favorite`, `equip_spell`, `unequip_spell`, `favorite_spell`, `hotkey_set`, `hotkey_clear`, `hotkey_trigger`, `player_marker_set`, `player_marker_clear`, `fast_travel`. |
+| `formId` | conditional | — | Hex form ID of the target item/spell/marker. Required for all commands **except** `hotkey_clear`, `hotkey_trigger`, `player_marker_set`, and `player_marker_clear`. For `fast_travel` this is the map-marker ref's `refId` (as returned by `Map::Markers`). |
 | `hand` | no | `"right"` | Target hand for weapons and spells: `"right"` or `"left"`. Ignored for non-weapon items and non-spell commands. Two-handed weapons and master-level spells only accept `"right"`. |
 | `count` | no | `1` | Number of items to drop. Only used by the `drop` command. |
 | `slot` | conditional | — | Hotkey slot number in the range `1..8`. Required by `hotkey_set`, `hotkey_clear`, and `hotkey_trigger`. Ignored otherwise. |
@@ -157,6 +157,7 @@ validates the request and executes it on the game thread, then replies with a
 | `hotkey_trigger` | — | Fires the action bound to the given `slot` by synthesizing a `Hotkey<N>` button event and dispatching it through the engine's own `FavoritesHandler`. Behavior is bit-for-bit identical to the player physically pressing the corresponding number key in gameplay: spells toggle right-hand → left-hand → unequip, weapons toggle equip ↔ unequip (with the special two-handed/dual-wield rules), shouts/powers go to the voice slot, consumables are used, etc. Always succeeds when slot is valid (no error if the slot is empty — the engine simply does nothing, just like vanilla). |
 | `player_marker_set` | Player-placed map marker | Places (or moves) the player's custom map marker to `(x, y, z)` in the marker's worldspace and makes it visible / fast-travel-enabled. Returns the new marker state in `data` (same shape as the `Player::Marker` field). Fails with an error if the marker reference has not been initialized yet — open the world map at least once in the save before calling this. |
 | `player_marker_clear` | Player-placed map marker | Hides the player's custom map marker (clears its visibility / fast-travel flags). The underlying reference is preserved and reused next time the marker is placed. Always succeeds. Returns the resulting marker state in `data` (with `isSet: false`). |
+| `fast_travel` | Map-marker reference | Teleports the player to the map marker identified by `formId` (use `refId` from `Map::Markers`). Mirrors the engine's pre-flight checks: the marker must exist, be visible (discovered), have `canFastTravel=true`, the player must not be in combat, and fast travel must not be globally disabled. Internally executes `player.moveto <refId>` via `Script::CompileAndRun`, which works cross-worldspace but does not advance the in-game clock or play the fade animation. Returns the destination marker info in `data` (`refId`, `name`, `typeId`, `x`, `y`, `isVisible`, `canFastTravel`). |
 
 ---
 

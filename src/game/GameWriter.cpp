@@ -970,4 +970,106 @@ namespace GameWriter
         PrintConsole("[WS] Player marker cleared");
         return result;
     }
+
+    // ─── Fast travel ──────────────────────────────────────────────
+
+    // Build a JSON payload describing a map-marker ref (matches the per-entry
+    // shape produced by PlayerReader::ReadMapMarkers).
+    static nlohmann::json BuildMarkerPayload(RE::TESObjectREFR* ref, RE::MapMarkerData* data)
+    {
+        using Flag = RE::MapMarkerData::Flag;
+        nlohmann::json out;
+        out["refId"]         = std::format("0x{:08X}", ref->GetFormID());
+        const char* fullName = data->locationName.GetFullName();
+        out["name"]          = fullName ? fullName : "";
+        const auto typeId    = static_cast<std::uint32_t>(data->type.underlying());
+        out["typeId"]        = typeId;
+        out["x"]             = ref->GetPositionX();
+        out["y"]             = ref->GetPositionY();
+        out["isVisible"]     = data->flags.any(Flag::kVisible);
+        out["canFastTravel"] = data->flags.any(Flag::kCanTravelTo);
+        return out;
+    }
+
+    CommandResult FastTravelToMarker(RE::FormID formId)
+    {
+        // 1. Resolve form and require it to be an actual reference.
+        auto* form = RE::TESForm::LookupByID(formId);
+        if (!form)
+            return {false, std::format("No form with id 0x{:08X}", formId)};
+
+        auto* ref = form->As<RE::TESObjectREFR>();
+        if (!ref)
+            return {false, std::format("Form 0x{:08X} is not a reference", formId)};
+
+        // 2. Require an ExtraMapMarker — i.e. this ref is a map marker.
+        auto* extra = ref->extraList.GetByType<RE::ExtraMapMarker>();
+        if (!extra || !extra->mapData)
+            return {false, std::format("Reference 0x{:08X} is not a map marker", formId)};
+
+        auto* data = extra->mapData;
+        using Flag = RE::MapMarkerData::Flag;
+
+        // 3. Marker-level checks (mirror what MapMenu enforces).
+        if (!data->flags.any(Flag::kVisible))
+            return {false, "Marker is not discovered yet (cannot fast-travel to a hidden marker)"};
+
+        if (!data->flags.any(Flag::kCanTravelTo))
+            return {false, "Marker is flagged as non-fast-travel (canFastTravel=false)"};
+
+        // Skip disabled / deleted refs to match the in-engine filter.
+        if (ref->IsDisabled())
+            return {false, "Marker reference is disabled"};
+        if (ref->IsDeleted())
+            return {false, "Marker reference is deleted"};
+
+        // 4. Worldspace gate: some worldspaces (DLC interiors, etc.) forbid
+        //    fast travel entirely.
+        if (auto* parentCell = ref->GetParentCell()) {
+            if (auto* world = parentCell->GetRuntimeData().worldSpace) {
+                using WFlag = RE::TESWorldSpace::Flag;
+                if (world->flags.any(WFlag::kCantFastTravel))
+                    return {false, "Marker's worldspace forbids fast travel"};
+            }
+        }
+
+        // 5. Player-state checks.
+        auto* player = RE::PlayerCharacter::GetSingleton();
+        if (!player)
+            return {false, "Player singleton unavailable"};
+
+        if (player->IsInCombat())
+            return {false, "Cannot fast-travel while in combat"};
+
+        // The Sky::kFastTravel flag is cleared by quests/scripts that
+        // temporarily disable fast travel (e.g. "in dialogue" sequences).
+        if (auto* sky = RE::Sky::GetSingleton()) {
+            using SkyFlag = RE::Sky::Flags;
+            if (!sky->flags.any(SkyFlag::kFastTravel))
+                return {false, "Fast travel is currently disabled by the game (a quest or script blocked it)"};
+        }
+
+        // 6. Execute the teleport via Script::CompileAndRun (`player.moveto
+        //    <refId>`).  This is the well-established SKSE pattern: it goes
+        //    through the engine's normal moveto pipeline (cell load,
+        //    worldspace switch, fast-travel marker placement) and works
+        //    cross-worldspace.  Note: like the console command, this
+        //    teleports without advancing the in-game clock or playing the
+        //    fade animation — callers that need vanilla time-pass behavior
+        //    should layer it on top.
+        const std::string cmd = std::format("player.moveto 0x{:08X}", formId);
+
+        auto* script = new RE::Script();
+        script->SetCommand(cmd);
+        script->CompileAndRun(player);
+        delete script;
+
+        CommandResult result;
+        result.success = true;
+        result.data    = BuildMarkerPayload(ref, data);
+        PrintConsole(std::format("[WS] Fast-travel to 0x{:08X} ({})",
+                                 formId,
+                                 result.data.value("name", std::string{"unnamed"})));
+        return result;
+    }
 }

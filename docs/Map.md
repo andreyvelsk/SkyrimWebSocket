@@ -162,3 +162,83 @@ Useful when the player is actively exploring and new markers may appear:
   }
 }
 ```
+
+---
+
+## Commands
+
+### `fast_travel`
+
+Teleports the player to a map-marker reference.
+
+| Field | Type | Description |
+|---|---|---|
+| `formId` | `string` | Hex form ID of the marker reference. Use the `refId` value returned by `Map::Markers` (e.g. `"0x000136D5"`). |
+
+#### Pre-flight checks
+
+The command fails (with `success: false` and a human-readable `error`) when any
+of the following are not satisfied:
+
+* The form ID resolves to an actual `TESObjectREFR`.
+* The reference carries an `ExtraMapMarker` with `MapMarkerData` (i.e. it is a
+  map marker, not just any reference).
+* The marker has been **discovered** (`isVisible == true`).
+* The marker has `canFastTravel == true`.
+* The reference is not disabled or deleted.
+* The marker's parent worldspace does not have the `kCantFastTravel` flag.
+* The player is not currently in combat.
+* Fast travel is not globally suppressed by the engine (`Sky::Flags::kFastTravel`
+  is set — quests and scripts can clear this flag temporarily).
+
+#### Behaviour
+
+Internally executes `player.moveto <refId>` via `Script::CompileAndRun`. This
+works **cross-worldspace** (you can call it from inside a city sub-world or an
+interior cell) and routes through the engine's normal teleport pipeline.
+
+> **Note:** like the `player.moveto` console command, this teleport does not
+> advance the in-game clock and does not play the fast-travel fade animation.
+> If you need vanilla-style time-passing fast travel, advance the clock with
+> a separate command after the teleport.
+
+#### Request
+
+```json
+{
+  "type": "command",
+  "id": "ft-1",
+  "command": "fast_travel",
+  "formId": "0x000136D5"
+}
+```
+
+#### Successful response
+
+```json
+{
+  "type": "commandResult",
+  "id": "ft-1",
+  "success": true,
+  "data": {
+    "refId": "0x000136D5",
+    "name": "Whiterun Stables",
+    "typeId": 21,
+    "x": 1185.0,
+    "y": -3970.0,
+    "isVisible": true,
+    "canFastTravel": true
+  }
+}
+```
+
+#### Error response
+
+```json
+{
+  "type": "commandResult",
+  "id": "ft-1",
+  "success": false,
+  "error": "Marker is flagged as non-fast-travel (canFastTravel=false)"
+}
+```

@@ -237,6 +237,8 @@ namespace MessageRouter
                 result = GameWriter::UnequipSpell(formId, hand);
             else if (command == "favorite_spell")
                 result = GameWriter::FavoriteSpell(formId);
+            else if (command == "fast_travel")
+                result = GameWriter::FastTravelToMarker(formId);
             else
                 result = {false, "Unknown command: '" + command + "'"};
 

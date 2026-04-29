@@ -105,4 +105,22 @@ namespace GameWriter
     // ExtraMapMarker visibility flag is cleared.
     // Must be called on the game thread.
     CommandResult ClearPlayerMarker();
+
+    // ─── Fast travel ──────────────────────────────────────────────
+
+    // Teleport the player to the map-marker reference identified by formId.
+    // Mirrors the in-game fast-travel pipeline's pre-flight checks:
+    //   * the form must exist and be a TESObjectREFR
+    //   * the ref must carry an ExtraMapMarker with MapMarkerData
+    //   * the marker must have MapMarkerData::Flag::kCanTravelTo set
+    //   * the marker must have MapMarkerData::Flag::kVisible (i.e. discovered)
+    //   * the player must not be in combat
+    //   * the marker's parent worldspace must not have kCantFastTravel
+    // On success the player is teleported to the marker's reference.
+    //
+    // Returns the same JSON shape used by Map::Markers entries on success
+    // (refId, name, type, typeId, x, y, isVisible, canFastTravel) so callers
+    // can confirm the destination in a single round-trip.
+    // Must be called on the game thread.
+    CommandResult FastTravelToMarker(RE::FormID formId);
 }
