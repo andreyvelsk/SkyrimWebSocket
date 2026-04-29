@@ -1065,7 +1065,7 @@ namespace GameWriter
         // CommonLibSSE.lib, so a direct construction produces a wall of
         // unresolved-external linker errors.
         const auto* factory = RE::IFormFactory::GetConcreteFormFactoryByType<RE::Script>();
-        auto*       script  = factory ? factory->Create() : nullptr;
+        auto*       script  = factory ? const_cast<RE::ConcreteFormFactory<RE::Script, RE::FormType::Script>*>(factory)->Create() : nullptr;
         if (!script)
             return {false, "Failed to allocate Script form via game factory"};
 
