@@ -188,8 +188,6 @@ of the following are not satisfied:
 * The reference is not disabled or deleted.
 * The marker's parent worldspace does not have the `kCantFastTravel` flag.
 * The player is not currently in combat.
-* Fast travel is not globally suppressed by the engine (`Sky::Flags::kFastTravel`
-  is set — quests and scripts can clear this flag temporarily).
 
 #### Behaviour
 

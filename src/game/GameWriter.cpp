@@ -1041,13 +1041,13 @@ namespace GameWriter
         if (player->IsInCombat())
             return {false, "Cannot fast-travel while in combat"};
 
-        // The Sky::kFastTravel flag is cleared by quests/scripts that
-        // temporarily disable fast travel (e.g. "in dialogue" sequences).
-        if (auto* sky = RE::Sky::GetSingleton()) {
-            using SkyFlag = RE::Sky::Flags;
-            if (!sky->flags.any(SkyFlag::kFastTravel))
-                return {false, "Fast travel is currently disabled by the game (a quest or script blocked it)"};
-        }
+        // Note: we deliberately do not consult RE::Sky's flags here.  The
+        // `kFastTravel` bit is not portable across CommonLibSSE-NG versions
+        // (multi-target builds may not expose the `Flags` enum at all), and
+        // semantically it tracks "fast travel currently in progress" rather
+        // than "fast travel globally allowed".  The combat check above plus
+        // the worldspace `kCantFastTravel` check below cover the cases that
+        // matter in practice.
 
         // 6. Execute the teleport via Script::CompileAndRun (`player.moveto
         //    <refId>`).  This is the well-established SKSE pattern: it goes
