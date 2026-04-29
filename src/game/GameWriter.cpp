@@ -993,19 +993,26 @@ namespace GameWriter
 
     CommandResult FastTravelToMarker(RE::FormID formId)
     {
+        logger::info("[FastTravel] BEGIN formId=0x{:08X}", formId);
+
         // 1. Resolve form and require it to be an actual reference.
         auto* form = RE::TESForm::LookupByID(formId);
-        if (!form)
+        if (!form) {
+            logger::info("[FastTravel] step1: form lookup FAILED");
             return {false, std::format("No form with id 0x{:08X}", formId)};
+        }
+        logger::info("[FastTravel] step1: form ok, type={}", static_cast<int>(form->GetFormType()));
 
         auto* ref = form->As<RE::TESObjectREFR>();
         if (!ref)
             return {false, std::format("Form 0x{:08X} is not a reference", formId)};
+        logger::info("[FastTravel] step1b: ref ok");
 
         // 2. Require an ExtraMapMarker — i.e. this ref is a map marker.
         auto* extra = ref->extraList.GetByType<RE::ExtraMapMarker>();
         if (!extra || !extra->mapData)
             return {false, std::format("Reference 0x{:08X} is not a map marker", formId)};
+        logger::info("[FastTravel] step2: ExtraMapMarker ok");
 
         auto* data = extra->mapData;
         using Flag = RE::MapMarkerData::Flag;
@@ -1022,6 +1029,7 @@ namespace GameWriter
             return {false, "Marker reference is disabled"};
         if (ref->IsDeleted())
             return {false, "Marker reference is deleted"};
+        logger::info("[FastTravel] step3: marker flags & state ok");
 
         // 4. Worldspace gate: some worldspaces (DLC interiors, etc.) forbid
         //    fast travel entirely.
@@ -1030,6 +1038,9 @@ namespace GameWriter
                 using WFlag = RE::TESWorldSpace::Flag;
                 if (world->flags.any(WFlag::kCantFastTravel))
                     return {false, "Marker's worldspace forbids fast travel"};
+                logger::info("[FastTravel] step4: target worldspace='{}' editorId='{}'",
+                             world->GetName() ? world->GetName() : "<null>",
+                             world->GetFormEditorID() ? world->GetFormEditorID() : "<null>");
             }
         }
 
@@ -1040,14 +1051,7 @@ namespace GameWriter
 
         if (player->IsInCombat())
             return {false, "Cannot fast-travel while in combat"};
-
-        // Note: we deliberately do not consult RE::Sky's flags here.  The
-        // `kFastTravel` bit is not portable across CommonLibSSE-NG versions
-        // (multi-target builds may not expose the `Flags` enum at all), and
-        // semantically it tracks "fast travel currently in progress" rather
-        // than "fast travel globally allowed".  The combat check above plus
-        // the worldspace `kCantFastTravel` check below cover the cases that
-        // matter in practice.
+        logger::info("[FastTravel] step5: player ok, inCombat=false");
 
         // 6. Execute the teleport via Script::CompileAndRun (`player.moveto
         //    <refId>`).  This is the well-established SKSE pattern: it goes
@@ -1058,6 +1062,7 @@ namespace GameWriter
         //    fade animation — callers that need vanilla time-pass behavior
         //    should layer it on top.
         const std::string cmd = std::format("player.moveto 0x{:08X}", formId);
+        logger::info("[FastTravel] step6: prepared cmd='{}'", cmd);
 
         // Create the Script via the game's own form factory.  We must not
         // `new RE::Script()` directly — the vtable for RE::Script (and its
@@ -1068,10 +1073,20 @@ namespace GameWriter
         auto*       script  = factory ? const_cast<RE::ConcreteFormFactory<RE::Script, RE::FormType::Script>*>(factory)->Create() : nullptr;
         if (!script)
             return {false, "Failed to allocate Script form via game factory"};
+        logger::info("[FastTravel] step6: Script form created at {}", static_cast<void*>(script));
 
         script->SetCommand(cmd);
+        logger::info("[FastTravel] step6: SetCommand done; calling CompileAndRun(player) ...");
+
         script->CompileAndRun(player);
-        delete script;
+        logger::info("[FastTravel] step6: CompileAndRun returned (this log only fires AFTER moveto initiates)");
+
+        // NOTE: deliberately NOT calling `delete script` — the form factory
+        // may register the new form in the global form table on Create().
+        // Manually deleting can race with engine bookkeeping and was a
+        // suspected cause of post-teleport hangs.  The leak is a single
+        // ~400-byte form per fast-travel call; acceptable.
+        logger::info("[FastTravel] step6: skipping delete (intentional)");
 
         CommandResult result;
         result.success = true;
@@ -1079,6 +1094,7 @@ namespace GameWriter
         PrintConsole(std::format("[WS] Fast-travel to 0x{:08X} ({})",
                                  formId,
                                  result.data.value("name", std::string{"unnamed"})));
+        logger::info("[FastTravel] END success");
         return result;
     }
 }
