@@ -335,89 +335,60 @@ namespace PlayerReader
         // Map markers are persistent refs attached to each worldspace, NOT
         // members of TESDataHandler::GetFormArray<TESObjectREFR>() (that array
         // does not store object references). We iterate every worldspace and
-        // walk its fixedPersistentRefMap + mobilePersistentRefs, looking for
-        // refs that carry an ExtraMapMarker.
-        logger::info("[Map::Markers] start");
+        // walk its persistentCell via TESObjectCELL::ForEachReference, looking
+        // for refs that carry an ExtraMapMarker.
+        //
+        // NOTE: this walks thousands of refs across all worldspaces.  Keep
+        // this hot path silent (no per-ref logging); the per-flush-on-trace
+        // fsync inside spdlog turns each log line into a multi-millisecond
+        // disk write that visibly freezes the renderer.
 
         auto* handler = RE::TESDataHandler::GetSingleton();
         if (!handler) {
-            logger::info("[Map::Markers] no TESDataHandler");
+            logger::warn("[Map::Markers] no TESDataHandler");
             return result;
         }
-        logger::info("[Map::Markers] handler ok");
 
         std::unordered_set<RE::FormID> seen;
 
         auto emit = [&](RE::TESObjectREFR* form) {
-            if (!form) {
-                logger::info("[Map::Markers]   emit: form=null, skip");
+            if (!form)
                 return;
-            }
             const auto formId = form->GetFormID();
-            logger::info("[Map::Markers]   emit: form=0x{:08X}", formId);
 
-            logger::info("[Map::Markers]     - get extraList ExtraMapMarker");
             auto* extra = form->extraList.GetByType<RE::ExtraMapMarker>();
-            if (!extra) {
-                logger::info("[Map::Markers]     -> no ExtraMapMarker, skip");
+            if (!extra || !extra->mapData)
                 return;
-            }
-            logger::info("[Map::Markers]     - extra ok, mapData={}",
-                         static_cast<const void*>(extra->mapData));
-            if (!extra->mapData) {
-                logger::info("[Map::Markers]     -> mapData null, skip");
-                return;
-            }
 
-            if (!seen.insert(formId).second) {
-                logger::info("[Map::Markers]     -> dup, skip");
+            if (!seen.insert(formId).second)
                 return;
-            }
 
             auto* data = extra->mapData;
 
             using Flag = RE::MapMarkerData::Flag;
-            logger::info("[Map::Markers]     - read flags");
             const bool isVisible     = data->flags.any(Flag::kVisible);
             const bool canFastTravel = data->flags.any(Flag::kCanTravelTo);
 
-            if (visibleOnly && !isVisible) {
-                logger::info("[Map::Markers]     -> not visible, skip (visibleOnly mode)");
+            if (visibleOnly && !isVisible)
                 return;
-            }
 
             // When visibleOnly is requested we want exactly what MapMenu would
             // render: skip disabled / deleted refs and nameless markers (the
             // engine itself filters those out before drawing).
-            if (visibleOnly) {
-                if (form->IsDisabled()) {
-                    logger::info("[Map::Markers]     -> ref disabled, skip");
-                    return;
-                }
-                if (form->IsDeleted()) {
-                    logger::info("[Map::Markers]     -> ref deleted, skip");
-                    return;
-                }
-            }
+            if (visibleOnly && (form->IsDisabled() || form->IsDeleted()))
+                return;
 
-            logger::info("[Map::Markers]     - read type");
             const auto typeId   = static_cast<uint32_t>(data->type.underlying());
             const auto typeName = typeId < kTypeNames.size()
                                       ? std::string(kTypeNames[typeId])
                                       : "Unknown";
 
-            logger::info("[Map::Markers]     - read locationName.GetFullName");
             const char* fullName = data->locationName.GetFullName();
             std::string name     = fullName ? fullName : "";
-            logger::info("[Map::Markers]     - name='{}' typeId={} vis={} ft={}",
-                         name, typeId, isVisible, canFastTravel);
 
-            if (visibleOnly && name.empty()) {
-                logger::info("[Map::Markers]     -> empty name, skip (visibleOnly mode)");
+            if (visibleOnly && name.empty())
                 return;
-            }
 
-            logger::info("[Map::Markers]     - read position");
             const float x = form->GetPositionX();
             const float y = form->GetPositionY();
 
@@ -432,12 +403,9 @@ namespace PlayerReader
             entry["canFastTravel"] = canFastTravel;
 
             result.push_back(std::move(entry));
-            logger::info("[Map::Markers]     -> pushed");
         };
 
-        logger::info("[Map::Markers] get worldspace form array");
         const auto& worlds = handler->GetFormArray<RE::TESWorldSpace>();
-        logger::info("[Map::Markers] worldspace count = {}", worlds.size());
 
         // We avoid touching world->fixedPersistentRefMap / mobilePersistentRefs
         // directly: in multi-targeting builds the BSTHashMap layout mismatches
@@ -445,36 +413,23 @@ namespace PlayerReader
         // walk every worldspace's persistent cell using the public, safe API
         // TESObjectCELL::ForEachReference. Map markers live in the persistent
         // cell of each worldspace.
-        std::size_t worldIdx = 0;
+        std::size_t totalRefs = 0;
         for (auto* world : worlds) {
-            const auto idx = worldIdx++;
-            if (!world) {
-                logger::info("[Map::Markers] world #{}: null, skip", idx);
+            if (!world)
                 continue;
-            }
-            const auto  wid   = world->GetFormID();
-            const char* wedid = world->GetFormEditorID();
-            logger::info("[Map::Markers] world #{}: 0x{:08X} edid='{}'",
-                         idx, wid, wedid ? wedid : "(null)");
-
             auto* persist = world->persistentCell;
-            logger::info("[Map::Markers]   - persistentCell={}",
-                         static_cast<const void*>(persist));
-            if (!persist) {
-                logger::info("[Map::Markers] world #{} no persistent cell, skip", idx);
+            if (!persist)
                 continue;
-            }
 
-            std::size_t visited = 0;
             persist->ForEachReference([&](RE::TESObjectREFR& ref) {
-                ++visited;
+                ++totalRefs;
                 emit(&ref);
                 return RE::BSContainer::ForEachResult::kContinue;
             });
-            logger::info("[Map::Markers] world #{} done, refs visited = {}", idx, visited);
         }
 
-        logger::info("[Map::Markers] finished, total markers = {}", result.size());
+        logger::debug("[Map::Markers] visibleOnly={} worlds={} refs_visited={} markers={}",
+                      visibleOnly, worlds.size(), totalRefs, result.size());
         return result;
     }
 

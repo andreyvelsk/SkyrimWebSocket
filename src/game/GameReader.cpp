@@ -92,18 +92,29 @@ namespace GameReader
                         lvIt->second == currentVersion &&
                         cacheIt != state.lastValues.end()) {
                         // No event since last resolve — value is guaranteed
-                        // unchanged from our perspective; skip.
+                        // unchanged from our perspective; skip without
+                        // touching the resolver or the shared cache.
                         continue;
                     }
-                    // Record the version we are about to read at; if an
-                    // event fires between this read and the next tick the
-                    // counter will have advanced and we'll resolve again.
-                    state.lastVersions[alias] = currentVersion;
                 }
 
                 nlohmann::json val;
                 if (jsonEntryOpt->requiresInGame && !inGame) {
                     val = nullptr;
+                    if (state.sendOnChange && EventBus::IsEventDriven(registryKey))
+                        state.lastVersions[alias] = EventBus::GetVersion(registryKey);
+                } else if (EventBus::IsEventDriven(registryKey)) {
+                    // Shared cache: the resolver runs at most once per
+                    // (key, version) across ALL subscribers.  This is what
+                    // makes the heavy walk (e.g. Map::Markers across every
+                    // worldspace) cost O(1) per poll once the value has
+                    // been computed for the current version.
+                    const auto& jsonEntry = *jsonEntryOpt;
+                    auto cached = EventBus::ResolveCached(registryKey,
+                                                          [&]() { return jsonEntry.resolve(); });
+                    val = std::move(cached.value);
+                    if (state.sendOnChange)
+                        state.lastVersions[alias] = cached.version;
                 } else {
                     val = jsonEntryOpt->resolve();
                 }

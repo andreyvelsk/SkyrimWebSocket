@@ -24,6 +24,18 @@ namespace EventBus
         std::vector<KeyEntry>                                        g_storage;
         bool                                                         g_installed = false;
 
+        // Shared resolver cache.  Game-thread only — ResolveCached is the
+        // sole accessor and is documented to run on the game thread, so we
+        // do not need a mutex.
+        struct CacheEntry
+        {
+            // 0 means "never resolved".  Cache is considered valid only when
+            // version != 0 AND version == GetVersion(key).
+            std::uint64_t  version = 0;
+            nlohmann::json value;
+        };
+        std::unordered_map<std::string, CacheEntry> g_cache;
+
         void RegisterKey(const std::string& key)
         {
             auto entry    = KeyEntry{key, std::make_unique<std::atomic<std::uint64_t>>(0)};
@@ -58,8 +70,14 @@ namespace EventBus
         //
         // All sinks are stateless singletons.  ProcessEvent runs on the game
         // thread; we keep the work to a couple of atomic increments so this
-        // is safe to register globally.
-
+        // is safe to register globally.        //
+        // We deliberately do NOT subscribe to TESQuestStageEvent: it fires
+        // on every quest-stage change in the game (very frequent), and the
+        // vast majority of stages do not reveal map markers.  Bumping on
+        // every stage forces a full re-walk of all worldspaces on the next
+        // poll, which is the exact freeze we are trying to avoid.  Markers
+        // that are script-revealed mid-quest will refresh on the next cell
+        // load or when the player opens MapMenu.
         class CellLoadSink final : public RE::BSTEventSink<RE::TESCellFullyLoadedEvent>
         {
         public:
@@ -106,26 +124,6 @@ namespace EventBus
             }
         };
 
-        class QuestStageSink final : public RE::BSTEventSink<RE::TESQuestStageEvent>
-        {
-        public:
-            static QuestStageSink* GetSingleton()
-            {
-                static QuestStageSink s;
-                return &s;
-            }
-
-            RE::BSEventNotifyControl ProcessEvent(
-                const RE::TESQuestStageEvent*,
-                RE::BSTEventSource<RE::TESQuestStageEvent>*) override
-            {
-                // Quest stages frequently script-reveal map markers.  This
-                // fires often, but the work is one atomic increment.
-                BumpKeys({"Map::Markers", "Map::Markers::All"}, "TESQuestStage");
-                return RE::BSEventNotifyControl::kContinue;
-            }
-        };
-
         class LoadGameSink final : public RE::BSTEventSink<RE::TESLoadGameEvent>
         {
         public:
@@ -161,7 +159,6 @@ namespace EventBus
         // ── Install SKSE event sinks ─────────────────────────────────────
         if (auto* src = RE::ScriptEventSourceHolder::GetSingleton()) {
             src->AddEventSink<RE::TESCellFullyLoadedEvent>(CellLoadSink::GetSingleton());
-            src->AddEventSink<RE::TESQuestStageEvent>(QuestStageSink::GetSingleton());
             src->AddEventSink<RE::TESLoadGameEvent>(LoadGameSink::GetSingleton());
         } else {
             logger::warn("[EventBus] ScriptEventSourceHolder unavailable; "
@@ -187,5 +184,25 @@ namespace EventBus
         if (it == g_versions.end())
             return 0;
         return it->second->load(std::memory_order_relaxed);
+    }
+
+    CachedValue ResolveCached(const std::string&                          registryKey,
+                              const std::function<nlohmann::json()>&      compute)
+    {
+        const auto current = GetVersion(registryKey);
+        auto&      slot    = g_cache[registryKey];
+
+        // Hit: cached entry was produced at the current version (and is not
+        // the initial sentinel 0).  Reuse it without invoking `compute`.
+        if (slot.version == current && slot.version != 0) {
+            logger::trace("[EventBus] cache hit '{}' v={}", registryKey, current);
+            return {slot.version, slot.value};
+        }
+
+        logger::debug("[EventBus] cache miss '{}' prev_v={} new_v={} — resolving",
+                      registryKey, slot.version, current);
+        slot.value   = compute();
+        slot.version = current;
+        return {slot.version, slot.value};
     }
 }
