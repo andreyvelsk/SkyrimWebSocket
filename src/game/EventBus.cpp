@@ -124,6 +124,53 @@ namespace EventBus
             }
         };
 
+        // Fires when the player walks close enough to a location for the
+        // engine to flip its map marker to discovered (the
+        // "Location Discovered" pop-up).  This is the canonical event for
+        // exterior marker discovery and is what we were missing earlier:
+        // TESCellFullyLoadedEvent fires on cell loads, not on the moment of
+        // discovery.
+        class LocationDiscoverySink final : public RE::BSTEventSink<RE::LocationDiscovery::Event>
+        {
+        public:
+            static LocationDiscoverySink* GetSingleton()
+            {
+                static LocationDiscoverySink s;
+                return &s;
+            }
+
+            RE::BSEventNotifyControl ProcessEvent(
+                const RE::LocationDiscovery::Event*,
+                RE::BSTEventSource<RE::LocationDiscovery::Event>*) override
+            {
+                BumpKeys({"Map::Markers", "Map::Markers::All"}, "LocationDiscovery");
+                return RE::BSEventNotifyControl::kContinue;
+            }
+        };
+
+        // Quest stages frequently script-reveal map markers ("a marker has
+        // been added to your map").  Many stages do NOT touch markers, but
+        // bumping is cheap (one atomic increment) and the actual re-walk is
+        // de-duplicated by the shared resolver cache: multiple bumps within
+        // a single poll interval still produce only one walk.
+        class QuestStageSink final : public RE::BSTEventSink<RE::TESQuestStageEvent>
+        {
+        public:
+            static QuestStageSink* GetSingleton()
+            {
+                static QuestStageSink s;
+                return &s;
+            }
+
+            RE::BSEventNotifyControl ProcessEvent(
+                const RE::TESQuestStageEvent*,
+                RE::BSTEventSource<RE::TESQuestStageEvent>*) override
+            {
+                BumpKeys({"Map::Markers", "Map::Markers::All"}, "TESQuestStage");
+                return RE::BSEventNotifyControl::kContinue;
+            }
+        };
+
         class LoadGameSink final : public RE::BSTEventSink<RE::TESLoadGameEvent>
         {
         public:
@@ -159,11 +206,20 @@ namespace EventBus
         // ── Install SKSE event sinks ─────────────────────────────────────
         if (auto* src = RE::ScriptEventSourceHolder::GetSingleton()) {
             src->AddEventSink<RE::TESCellFullyLoadedEvent>(CellLoadSink::GetSingleton());
+            src->AddEventSink<RE::TESQuestStageEvent>(QuestStageSink::GetSingleton());
             src->AddEventSink<RE::TESLoadGameEvent>(LoadGameSink::GetSingleton());
         } else {
             logger::warn("[EventBus] ScriptEventSourceHolder unavailable; "
                          "TES* sinks not installed");
         }
+
+        // LocationDiscovery has its own event source, not routed via
+        // ScriptEventSourceHolder.
+        if (auto* lds = RE::LocationDiscovery::GetEventSource())
+            lds->AddEventSink<RE::LocationDiscovery::Event>(LocationDiscoverySink::GetSingleton());
+        else
+            logger::warn("[EventBus] LocationDiscovery::GetEventSource() returned null; "
+                         "discovery sink not installed");
 
         if (auto* ui = RE::UI::GetSingleton())
             ui->AddEventSink<RE::MenuOpenCloseEvent>(MenuSink::GetSingleton());
