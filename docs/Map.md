@@ -169,7 +169,7 @@ Useful when the player is actively exploring and new markers may appear:
 
 ### `fast_travel`
 
-Teleports the player to a map-marker reference.
+Triggers a real, vanilla-style fast travel to a map-marker reference.
 
 | Field | Type | Description |
 |---|---|---|
@@ -191,14 +191,23 @@ of the following are not satisfied:
 
 #### Behaviour
 
-Internally executes `player.moveto <refId>` via `Script::CompileAndRun`. This
-works **cross-worldspace** (you can call it from inside a city sub-world or an
-interior cell) and routes through the engine's normal teleport pipeline.
+Internally dispatches the Papyrus static `Game.FastTravel(akMarker)` through
+the SKSE Virtual Machine. This routes through the engine's full fast-travel
+pipeline, exactly like the player confirming a destination on the in-game
+map:
 
-> **Note:** like the `player.moveto` console command, this teleport does not
-> advance the in-game clock and does not play the fast-travel fade animation.
-> If you need vanilla-style time-passing fast travel, advance the clock with
-> a separate command after the teleport.
+* fade animation is played,
+* in-game time is advanced based on the travel distance,
+* random-encounter rolls are performed,
+* weather is reset and autosave is triggered (per the engine's own rules),
+* followers are transported with the player,
+* the `PlayerFlags::fastTraveling` bit is toggled, so other mods that hook
+  it (e.g. `OnFastTravelEnd` listeners) fire correctly.
+
+The command returns success **as soon as the VM call is queued** — actual
+arrival happens asynchronously inside the engine. Clients that need to react
+to arrival should observe the player's position / current location via the
+existing field subscriptions.
 
 #### Request
 

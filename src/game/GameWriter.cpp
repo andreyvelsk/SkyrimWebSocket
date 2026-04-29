@@ -1053,40 +1053,27 @@ namespace GameWriter
             return {false, "Cannot fast-travel while in combat"};
         logger::info("[FastTravel] step5: player ok, inCombat=false");
 
-        // 6. Execute the teleport via Script::CompileAndRun (`player.moveto
-        //    <refId>`).  This is the well-established SKSE pattern: it goes
-        //    through the engine's normal moveto pipeline (cell load,
-        //    worldspace switch, fast-travel marker placement) and works
-        //    cross-worldspace.  Note: like the console command, this
-        //    teleports without advancing the in-game clock or playing the
-        //    fade animation — callers that need vanilla time-pass behavior
-        //    should layer it on top.
-        const std::string cmd = std::format("player.moveto 0x{:08X}", formId);
-        logger::info("[FastTravel] step6: prepared cmd='{}'", cmd);
+        // 6. Trigger a *real* fast travel via Papyrus `Game.FastTravel(akMarker)`.
+        //    Unlike `player.moveto`, this dispatches into the engine's
+        //    full fast-travel pipeline: fade animation, in-game time
+        //    advancement, random-encounter rolls, weather reset, autosave,
+        //    follower transfer and the `PlayerFlags::fastTraveling` bit.
+        //    The Papyrus static is implemented natively in the runtime, so
+        //    this works cross-runtime (SE/AE/VR/GOG) without depending on
+        //    Address Library IDs.
+        auto* vm = RE::BSScript::Internal::VirtualMachine::GetSingleton();
+        if (!vm)
+            return {false, "Papyrus VM unavailable"};
 
-        // Create the Script via the game's own form factory.  We must not
-        // `new RE::Script()` directly — the vtable for RE::Script (and its
-        // base RE::TESForm) lives inside the Skyrim runtime, not in
-        // CommonLibSSE.lib, so a direct construction produces a wall of
-        // unresolved-external linker errors.
-        const auto* factory = RE::IFormFactory::GetConcreteFormFactoryByType<RE::Script>();
-        auto*       script  = factory ? const_cast<RE::ConcreteFormFactory<RE::Script, RE::FormType::Script>*>(factory)->Create() : nullptr;
-        if (!script)
-            return {false, "Failed to allocate Script form via game factory"};
-        logger::info("[FastTravel] step6: Script form created at {}", static_cast<void*>(script));
-
-        script->SetCommand(cmd);
-        logger::info("[FastTravel] step6: SetCommand done; calling CompileAndRun(player) ...");
-
-        script->CompileAndRun(player);
-        logger::info("[FastTravel] step6: CompileAndRun returned (this log only fires AFTER moveto initiates)");
-
-        // NOTE: deliberately NOT calling `delete script` — the form factory
-        // may register the new form in the global form table on Create().
-        // Manually deleting can race with engine bookkeeping and was a
-        // suspected cause of post-teleport hangs.  The leak is a single
-        // ~400-byte form per fast-travel call; acceptable.
-        logger::info("[FastTravel] step6: skipping delete (intentional)");
+        auto* fnArgs = RE::MakeFunctionArguments(static_cast<RE::TESObjectREFR*>(ref));
+        RE::BSTSmartPointer<RE::BSScript::IStackCallbackFunctor> callback;
+        const bool dispatched = vm->DispatchStaticCall(RE::BSFixedString("Game"),
+                                                       RE::BSFixedString("FastTravel"),
+                                                       fnArgs,
+                                                       callback);
+        if (!dispatched)
+            return {false, "Failed to dispatch Game.FastTravel via Papyrus VM"};
+        logger::info("[FastTravel] step6: Game.FastTravel dispatched");
 
         CommandResult result;
         result.success = true;

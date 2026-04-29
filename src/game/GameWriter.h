@@ -108,19 +108,26 @@ namespace GameWriter
 
     // ─── Fast travel ──────────────────────────────────────────────
 
-    // Teleport the player to the map-marker reference identified by formId.
-    // Mirrors the in-game fast-travel pipeline's pre-flight checks:
+    // Trigger a real fast travel to the map-marker reference identified by
+    // formId.  Internally dispatches the Papyrus static `Game.FastTravel(ref)`,
+    // which routes through the engine's full fast-travel pipeline (fade
+    // animation, in-game time advancement, random-encounter rolls, weather
+    // reset, autosave, follower transfer, `PlayerFlags::fastTraveling`).
+    //
+    // Mirrors the in-game fast-travel pre-flight checks before dispatching:
     //   * the form must exist and be a TESObjectREFR
     //   * the ref must carry an ExtraMapMarker with MapMarkerData
-    //   * the marker must have MapMarkerData::Flag::kCanTravelTo set
     //   * the marker must have MapMarkerData::Flag::kVisible (i.e. discovered)
-    //   * the player must not be in combat
+    //   * the marker must have MapMarkerData::Flag::kCanTravelTo set
+    //   * the marker reference must not be disabled or deleted
     //   * the marker's parent worldspace must not have kCantFastTravel
-    // On success the player is teleported to the marker's reference.
+    //   * the player must not be in combat
     //
     // Returns the same JSON shape used by Map::Markers entries on success
     // (refId, name, type, typeId, x, y, isVisible, canFastTravel) so callers
-    // can confirm the destination in a single round-trip.
+    // can confirm the destination in a single round-trip.  The success
+    // response is sent immediately after the VM dispatch is queued; actual
+    // arrival happens asynchronously inside the engine.
     // Must be called on the game thread.
     CommandResult FastTravelToMarker(RE::FormID formId);
 }
