@@ -57,10 +57,19 @@ namespace PlayerReader
     // Must be called on the game thread.
     nlohmann::json ReadExteriorPosition();
 
-    // Returns an array of all map markers the player has discovered.
+    // Returns an array of map markers currently shown on the player's world
+    // map (i.e. markers whose MapMarkerData::Flag::kVisible bit is set —
+    // either pre-set in the ESM for cities/major locations, or toggled on by
+    // the engine when the player discovers them, or by quest scripts).
     // Each entry: { "refId", "name", "type", "typeId", "x", "y", "isVisible", "canFastTravel" }
     // Must be called on the game thread.
     nlohmann::json ReadMapMarkers();
+
+    // Same as ReadMapMarkers but returns ALL map markers in every loaded
+    // worldspace, including undiscovered/hidden ones. Useful for tooling /
+    // map editors.
+    // Must be called on the game thread.
+    nlohmann::json ReadMapMarkersAll();
 
     // Returns a JSON object describing the current game / player state.
     // Lets clients tell whether the player can act right now (paused, loading,

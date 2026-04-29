@@ -311,9 +311,13 @@ namespace FieldRegistry
 
         // Map markers
         { "Map::Markers",
-          { "Array of all map markers in every loaded worldspace (discovered and undiscovered). Each entry: { refId, name, type, typeId, x, y, isVisible, canFastTravel }.",
+          { "Array of map markers currently shown on the player's world map (only entries with isVisible=true — i.e. pre-discovered cities, locations the player has discovered, and quest-script-revealed markers). Each entry: { refId, name, type, typeId, x, y, isVisible, canFastTravel }.",
             "array",
             &PlayerReader::ReadMapMarkers } },
+        { "Map::Markers::All",
+          { "Array of ALL map markers in every loaded worldspace, including undiscovered/hidden ones. Same entry shape as Map::Markers.",
+            "array",
+            &PlayerReader::ReadMapMarkersAll } },
     };
     // clang-format on
 

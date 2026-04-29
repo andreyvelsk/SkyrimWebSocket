@@ -178,7 +178,7 @@ namespace PlayerReader
         return out;
     }
 
-    nlohmann::json ReadMapMarkers()
+    static nlohmann::json ReadMapMarkersImpl(bool visibleOnly)
     {
         auto* player = RE::PlayerCharacter::GetSingleton();
         if (!player)
@@ -306,6 +306,25 @@ namespace PlayerReader
             const bool isVisible     = data->flags.any(Flag::kVisible);
             const bool canFastTravel = data->flags.any(Flag::kCanTravelTo);
 
+            if (visibleOnly && !isVisible) {
+                logger::info("[Map::Markers]     -> not visible, skip (visibleOnly mode)");
+                return;
+            }
+
+            // When visibleOnly is requested we want exactly what MapMenu would
+            // render: skip disabled / deleted refs and nameless markers (the
+            // engine itself filters those out before drawing).
+            if (visibleOnly) {
+                if (form->IsDisabled()) {
+                    logger::info("[Map::Markers]     -> ref disabled, skip");
+                    return;
+                }
+                if (form->IsDeleted()) {
+                    logger::info("[Map::Markers]     -> ref deleted, skip");
+                    return;
+                }
+            }
+
             logger::info("[Map::Markers]     - read type");
             const auto typeId   = static_cast<uint32_t>(data->type.underlying());
             const auto typeName = typeId < kTypeNames.size()
@@ -317,6 +336,11 @@ namespace PlayerReader
             std::string name     = fullName ? fullName : "";
             logger::info("[Map::Markers]     - name='{}' typeId={} vis={} ft={}",
                          name, typeId, isVisible, canFastTravel);
+
+            if (visibleOnly && name.empty()) {
+                logger::info("[Map::Markers]     -> empty name, skip (visibleOnly mode)");
+                return;
+            }
 
             logger::info("[Map::Markers]     - read position");
             const float x = form->GetPositionX();
@@ -377,6 +401,16 @@ namespace PlayerReader
 
         logger::info("[Map::Markers] finished, total markers = {}", result.size());
         return result;
+    }
+
+    nlohmann::json ReadMapMarkers()
+    {
+        return ReadMapMarkersImpl(/*visibleOnly=*/true);
+    }
+
+    nlohmann::json ReadMapMarkersAll()
+    {
+        return ReadMapMarkersImpl(/*visibleOnly=*/false);
     }
 
     nlohmann::json ReadGameStatus()
