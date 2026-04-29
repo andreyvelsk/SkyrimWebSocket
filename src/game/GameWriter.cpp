@@ -1059,7 +1059,16 @@ namespace GameWriter
         //    should layer it on top.
         const std::string cmd = std::format("player.moveto 0x{:08X}", formId);
 
-        auto* script = new RE::Script();
+        // Create the Script via the game's own form factory.  We must not
+        // `new RE::Script()` directly — the vtable for RE::Script (and its
+        // base RE::TESForm) lives inside the Skyrim runtime, not in
+        // CommonLibSSE.lib, so a direct construction produces a wall of
+        // unresolved-external linker errors.
+        const auto* factory = RE::IFormFactory::GetConcreteFormFactoryByType<RE::Script>();
+        auto*       script  = factory ? factory->Create() : nullptr;
+        if (!script)
+            return {false, "Failed to allocate Script form via game factory"};
+
         script->SetCommand(cmd);
         script->CompileAndRun(player);
         delete script;
