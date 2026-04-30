@@ -183,11 +183,11 @@ editors, or pre-rendering an offline atlas.
 
 Returns an array of **active quest-objective targets** — the markers Skyrim
 renders as the floating quest arrows on the compass and as quest-target icons
-on the world map. The list mirrors the engine's own quest-target list:
+on the world map. The list mirrors what the player actually sees on the map:
 
-* only quests that are **running** and not completed,
-* only objectives whose state is **`Displayed`** (i.e. currently shown in the
-  journal),
+* only quests flagged as **active** in the journal (the one(s) the player has
+  marked with the “Active” arrow — `TESQuest::IsActive()`),
+* only quests that are currently **running** and not completed,
 * one entry per `TESQuestTarget`. A single objective with multiple targets
   produces multiple entries that share the same `questFormId` /
   `objectiveIndex`.
@@ -203,6 +203,7 @@ to unfilled / deleted refs are skipped.
 | `questEditorId` | `string` | Editor ID of the quest (e.g. `"MQ101"`). Empty if not present. |
 | `questName` | `string` | Localised quest name. Empty if unnamed. |
 | `questType` | `string` | Quest category — one of `MainQuest`, `MagesGuild`, `ThievesGuild`, `DarkBrotherhood`, `Companions`, `Miscellaneous`, `Daedric`, `SideQuest`, `CivilWar`, `DLC01_Vampire`, `DLC02_Dragonborn`, `None`. |
+| `isActive` | `bool` | Always `true` for entries returned here — included so clients can carry the same field into their UI. Only active (tracked) quests are returned. |
 | `objectiveIndex` | `integer` | The objective's `QOBJ` index inside the quest. |
 | `objectiveText` | `string` | Localised objective description (the line shown in the journal). |
 | `aliasId` | `integer` | The quest alias ID this target points at. |
@@ -251,6 +252,7 @@ for a marker in the same exterior cell).
         "questEditorId": "MQ102",
         "questName": "Before the Storm",
         "questType": "MainQuest",
+        "isActive": true,
         "objectiveIndex": 10,
         "objectiveText": "Talk to the Jarl of Whiterun",
         "aliasId": 0,

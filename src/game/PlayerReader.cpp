@@ -519,6 +519,16 @@ namespace PlayerReader
             if (!quest || !objective || !target)
                 return false;
 
+            // Skyrim's world map / compass only render quest-target arrows
+            // for the *active* (tracked) quest in the journal. The kActive
+            // flag is what the journal toggles when the player taps the
+            // "Active" arrow next to a quest. Filtering by it gives us the
+            // same visual set the player sees on the map.
+            if (!quest->IsActive())
+                return false;
+            if (!quest->IsRunning() || quest->IsCompleted())
+                return false;
+
             const std::uint32_t aliasID = target->alias;
             const auto          dedup  = makeKey(quest->GetFormID(), objective->index, aliasID);
             if (!seen.insert(dedup).second)
@@ -545,6 +555,7 @@ namespace PlayerReader
             entry["questEditorId"]  = questEditorId;
             entry["questName"]      = questName;
             entry["questType"]      = std::string(QuestTypeName(quest->GetType()));
+            entry["isActive"]       = true;
             entry["objectiveIndex"] = objective->index;
             entry["objectiveText"]  = objectiveText;
             entry["aliasId"]        = aliasID;
@@ -587,6 +598,11 @@ namespace PlayerReader
                 entry["cellFormId"] = nullptr;
                 entry["isInterior"] = false;
             }
+
+            logger::debug("[Map::Markers::Quests] emit quest='{}' (type={}, formId={}) obj#{} alias={} ref={} '{}'",
+                          questEditorId, std::string(QuestTypeName(quest->GetType())),
+                          formIdStr(quest->GetFormID()), objective->index, aliasID,
+                          formIdStr(ref->GetFormID()), entry["name"].get<std::string>());
 
             result.push_back(std::move(entry));
             return true;
