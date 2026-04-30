@@ -515,12 +515,9 @@ namespace PlayerReader
 
             ++questsScanned;
 
-            // BGSQuestObjective list: BSSimpleList<BGSQuestObjective*>*
-            // (a pointer to a list — may be null on quests with no
-            // objectives at all).
-            auto* objectives = quest->objectives;
-            if (!objectives)
-                continue;
+            // BGSQuestObjective list: BSSimpleList<BGSQuestObjective*>
+            // (a value member of TESQuest, not a pointer).
+            auto& objectives = quest->objectives;
 
             const char* questEditorIdC = quest->GetFormEditorID();
             const char* questNameC     = quest->GetFullName();
@@ -529,7 +526,7 @@ namespace PlayerReader
             const auto        questFormIdS  = formIdStr(quest->GetFormID());
             const auto        questTypeS    = std::string(QuestTypeName(quest->GetType()));
 
-            for (auto* objective : *objectives) {
+            for (auto* objective : objectives) {
                 if (!objective)
                     continue;
                 if (objective->state != RE::QUEST_OBJECTIVE_STATE::kDisplayed)
