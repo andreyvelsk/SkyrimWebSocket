@@ -77,7 +77,7 @@ namespace PlayerReader
     // kDisplayed state, resolves each TESQuestTarget through the quest's
     // ref alias to a live TESObjectREFR and reports its world position.
     // Each entry: { questFormId, questEditorId, questName, questType,
-    //               objectiveIndex, objectiveText, aliasId,
+    //               objectiveIndex, objectiveText, objectiveTextResolved, aliasId,
     //               refId, name, x, y, z,
     //               worldspace, worldspaceFormId,
     //               parentWorldspace, parentWorldspaceFormId,

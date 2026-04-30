@@ -486,6 +486,119 @@ namespace PlayerReader
             }
             return nullptr;
         }
+
+        // Lookup an alias by its (case-insensitive) editor name on a quest.
+        // Used to resolve <Alias=Foo> tokens in objective text.
+        RE::BGSBaseAlias* FindAliasByName(RE::TESQuest* quest, std::string_view name)
+        {
+            if (!quest || name.empty())
+                return nullptr;
+            for (auto* alias : quest->aliases) {
+                if (!alias)
+                    continue;
+                const char* aname = alias->aliasName.c_str();
+                if (!aname)
+                    continue;
+                if (std::string_view(aname).size() != name.size())
+                    continue;
+                if (_stricmp(aname, std::string(name).c_str()) == 0)
+                    return alias;
+            }
+            return nullptr;
+        }
+
+        // Best-effort display string for a quest alias \u2014 used as the
+        // replacement value for <Alias=...>, <Alias.ShortName=...>, etc.
+        std::string ResolveAliasDisplayName(RE::BGSBaseAlias* alias)
+        {
+            if (!alias)
+                return {};
+            if (alias->GetVMTypeID() == RE::BGSRefAlias::VMTYPEID) {
+                auto* ra = static_cast<RE::BGSRefAlias*>(alias);
+                if (auto* ref = ra->GetReference()) {
+                    const char* full = ref->GetDisplayFullName();
+                    if (full && *full)
+                        return full;
+                    const char* nm = ref->GetName();
+                    if (nm && *nm)
+                        return nm;
+                    if (auto* base = ref->GetBaseObject()) {
+                        const char* bnm = base->GetName();
+                        if (bnm && *bnm)
+                            return bnm;
+                    }
+                }
+            }
+            // Fallback: leave token unresolved by returning an empty string.
+            return {};
+        }
+
+        // Replace every <Alias[.<sub>]=<Name>> token in `raw` with the
+        // resolved alias name from `quest`. Tokens we can't resolve are
+        // left in place verbatim so callers can still see what's missing.
+        // We do not try to handle <Global=...>, <Spouse>, <Faction=...>,
+        // etc. here \u2014 those would need additional context (textGlobals,
+        // player relationships) and are out of scope for now.
+        std::string ResolveQuestObjectiveText(RE::TESQuest* quest, const std::string& raw)
+        {
+            if (raw.empty() || !quest)
+                return raw;
+
+            std::string out;
+            out.reserve(raw.size());
+
+            std::size_t i = 0;
+            while (i < raw.size()) {
+                if (raw[i] != '<') {
+                    out.push_back(raw[i++]);
+                    continue;
+                }
+                const auto end = raw.find('>', i + 1);
+                if (end == std::string::npos) {
+                    out.append(raw, i, std::string::npos);
+                    break;
+                }
+                // Token without the angle brackets:
+                //   "Alias=BanditCamp"  or  "Alias.ShortName=BanditLeader"
+                std::string_view token(&raw[i + 1], end - i - 1);
+
+                bool         matched = false;
+                const auto eq = token.find('=');
+                if (eq != std::string_view::npos) {
+                    auto head = token.substr(0, eq);
+                    auto name = token.substr(eq + 1);
+
+                    // Accept "Alias" and "Alias.<anything>" forms.
+                    bool isAlias = false;
+                    if (head.size() >= 5
+                        && (head[0] == 'A' || head[0] == 'a')
+                        && (head[1] == 'l' || head[1] == 'L')
+                        && (head[2] == 'i' || head[2] == 'I')
+                        && (head[3] == 'a' || head[3] == 'A')
+                        && (head[4] == 's' || head[4] == 'S')
+                        && (head.size() == 5 || head[5] == '.'))
+                        isAlias = true;
+
+                    if (isAlias) {
+                        if (auto* a = FindAliasByName(quest, name)) {
+                            std::string repl = ResolveAliasDisplayName(a);
+                            if (!repl.empty()) {
+                                out.append(repl);
+                                matched = true;
+                            }
+                        }
+                    }
+                }
+
+                if (!matched) {
+                    // Leave the original "<...>" untouched.
+                    out.append(raw, i, end - i + 1);
+                }
+                i = end + 1;
+            }
+
+            return out;
+        }
     }  // namespace
 
     nlohmann::json ReadQuestMarkers()
@@ -549,6 +662,8 @@ namespace PlayerReader
             const std::string objectiveText = objective->displayText.c_str()
                                                   ? objective->displayText.c_str()
                                                   : "";
+            const std::string objectiveTextResolved =
+                ResolveQuestObjectiveText(quest, objectiveText);
 
             nlohmann::json entry;
             entry["questFormId"]    = formIdStr(quest->GetFormID());
@@ -558,6 +673,7 @@ namespace PlayerReader
             entry["isActive"]       = true;
             entry["objectiveIndex"] = objective->index;
             entry["objectiveText"]  = objectiveText;
+            entry["objectiveTextResolved"] = objectiveTextResolved;
             entry["aliasId"]        = aliasID;
             entry["refId"]          = formIdStr(ref->GetFormID());
 
