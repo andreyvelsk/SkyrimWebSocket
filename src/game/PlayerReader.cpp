@@ -502,7 +502,15 @@ namespace PlayerReader
             return std::format("0x{:08X}", id);
         };
 
-        // Build one JSON entry from a BGSQuestObjective + its target index +
+        // Dedup key: quest formId + objective index + alias id.
+        std::unordered_set<std::uint64_t> seen;
+        const auto makeKey = [](RE::FormID qid, std::uint16_t obj, std::uint32_t alias) {
+            return (static_cast<std::uint64_t>(qid) << 32)
+                 ^ (static_cast<std::uint64_t>(obj) << 16)
+                 ^  static_cast<std::uint64_t>(alias);
+        };
+
+        // Build one JSON entry from a BGSQuestObjective + a TESQuestTarget +
         // resolved ref. Returns false when the target couldn't be resolved
         // and nothing was emitted.
         const auto emitTargetEntry = [&](RE::TESQuest*          quest,
@@ -511,8 +519,12 @@ namespace PlayerReader
             if (!quest || !objective || !target)
                 return false;
 
-            const std::uint32_t aliasID  = target->alias;
-            auto*               refAlias = FindRefAlias(quest, aliasID);
+            const std::uint32_t aliasID = target->alias;
+            const auto          dedup  = makeKey(quest->GetFormID(), objective->index, aliasID);
+            if (!seen.insert(dedup).second)
+                return false;
+
+            auto* refAlias = FindRefAlias(quest, aliasID);
             if (!refAlias)
                 return false;
 
@@ -580,102 +592,143 @@ namespace PlayerReader
             return true;
         };
 
-        // The engine renders quest markers (compass arrows + map quest
-        // icons) from PlayerCharacter::PLAYER_RUNTIME_DATA::objectives — a
-        // BSTArray<BGSInstancedQuestObjective>. Each instance records the
-        // *runtime* state (kDisplayed/kCompleted/etc.) for an objective
-        // whose template lives on TESQuest.
+        // We feed `result` from up to three sources and dedup by
+        // (quest, objectiveIndex, aliasId):
         //
-        // Filtering by BGSQuestObjective::state instead (as we did first)
-        // misses every quest that uses instanced objectives — including
-        // most Main / Daedric / faction quests — because the static state
-        // field is only meaningful for non-instanced (radiant) quests. Misc
-        // quests happen to be non-instanced, which is why those were the
-        // only ones that came through.
+        //  1. PLAYER_RUNTIME_DATA::questTargets — a runtime BSTHashMap keyed
+        //     by TESQuest*; the values are BSTArrays of TESQuestTarget* that
+        //     the engine itself uses to draw compass arrows / quest-target
+        //     icons. This is the source we trust most.
+        //
+        //  2. PLAYER_RUNTIME_DATA::objectives — a BSTArray of
+        //     BGSInstancedQuestObjective. Tells us which objectives are in
+        //     the kDisplayed runtime state for the current playthrough. We
+        //     cross every displayed objective's `targets[]` through the
+        //     dedup set so they land in the result if (1) missed them.
+        //
+        //  3. Static fallback: TESQuest::objectives walked with the
+        //     non-instanced state field. Required for radiant / Misc quests
+        //     and for VR (which has a different runtime data layout we
+        //     don't translate yet).
         //
         // PLAYER_RUNTIME_DATA fields are not exposed as struct members in
-        // multi-targeting builds, so we resolve the array by absolute
-        // offsets from the PlayerCharacter base. Offsets come from
-        // CommonLibSSE-NG's PlayerCharacter.h:
-        //   objectives : SE 0x580, AE 1.6.629+ 0x588
-        // VR uses a different runtime layout that doesn't expose this
-        // field at a stable offset; we fall back to scanning TESQuests on
-        // VR (loses non-radiant quest markers, but at least keeps Misc
-        // markers working).
-        std::size_t shown   = 0;
-        std::size_t emitted = 0;
+        // multi-targeting builds; we resolve by absolute offsets.
+        //   objectives    : SE 0x580, AE 1.6.629+ 0x588
+        //   questTargets  : SE 0x598, AE 1.6.629+ 0x5A0
+
+        std::size_t fromQuestTargets   = 0;
+        std::size_t fromInstanced      = 0;
+        std::size_t fromStaticFallback = 0;
 
         if (!REL::Module::IsVR()) {
-            const std::size_t off = REL::Module::IsAE() ? 0x588 : 0x580;
-            const auto        base = reinterpret_cast<std::uintptr_t>(player);
-            const auto&       instances =
-                *reinterpret_cast<const RE::BSTArray<RE::BGSInstancedQuestObjective>*>(base + off);
+            const auto base = reinterpret_cast<std::uintptr_t>(player);
 
-            for (const auto& inst : instances) {
-                if (inst.InstanceState != RE::QUEST_OBJECTIVE_STATE::kDisplayed)
-                    continue;
+            // ── (1) questTargets ─────────────────────────────────────────
+            {
+                const std::size_t off = REL::Module::IsAE() ? 0x5A0 : 0x598;
+                const auto&       map =
+                    *reinterpret_cast<const RE::BSTHashMap<RE::TESQuest*, RE::BSTArray<RE::TESQuestTarget*>*>*>(
+                        base + off);
 
-                ++shown;
+                for (const auto& kv : map) {
+                    auto* quest = kv.first;
+                    if (!quest)
+                        continue;
+                    auto* targetArray = kv.second;
+                    if (!targetArray)
+                        continue;
 
-                auto* objective = inst.Objective;
-                if (!objective)
-                    continue;
-                auto* quest = objective->ownerQuest;
+                    for (auto* target : *targetArray) {
+                        if (!target)
+                            continue;
+
+                        // We need an objective for the entry's
+                        // index/displayText, but questTargets has only
+                        // (quest, target) and target carries no objective
+                        // back-pointer. Walk the quest's objectives and
+                        // pick the one whose `targets[]` contains this
+                        // target pointer. Cheap (objectives count is small
+                        // per quest) and gives accurate metadata.
+                        RE::BGSQuestObjective* matchedObj = nullptr;
+                        for (auto* obj : quest->objectives) {
+                            if (!obj || !obj->targets)
+                                continue;
+                            for (std::uint32_t i = 0; i < obj->numTargets; ++i) {
+                                if (obj->targets[i] == target) {
+                                    matchedObj = obj;
+                                    break;
+                                }
+                            }
+                            if (matchedObj)
+                                break;
+                        }
+                        if (!matchedObj)
+                            continue;
+
+                        if (emitTargetEntry(quest, matchedObj, target))
+                            ++fromQuestTargets;
+                    }
+                }
+            }
+
+            // ── (2) instanced objectives ─────────────────────────────────
+            {
+                const std::size_t off = REL::Module::IsAE() ? 0x588 : 0x580;
+                const auto&       instances =
+                    *reinterpret_cast<const RE::BSTArray<RE::BGSInstancedQuestObjective>*>(base + off);
+
+                for (const auto& inst : instances) {
+                    if (inst.InstanceState != RE::QUEST_OBJECTIVE_STATE::kDisplayed)
+                        continue;
+
+                    auto* objective = inst.Objective;
+                    if (!objective)
+                        continue;
+                    auto* quest = objective->ownerQuest;
+                    if (!quest)
+                        continue;
+
+                    const auto numTargets = objective->numTargets;
+                    for (std::uint32_t i = 0; i < numTargets; ++i) {
+                        auto* target = objective->targets ? objective->targets[i] : nullptr;
+                        if (!target)
+                            continue;
+                        if (emitTargetEntry(quest, objective, target))
+                            ++fromInstanced;
+                    }
+                }
+            }
+        }
+
+        // ── (3) static-state fallback over every TESQuest ────────────────
+        if (auto* handler = RE::TESDataHandler::GetSingleton()) {
+            const auto& quests = handler->GetFormArray<RE::TESQuest>();
+            for (auto* quest : quests) {
                 if (!quest)
                     continue;
-
-                const auto numTargets = objective->numTargets;
-                for (std::uint32_t i = 0; i < numTargets; ++i) {
-                    auto* target = objective->targets ? objective->targets[i] : nullptr;
-                    if (!target)
-                        continue;
-                    if (emitTargetEntry(quest, objective, target))
-                        ++emitted;
-                }
-            }
-
-            logger::debug("[Map::Markers::Quests] (instanced) instances_shown={} markers={}",
-                          shown, emitted);
-            return result;
-        }
-
-        // ── VR fallback ──────────────────────────────────────────────────
-        // Walk every TESQuest and use the static BGSQuestObjective::state
-        // (works only for non-instanced quests).
-        auto* handler = RE::TESDataHandler::GetSingleton();
-        if (!handler) {
-            logger::warn("[Map::Markers::Quests] no TESDataHandler (VR fallback)");
-            return result;
-        }
-
-        const auto& quests = handler->GetFormArray<RE::TESQuest>();
-        for (auto* quest : quests) {
-            if (!quest)
-                continue;
-            if (!quest->IsRunning() || quest->IsCompleted())
-                continue;
-
-            for (auto* objective : quest->objectives) {
-                if (!objective)
-                    continue;
-                if (objective->state != RE::QUEST_OBJECTIVE_STATE::kDisplayed)
+                if (!quest->IsRunning() || quest->IsCompleted())
                     continue;
 
-                ++shown;
-
-                const auto numTargets = objective->numTargets;
-                for (std::uint32_t i = 0; i < numTargets; ++i) {
-                    auto* target = objective->targets ? objective->targets[i] : nullptr;
-                    if (!target)
+                for (auto* objective : quest->objectives) {
+                    if (!objective)
                         continue;
-                    if (emitTargetEntry(quest, objective, target))
-                        ++emitted;
+                    if (objective->state != RE::QUEST_OBJECTIVE_STATE::kDisplayed)
+                        continue;
+
+                    const auto numTargets = objective->numTargets;
+                    for (std::uint32_t i = 0; i < numTargets; ++i) {
+                        auto* target = objective->targets ? objective->targets[i] : nullptr;
+                        if (!target)
+                            continue;
+                        if (emitTargetEntry(quest, objective, target))
+                            ++fromStaticFallback;
+                    }
                 }
             }
         }
 
-        logger::debug("[Map::Markers::Quests] (VR fallback) objectives_displayed={} markers={}",
-                      shown, emitted);
+        logger::info("[Map::Markers::Quests] markers={} (questTargets={}, instanced={}, staticFallback={})",
+                     result.size(), fromQuestTargets, fromInstanced, fromStaticFallback);
         return result;
     }
 
