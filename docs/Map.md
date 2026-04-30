@@ -8,16 +8,21 @@ Map fields expose the player's discovered locations and their metadata.
 
 | Registry key | Value type | Description |
 |---|---|---|
-| `Map::Markers` | `array` | All map markers in every loaded worldspace (discovered and undiscovered) |
+| `Map::Markers::Locations` | `array` | Map markers visible on the player's world map (discovered locations + pre-set city markers). |
+| `Map::Markers::All` | `array` | Same shape as `Map::Markers::Locations` but includes undiscovered/hidden markers in every loaded worldspace. |
+| `Map::Markers::Quests` | `array` | Active quest-objective targets (the floating quest arrows / quest-target icons). |
 
 ---
 
-## `Map::Markers`
+## `Map::Markers::Locations`
 
-Returns an array of every map marker present in the loaded worldspaces. Each
-element is a JSON object describing one location. Use the `isVisible` flag to
-distinguish markers the player has already discovered from those that are still
-hidden on the in-game map.
+Returns an array of every map marker present in the loaded worldspaces with
+`isVisible=true` (cities/landmarks pre-set in the ESM, locations the player has
+discovered, and markers revealed by quest scripts). Each element is a JSON
+object describing one location.
+
+> Use [`Map::Markers::All`](#mapmarkersall) to get **all** markers, including
+> undiscovered ones — same entry shape, just unfiltered.
 
 ### Entry shape
 
@@ -110,7 +115,7 @@ hidden on the in-game map.
   "type": "query",
   "id": "map-load",
   "fields": {
-    "markers": "Map::Markers"
+    "markers": "Map::Markers::Locations"
   }
 }
 ```
@@ -158,7 +163,126 @@ Useful when the player is actively exploring and new markers may appear:
   "id": "map-markers",
   "settings": { "frequency": 30000, "sendOnChange": true },
   "fields": {
-    "markers": "Map::Markers"
+    "markers": "Map::Markers::Locations"
+  }
+}
+```
+
+---
+
+## `Map::Markers::All`
+
+Identical entry shape to [`Map::Markers::Locations`](#mapmarkerslocations) but
+returns **every** map marker in every loaded worldspace, including markers the
+player has not yet discovered (`isVisible=false`). Useful for tooling, map
+editors, or pre-rendering an offline atlas.
+
+---
+
+## `Map::Markers::Quests`
+
+Returns an array of **active quest-objective targets** — the markers Skyrim
+renders as the floating quest arrows on the compass and as quest-target icons
+on the world map. The list mirrors the engine's own quest-target list:
+
+* only quests that are **running** and not completed,
+* only objectives whose state is **`Displayed`** (i.e. currently shown in the
+  journal),
+* one entry per `TESQuestTarget`. A single objective with multiple targets
+  produces multiple entries that share the same `questFormId` /
+  `objectiveIndex`.
+
+Targets that resolve to non-ref aliases (location aliases, data aliases) or
+to unfilled / deleted refs are skipped.
+
+### Entry shape
+
+| Field | Type | Description |
+|---|---|---|
+| `questFormId` | `string` | Hex form ID of the quest. |
+| `questEditorId` | `string` | Editor ID of the quest (e.g. `"MQ101"`). Empty if not present. |
+| `questName` | `string` | Localised quest name. Empty if unnamed. |
+| `questType` | `string` | Quest category — one of `MainQuest`, `MagesGuild`, `ThievesGuild`, `DarkBrotherhood`, `Companions`, `Miscellaneous`, `Daedric`, `SideQuest`, `CivilWar`, `DLC01_Vampire`, `DLC02_Dragonborn`, `None`. |
+| `objectiveIndex` | `integer` | The objective's `QOBJ` index inside the quest. |
+| `objectiveText` | `string` | Localised objective description (the line shown in the journal). |
+| `aliasId` | `integer` | The quest alias ID this target points at. |
+| `refId` | `string` | Hex form ID of the resolved reference (NPC, door, container, etc.). |
+| `name` | `string` | Display name of the reference. Empty if unnamed. |
+| `x` | `float` | Reference X coordinate (local to its current worldspace / cell). |
+| `y` | `float` | Reference Y coordinate. |
+| `z` | `float` | Reference Z coordinate. |
+| `worldspace` | `string \| null` | EditorID of the reference's worldspace. `null` if the reference is in an interior cell or not currently placed in a worldspace. |
+| `worldspaceFormId` | `string \| null` | Hex form ID of the worldspace. |
+| `parentWorldspace` | `string \| null` | EditorID of the root worldspace (walks `parentWorld` to the top, e.g. `"Tamriel"` for city sub-worlds). |
+| `parentWorldspaceFormId` | `string \| null` | Hex form ID of the root worldspace. |
+| `cell` | `string \| null` | EditorID of the reference's parent cell. |
+| `cellFormId` | `string \| null` | Hex form ID of the cell. |
+| `isInterior` | `bool` | `true` if the parent cell is an interior. |
+
+Use `parentWorldspace` to plot quest markers on a global Tamriel/Solstheim map
+(see [`Player::ExteriorPosition`](Player.md) for the same convention applied
+to the player). When `isInterior` is `true`, the reference itself lives inside
+a building/dungeon and a global-map client should fall back to the location
+entrance (e.g. by querying [`Map::Markers::Locations`](#mapmarkerslocations)
+for a marker in the same exterior cell).
+
+### Example — query active quest markers
+
+```json
+{
+  "type": "query",
+  "id": "q-quest-markers",
+  "fields": {
+    "questMarkers": "Map::Markers::Quests"
+  }
+}
+```
+
+**Server reply:**
+```json
+{
+  "type": "data",
+  "id": "q-quest-markers",
+  "ts": 1712462400500,
+  "fields": {
+    "questMarkers": [
+      {
+        "questFormId": "0x0003372B",
+        "questEditorId": "MQ102",
+        "questName": "Before the Storm",
+        "questType": "MainQuest",
+        "objectiveIndex": 10,
+        "objectiveText": "Talk to the Jarl of Whiterun",
+        "aliasId": 0,
+        "refId": "0x0001A696",
+        "name": "Jarl Balgruuf the Greater",
+        "x": 1893.0, "y": -2402.0, "z": 360.0,
+        "worldspace": null,
+        "worldspaceFormId": null,
+        "parentWorldspace": null,
+        "parentWorldspaceFormId": null,
+        "cell": "WhiterunDragonsreach",
+        "cellFormId": "0x000165A3",
+        "isInterior": true
+      }
+    ]
+  }
+}
+```
+
+### Example — live subscription
+
+Quest markers change whenever a quest stage advances or the player enters a
+new cell, so this field is wired to the same event-driven cache as
+`Map::Markers::Locations`:
+
+```json
+{
+  "type": "subscribe",
+  "id": "quest-markers",
+  "settings": { "frequency": 1000, "sendOnChange": true },
+  "fields": {
+    "quests": "Map::Markers::Quests"
   }
 }
 ```
@@ -173,7 +297,7 @@ Triggers a real, vanilla-style fast travel to a map-marker reference.
 
 | Field | Type | Description |
 |---|---|---|
-| `formId` | `string` | Hex form ID of the marker reference. Use the `refId` value returned by `Map::Markers` (e.g. `"0x000136D5"`). |
+| `formId` | `string` | Hex form ID of the marker reference. Use the `refId` value returned by `Map::Markers::Locations` (e.g. `"0x000136D5"`). |
 
 #### Pre-flight checks
 

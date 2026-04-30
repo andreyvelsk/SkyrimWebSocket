@@ -71,6 +71,20 @@ namespace PlayerReader
     // Must be called on the game thread.
     nlohmann::json ReadMapMarkersAll();
 
+    // Returns an array of active quest-objective targets — the markers the
+    // engine renders as floating quest arrows / quest-target icons. Walks
+    // every TESQuest, picks running quests, picks objectives in the
+    // kDisplayed state, resolves each TESQuestTarget through the quest's
+    // ref alias to a live TESObjectREFR and reports its world position.
+    // Each entry: { questFormId, questEditorId, questName, questType,
+    //               objectiveIndex, objectiveText, aliasId,
+    //               refId, name, x, y, z,
+    //               worldspace, worldspaceFormId,
+    //               parentWorldspace, parentWorldspaceFormId,
+    //               cell, cellFormId, isInterior }.
+    // Must be called on the game thread.
+    nlohmann::json ReadQuestMarkers();
+
     // Returns a JSON object describing the player-placed custom map marker
     // (the marker the player can drop on the world map by clicking on it):
     // { "isSet", "x", "y", "z",

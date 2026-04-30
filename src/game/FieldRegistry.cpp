@@ -310,14 +310,18 @@ namespace FieldRegistry
             &PlayerReader::ReadExteriorPosition } },
 
         // Map markers
-        { "Map::Markers",
+        { "Map::Markers::Locations",
           { "Array of map markers currently shown on the player's world map (only entries with isVisible=true — i.e. pre-discovered cities, locations the player has discovered, and quest-script-revealed markers). Each entry: { refId, name, type, typeId, x, y, isVisible, canFastTravel }.",
             "array",
             &PlayerReader::ReadMapMarkers } },
         { "Map::Markers::All",
-          { "Array of ALL map markers in every loaded worldspace, including undiscovered/hidden ones. Same entry shape as Map::Markers.",
+          { "Array of ALL map markers in every loaded worldspace, including undiscovered/hidden ones. Same entry shape as Map::Markers::Locations.",
             "array",
             &PlayerReader::ReadMapMarkersAll } },
+        { "Map::Markers::Quests",
+          { "Array of active quest-objective targets (the markers Skyrim renders as the floating quest arrows on the compass and as quest-target icons on the world map). Each entry: { questFormId, questEditorId, questName, questType, objectiveIndex, objectiveText, aliasId, refId, name, x, y, z, worldspace, worldspaceFormId, parentWorldspace, parentWorldspaceFormId, cell, cellFormId, isInterior }.",
+            "array",
+            &PlayerReader::ReadQuestMarkers } },
 
         // Player-placed custom map marker (the marker the player drops on
         // the world map by clicking on it).

@@ -9,8 +9,8 @@
 namespace EventBus
 {
     // Initialise the event-driven optimisation layer:
-    //  * registers the event-driven registry keys (currently Map::Markers,
-    //    Map::Markers::All)
+    //  * registers the event-driven registry keys (currently
+    //    Map::Markers::Locations, Map::Markers::All, Map::Markers::Quests)
     //  * installs SKSE event sinks (cell load, menu open/close, load game)
     //    that bump the version of every registered key.
     //

@@ -345,7 +345,7 @@ namespace PlayerReader
 
         auto* handler = RE::TESDataHandler::GetSingleton();
         if (!handler) {
-            logger::warn("[Map::Markers] no TESDataHandler");
+            logger::warn("[Map::Markers::Locations] no TESDataHandler");
             return result;
         }
 
@@ -428,7 +428,7 @@ namespace PlayerReader
             });
         }
 
-        logger::debug("[Map::Markers] visibleOnly={} worlds={} refs_visited={} markers={}",
+        logger::debug("[Map::Markers::Locations] visibleOnly={} worlds={} refs_visited={} markers={}",
                       visibleOnly, worlds.size(), totalRefs, result.size());
         return result;
     }
@@ -441,6 +441,180 @@ namespace PlayerReader
     nlohmann::json ReadMapMarkersAll()
     {
         return ReadMapMarkersImpl(/*visibleOnly=*/false);
+    }
+
+    namespace
+    {
+        std::string_view QuestTypeName(RE::QUEST_DATA::Type t)
+        {
+            using T = RE::QUEST_DATA::Type;
+            switch (t) {
+            case T::kNone:             return "None";
+            case T::kMainQuest:        return "MainQuest";
+            case T::kMagesGuild:       return "MagesGuild";
+            case T::kThievesGuild:     return "ThievesGuild";
+            case T::kDarkBrotherhood:  return "DarkBrotherhood";
+            case T::kCompanionsQuest:  return "Companions";
+            case T::kMiscellaneous:    return "Miscellaneous";
+            case T::kDaedric:          return "Daedric";
+            case T::kSideQuest:        return "SideQuest";
+            case T::kCivilWar:         return "CivilWar";
+            case T::kDLC01_Vampire:    return "DLC01_Vampire";
+            case T::kDLC02_Dragonborn: return "DLC02_Dragonborn";
+            default:                   return "Unknown";
+            }
+        }
+
+        // Find the BGSRefAlias in `quest` whose aliasID matches the
+        // TESQuestTarget::alias byte. Returns nullptr when nothing matches
+        // (e.g. data alias, location alias, or unfilled).
+        RE::BGSRefAlias* FindRefAlias(RE::TESQuest* quest, std::uint32_t aliasID)
+        {
+            if (!quest)
+                return nullptr;
+            for (auto* alias : quest->aliases) {
+                if (!alias)
+                    continue;
+                if (alias->aliasID != aliasID)
+                    continue;
+                // Identify a ref alias by its scripting VM type tag rather
+                // than RTTI so we don't depend on dynamic_cast working
+                // across module boundaries (BGSRefAlias::VMTYPEID == 140).
+                if (alias->GetVMTypeID() == RE::BGSRefAlias::VMTYPEID)
+                    return static_cast<RE::BGSRefAlias*>(alias);
+                return nullptr;
+            }
+            return nullptr;
+        }
+    }  // namespace
+
+    nlohmann::json ReadQuestMarkers()
+    {
+        nlohmann::json result = nlohmann::json::array();
+
+        auto* handler = RE::TESDataHandler::GetSingleton();
+        if (!handler) {
+            logger::warn("[Map::Markers::Quests] no TESDataHandler");
+            return result;
+        }
+
+        const auto formIdStr = [](RE::FormID id) {
+            return std::format("0x{:08X}", id);
+        };
+
+        const auto& quests = handler->GetFormArray<RE::TESQuest>();
+
+        std::size_t questsScanned   = 0;
+        std::size_t objectivesShown = 0;
+
+        for (auto* quest : quests) {
+            if (!quest)
+                continue;
+            if (!quest->IsRunning() || quest->IsCompleted())
+                continue;
+
+            ++questsScanned;
+
+            // BGSQuestObjective list: BSSimpleList<BGSQuestObjective*>*
+            // (a pointer to a list — may be null on quests with no
+            // objectives at all).
+            auto* objectives = quest->objectives;
+            if (!objectives)
+                continue;
+
+            const char* questEditorIdC = quest->GetFormEditorID();
+            const char* questNameC     = quest->GetFullName();
+            const std::string questEditorId = questEditorIdC ? questEditorIdC : "";
+            const std::string questName     = questNameC ? questNameC : "";
+            const auto        questFormIdS  = formIdStr(quest->GetFormID());
+            const auto        questTypeS    = std::string(QuestTypeName(quest->GetType()));
+
+            for (auto* objective : *objectives) {
+                if (!objective)
+                    continue;
+                if (objective->state != RE::QUEST_OBJECTIVE_STATE::kDisplayed)
+                    continue;
+
+                ++objectivesShown;
+
+                const std::string objectiveText = objective->displayText.c_str()
+                                                      ? objective->displayText.c_str()
+                                                      : "";
+
+                // BGSQuestObjective::targets is a TESQuestTarget**.
+                const auto numTargets = objective->numTargets;
+                for (std::uint32_t i = 0; i < numTargets; ++i) {
+                    auto* target = objective->targets ? objective->targets[i] : nullptr;
+                    if (!target)
+                        continue;
+
+                    const std::uint32_t aliasID = target->alias;
+
+                    auto* refAlias = FindRefAlias(quest, aliasID);
+                    if (!refAlias)
+                        continue;
+
+                    auto* ref = refAlias->GetReference();
+                    if (!ref || ref->IsDeleted())
+                        continue;
+
+                    nlohmann::json entry;
+                    entry["questFormId"]    = questFormIdS;
+                    entry["questEditorId"]  = questEditorId;
+                    entry["questName"]      = questName;
+                    entry["questType"]      = questTypeS;
+                    entry["objectiveIndex"] = objective->index;
+                    entry["objectiveText"]  = objectiveText;
+                    entry["aliasId"]        = aliasID;
+
+                    entry["refId"] = formIdStr(ref->GetFormID());
+
+                    const char* refNameC = ref->GetDisplayFullName();
+                    if (!refNameC || !*refNameC)
+                        refNameC = ref->GetName();
+                    entry["name"] = refNameC ? std::string(refNameC) : std::string();
+
+                    entry["x"] = ref->GetPositionX();
+                    entry["y"] = ref->GetPositionY();
+                    entry["z"] = ref->GetPositionZ();
+
+                    if (auto* world = ref->GetWorldspace()) {
+                        const char* edid = world->GetFormEditorID();
+                        entry["worldspace"]       = edid ? std::string(edid) : std::string();
+                        entry["worldspaceFormId"] = formIdStr(world->GetFormID());
+
+                        auto* root = world;
+                        while (root->parentWorld)
+                            root = root->parentWorld;
+                        const char* rootEdid = root->GetFormEditorID();
+                        entry["parentWorldspace"]       = rootEdid ? std::string(rootEdid) : std::string();
+                        entry["parentWorldspaceFormId"] = formIdStr(root->GetFormID());
+                    } else {
+                        entry["worldspace"]             = nullptr;
+                        entry["worldspaceFormId"]       = nullptr;
+                        entry["parentWorldspace"]       = nullptr;
+                        entry["parentWorldspaceFormId"] = nullptr;
+                    }
+
+                    if (auto* cell = ref->GetParentCell()) {
+                        const char* cedid = cell->GetFormEditorID();
+                        entry["cell"]       = cedid ? std::string(cedid) : std::string();
+                        entry["cellFormId"] = formIdStr(cell->GetFormID());
+                        entry["isInterior"] = cell->IsInteriorCell();
+                    } else {
+                        entry["cell"]       = nullptr;
+                        entry["cellFormId"] = nullptr;
+                        entry["isInterior"] = false;
+                    }
+
+                    result.push_back(std::move(entry));
+                }
+            }
+        }
+
+        logger::debug("[Map::Markers::Quests] quests_scanned={} objectives_displayed={} markers={}",
+                      questsScanned, objectivesShown, result.size());
+        return result;
     }
 
     nlohmann::json ReadGameStatus()

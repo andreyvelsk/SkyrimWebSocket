@@ -123,7 +123,7 @@ namespace GameWriter
     //   * the marker's parent worldspace must not have kCantFastTravel
     //   * the player must not be in combat
     //
-    // Returns the same JSON shape used by Map::Markers entries on success
+    // Returns the same JSON shape used by Map::Markers::Locations entries on success
     // (refId, name, type, typeId, x, y, isVisible, canFastTravel) so callers
     // can confirm the destination in a single round-trip.  The success
     // response is sent immediately after the VM dispatch is queued; actual

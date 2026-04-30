@@ -91,7 +91,8 @@ namespace EventBus
                 const RE::TESCellFullyLoadedEvent*,
                 RE::BSTEventSource<RE::TESCellFullyLoadedEvent>*) override
             {
-                BumpKeys({"Map::Markers", "Map::Markers::All"}, "TESCellFullyLoaded");
+                BumpKeys({"Map::Markers::Locations", "Map::Markers::All", "Map::Markers::Quests"},
+                         "TESCellFullyLoaded");
                 return RE::BSEventNotifyControl::kContinue;
             }
         };
@@ -118,7 +119,7 @@ namespace EventBus
                 //  * opening the map pushes fresh data even if the player
                 //    fast-travelled between polls,
                 //  * closing the map captures any player-placed marker change.
-                BumpKeys({"Map::Markers", "Map::Markers::All"},
+                BumpKeys({"Map::Markers::Locations", "Map::Markers::All", "Map::Markers::Quests"},
                          event->opening ? "MapMenu open" : "MapMenu close");
                 return RE::BSEventNotifyControl::kContinue;
             }
@@ -143,7 +144,8 @@ namespace EventBus
                 const RE::LocationDiscovery::Event*,
                 RE::BSTEventSource<RE::LocationDiscovery::Event>*) override
             {
-                BumpKeys({"Map::Markers", "Map::Markers::All"}, "LocationDiscovery");
+                BumpKeys({"Map::Markers::Locations", "Map::Markers::All", "Map::Markers::Quests"},
+                         "LocationDiscovery");
                 return RE::BSEventNotifyControl::kContinue;
             }
         };
@@ -166,7 +168,8 @@ namespace EventBus
                 const RE::TESQuestStageEvent*,
                 RE::BSTEventSource<RE::TESQuestStageEvent>*) override
             {
-                BumpKeys({"Map::Markers", "Map::Markers::All"}, "TESQuestStage");
+                BumpKeys({"Map::Markers::Locations", "Map::Markers::All", "Map::Markers::Quests"},
+                         "TESQuestStage");
                 return RE::BSEventNotifyControl::kContinue;
             }
         };
@@ -200,8 +203,9 @@ namespace EventBus
         // ── Register the event-driven registry keys ──────────────────────
         // For now we expose this only for map-marker fields; other heavy
         // resolvers (Inventory::*, Magic::*) can opt in later.
-        RegisterKey("Map::Markers");
+        RegisterKey("Map::Markers::Locations");
         RegisterKey("Map::Markers::All");
+        RegisterKey("Map::Markers::Quests");
 
         // ── Install SKSE event sinks ─────────────────────────────────────
         if (auto* src = RE::ScriptEventSourceHolder::GetSingleton()) {

@@ -106,7 +106,7 @@ namespace GameReader
                 } else if (EventBus::IsEventDriven(registryKey)) {
                     // Shared cache: the resolver runs at most once per
                     // (key, version) across ALL subscribers.  This is what
-                    // makes the heavy walk (e.g. Map::Markers across every
+                    // makes the heavy walk (e.g. Map::Markers::Locations across every
                     // worldspace) cost O(1) per poll once the value has
                     // been computed for the current version.
                     const auto& jsonEntry = *jsonEntryOpt;

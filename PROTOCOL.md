@@ -453,7 +453,7 @@ info in `data` (`refId`, `name`, `typeId`, `x`, `y`, `isVisible`,
 
 | Field | Required | Default | Description |
 |---|---|---|---|
-| `formId` | **yes** | — | Hex form ID of the map-marker reference. Use the `refId` value returned by `Map::Markers`. |
+| `formId` | **yes** | — | Hex form ID of the map-marker reference. Use the `refId` value returned by `Map::Markers::Locations`. |
 
 ```json
 {
