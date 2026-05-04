@@ -823,8 +823,8 @@ namespace PlayerReader
 
         const auto makeObjectiveKey = [](RE::TESQuest* quest, RE::BGSQuestObjective* objective) {
             return QuestObjectiveKey{
-                quest ? quest->GetFormID() : 0,
-                objective ? objective->index : 0
+                quest ? quest->GetFormID() : RE::FormID{0},
+                objective ? objective->index : std::uint16_t{0}
             };
         };
 
@@ -834,10 +834,10 @@ namespace PlayerReader
             auto* world = ref ? ref->GetWorldspace() : nullptr;
             auto* cell  = ref ? ref->GetParentCell() : nullptr;
             return QuestMarkerDestinationKey{
-                quest ? quest->GetFormID() : 0,
-                objective ? objective->index : 0,
-                world ? world->GetFormID() : 0,
-                cell ? cell->GetFormID() : 0,
+                quest ? quest->GetFormID() : RE::FormID{0},
+                objective ? objective->index : std::uint16_t{0},
+                world ? world->GetFormID() : RE::FormID{0},
+                cell ? cell->GetFormID() : RE::FormID{0},
                 ref ? ref->GetPositionX() : 0.0f,
                 ref ? ref->GetPositionY() : 0.0f,
                 ref ? ref->GetPositionZ() : 0.0f
