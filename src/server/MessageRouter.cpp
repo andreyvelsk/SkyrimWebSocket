@@ -255,13 +255,6 @@ namespace MessageRouter
             resp["ts"]   = nowMs;
             session->send(resp.dump());
 
-        } else if (type == "ping") {
-            nlohmann::json resp;
-            resp["type"] = "pong";
-            resp["message"] = "success";
-            logger::debug("Ping received, sending pong.");
-            session->send(resp.dump());
-
         } else if (type == "query") {
             if (!msg.contains("id") || !msg["id"].is_string()) {
                 session->send(R"({"type":"error","message":"Missing or invalid 'id' in query"})");
