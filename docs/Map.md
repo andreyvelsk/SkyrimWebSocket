@@ -206,7 +206,7 @@ to unfilled / deleted refs are skipped.
 | `isActive` | `bool` | Always `true` for entries returned here — included so clients can carry the same field into their UI. Only active (tracked) quests are returned. |
 | `objectiveIndex` | `integer` | The objective's `QOBJ` index inside the quest. |
 | `objectiveText` | `string` | Localised objective description as stored on the quest — may contain unresolved placeholders for radiant/templated quests, e.g. `"<Alias=BanditCamp>: kill the leader"`. |
-| `objectiveTextResolved` | `string` | Same text with `<Alias=...>` / `<Alias.ShortName=...>` etc. tokens replaced by the resolved alias display name (e.g. the bandit camp's actual name). Tokens we can't resolve (unknown aliases, `<Global=...>`, `<Spouse>`, ...) are left untouched. Identical to `objectiveText` when there are no placeholders. |
+| `objectiveTextResolved` | `string` | Same text with `<Alias=...>` / `<Alias.ShortName=...>` etc. tokens replaced through the current quest instance data (`aliasName -> aliasID -> fullNameFormID`) when available, e.g. the bandit camp's actual location name. Tokens we can't resolve (unknown aliases, `<Global=...>`, `<Spouse>`, ...) are left untouched. Identical to `objectiveText` when there are no placeholders. |
 | `aliasId` | `integer` | The quest alias ID this target points at. |
 | `refId` | `string` | Hex form ID of the resolved reference (NPC, door, container, etc.). |
 | `name` | `string` | Display name of the reference. Empty if unnamed. |

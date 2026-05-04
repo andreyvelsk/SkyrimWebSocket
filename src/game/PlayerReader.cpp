@@ -2,6 +2,7 @@
 
 #include "../../logger.h"
 
+#include <cctype>
 #include <unordered_set>
 
 namespace PlayerReader
@@ -487,10 +488,41 @@ namespace PlayerReader
             return nullptr;
         }
 
+        std::string_view TrimAscii(std::string_view value)
+        {
+            while (!value.empty() && std::isspace(static_cast<unsigned char>(value.front())))
+                value.remove_prefix(1);
+            while (!value.empty() && std::isspace(static_cast<unsigned char>(value.back())))
+                value.remove_suffix(1);
+            return value;
+        }
+
+        bool EqualAsciiIgnoreCase(std::string_view lhs, std::string_view rhs)
+        {
+            if (lhs.size() != rhs.size())
+                return false;
+            for (std::size_t i = 0; i < lhs.size(); ++i) {
+                const auto l = static_cast<unsigned char>(lhs[i]);
+                const auto r = static_cast<unsigned char>(rhs[i]);
+                if (std::tolower(l) != std::tolower(r))
+                    return false;
+            }
+            return true;
+        }
+
+        bool IsAliasTokenHead(std::string_view head)
+        {
+            head = TrimAscii(head);
+            return head.size() >= 5
+                && EqualAsciiIgnoreCase(head.substr(0, 5), "Alias")
+                && (head.size() == 5 || head[5] == '.');
+        }
+
         // Lookup an alias by its (case-insensitive) editor name on a quest.
         // Used to resolve <Alias=Foo> tokens in objective text.
         RE::BGSBaseAlias* FindAliasByName(RE::TESQuest* quest, std::string_view name)
         {
+            name = TrimAscii(name);
             if (!quest || name.empty())
                 return nullptr;
             for (auto* alias : quest->aliases) {
@@ -499,37 +531,129 @@ namespace PlayerReader
                 const char* aname = alias->aliasName.c_str();
                 if (!aname)
                     continue;
-                if (std::string_view(aname).size() != name.size())
-                    continue;
-                if (_stricmp(aname, std::string(name).c_str()) == 0)
+                if (EqualAsciiIgnoreCase(aname, name))
                     return alias;
             }
             return nullptr;
         }
 
-        // Best-effort display string for a quest alias \u2014 used as the
-        // replacement value for <Alias=...>, <Alias.ShortName=...>, etc.
-        std::string ResolveAliasDisplayName(RE::BGSBaseAlias* alias)
+        std::string RefDisplayName(RE::TESObjectREFR* ref)
         {
-            if (!alias)
+            if (!ref)
                 return {};
-            if (alias->GetVMTypeID() == RE::BGSRefAlias::VMTYPEID) {
-                auto* ra = static_cast<RE::BGSRefAlias*>(alias);
-                if (auto* ref = ra->GetReference()) {
-                    const char* full = ref->GetDisplayFullName();
-                    if (full && *full)
-                        return full;
-                    const char* nm = ref->GetName();
-                    if (nm && *nm)
-                        return nm;
-                    if (auto* base = ref->GetBaseObject()) {
-                        const char* bnm = base->GetName();
-                        if (bnm && *bnm)
-                            return bnm;
+            const char* full = ref->GetDisplayFullName();
+            if (full && *full)
+                return full;
+            const char* name = ref->GetName();
+            if (name && *name)
+                return name;
+            if (auto* base = ref->GetBaseObject()) {
+                const char* baseName = base->GetName();
+                if (baseName && *baseName)
+                    return baseName;
+            }
+            return {};
+        }
+
+        std::string FormDisplayName(RE::TESForm* form)
+        {
+            if (!form)
+                return {};
+            if (auto* ref = form->AsReference()) {
+                if (auto name = RefDisplayName(ref); !name.empty())
+                    return name;
+            }
+            const char* name = form->GetName();
+            if (name && *name)
+                return name;
+            const char* editorId = form->GetFormEditorID();
+            if (editorId && *editorId)
+                return editorId;
+            return {};
+        }
+
+        RE::BGSQuestInstanceText* FindQuestInstanceText(RE::TESQuest* quest, std::uint32_t instanceID)
+        {
+            if (!quest)
+                return nullptr;
+
+            const auto findByID = [&](std::uint32_t id) -> RE::BGSQuestInstanceText* {
+                if (id == 0)
+                    return nullptr;
+                for (auto* data : quest->instanceData) {
+                    if (data && data->id == id)
+                        return data;
+                }
+                return nullptr;
+            };
+
+            if (auto* data = findByID(instanceID))
+                return data;
+            if (quest->currentInstanceID != instanceID)
+                return findByID(quest->currentInstanceID);
+            return nullptr;
+        }
+
+        std::string ResolveAliasFromInstanceText(RE::TESQuest* quest,
+                                                 std::uint32_t aliasID,
+                                                 std::uint32_t instanceID)
+        {
+            const auto resolveFrom = [&](RE::BGSQuestInstanceText* data) -> std::string {
+                if (!data)
+                    return {};
+                for (const auto& str : data->stringData) {
+                    if (str.aliasID != aliasID || str.fullNameFormID == 0)
+                        continue;
+                    auto* form = RE::TESForm::LookupByID(str.fullNameFormID);
+                    if (!form) {
+                        logger::debug("[Map::Markers::Quests] unresolved instance text formId=0x{:08X} alias={} quest={} instance={}",
+                                      str.fullNameFormID, aliasID,
+                                      quest && quest->GetFormEditorID() ? quest->GetFormEditorID() : "",
+                                      data->id);
+                        continue;
+                    }
+                    if (auto name = FormDisplayName(form); !name.empty())
+                        return name;
+                }
+                return {};
+            };
+
+            if (auto name = resolveFrom(FindQuestInstanceText(quest, instanceID)); !name.empty())
+                return name;
+
+            std::string onlyName;
+            std::size_t matches = 0;
+            if (quest) {
+                for (auto* data : quest->instanceData) {
+                    if (auto name = resolveFrom(data); !name.empty()) {
+                        onlyName = std::move(name);
+                        ++matches;
                     }
                 }
             }
-            // Fallback: leave token unresolved by returning an empty string.
+            return matches == 1 ? onlyName : std::string();
+        }
+
+        // Best-effort display string for a quest alias. For radiant quests,
+        // the static alias usually has only a template name (BanditCamp),
+        // while the concrete value lives in TESQuest::instanceData as
+        // BGSQuestInstanceText::StringData(aliasID -> fullNameFormID).
+        std::string ResolveAliasDisplayName(RE::TESQuest* quest,
+                                            RE::BGSBaseAlias* alias,
+                                            std::uint32_t instanceID)
+        {
+            if (!alias)
+                return {};
+
+            if (auto name = ResolveAliasFromInstanceText(quest, alias->aliasID, instanceID); !name.empty())
+                return name;
+
+            if (alias->GetVMTypeID() == RE::BGSRefAlias::VMTYPEID) {
+                auto* refAlias = static_cast<RE::BGSRefAlias*>(alias);
+                if (auto name = RefDisplayName(refAlias->GetReference()); !name.empty())
+                    return name;
+            }
+
             return {};
         }
 
@@ -537,9 +661,11 @@ namespace PlayerReader
         // resolved alias name from `quest`. Tokens we can't resolve are
         // left in place verbatim so callers can still see what's missing.
         // We do not try to handle <Global=...>, <Spouse>, <Faction=...>,
-        // etc. here \u2014 those would need additional context (textGlobals,
+        // etc. here - those would need additional context (textGlobals,
         // player relationships) and are out of scope for now.
-        std::string ResolveQuestObjectiveText(RE::TESQuest* quest, const std::string& raw)
+        std::string ResolveQuestObjectiveText(RE::TESQuest* quest,
+                                              const std::string& raw,
+                                              std::uint32_t instanceID)
         {
             if (raw.empty() || !quest)
                 return raw;
@@ -565,27 +691,26 @@ namespace PlayerReader
                 bool         matched = false;
                 const auto eq = token.find('=');
                 if (eq != std::string_view::npos) {
-                    auto head = token.substr(0, eq);
-                    auto name = token.substr(eq + 1);
+                    const auto head = TrimAscii(token.substr(0, eq));
+                    const auto name = TrimAscii(token.substr(eq + 1));
 
-                    // Accept "Alias" and "Alias.<anything>" forms.
-                    bool isAlias = false;
-                    if (head.size() >= 5
-                        && (head[0] == 'A' || head[0] == 'a')
-                        && (head[1] == 'l' || head[1] == 'L')
-                        && (head[2] == 'i' || head[2] == 'I')
-                        && (head[3] == 'a' || head[3] == 'A')
-                        && (head[4] == 's' || head[4] == 'S')
-                        && (head.size() == 5 || head[5] == '.'))
-                        isAlias = true;
-
-                    if (isAlias) {
+                    if (IsAliasTokenHead(head)) {
                         if (auto* a = FindAliasByName(quest, name)) {
-                            std::string repl = ResolveAliasDisplayName(a);
+                            std::string repl = ResolveAliasDisplayName(quest, a, instanceID);
                             if (!repl.empty()) {
                                 out.append(repl);
                                 matched = true;
+                            } else {
+                                logger::debug("[Map::Markers::Quests] unresolved alias token '<{}>' quest={} aliasName='{}' aliasID={} instance={} currentInstance={}",
+                                              std::string(token),
+                                              quest->GetFormEditorID() ? quest->GetFormEditorID() : "",
+                                              std::string(name), a->aliasID, instanceID,
+                                              quest->currentInstanceID);
                             }
+                        } else {
+                            logger::debug("[Map::Markers::Quests] alias token '<{}>' did not match any quest alias quest={}",
+                                          std::string(token),
+                                          quest->GetFormEditorID() ? quest->GetFormEditorID() : "");
                         }
                     }
                 }
@@ -598,6 +723,30 @@ namespace PlayerReader
             }
 
             return out;
+        }
+
+        std::uint32_t FindDisplayedObjectiveInstanceID(RE::PlayerCharacter* player,
+                                                       RE::BGSQuestObjective* objective)
+        {
+            if (!player || !objective || REL::Module::IsVR())
+                return 0;
+
+            const auto base = reinterpret_cast<std::uintptr_t>(player);
+            const std::size_t off = REL::Module::IsAE() ? 0x588 : 0x580;
+            const auto& instances =
+                *reinterpret_cast<const RE::BSTArray<RE::BGSInstancedQuestObjective>*>(base + off);
+
+            for (const auto& inst : instances) {
+                if (inst.Objective == objective &&
+                    inst.InstanceState == RE::QUEST_OBJECTIVE_STATE::kDisplayed) {
+                    return inst.instanceID;
+                }
+            }
+            for (const auto& inst : instances) {
+                if (inst.Objective == objective)
+                    return inst.instanceID;
+            }
+            return 0;
         }
     }  // namespace
 
@@ -628,7 +777,8 @@ namespace PlayerReader
         // and nothing was emitted.
         const auto emitTargetEntry = [&](RE::TESQuest*          quest,
                                          RE::BGSQuestObjective* objective,
-                                         RE::TESQuestTarget*    target) -> bool {
+                                         RE::TESQuestTarget*    target,
+                                         std::uint32_t          instanceID) -> bool {
             if (!quest || !objective || !target)
                 return false;
 
@@ -663,7 +813,7 @@ namespace PlayerReader
                                                   ? objective->displayText.c_str()
                                                   : "";
             const std::string objectiveTextResolved =
-                ResolveQuestObjectiveText(quest, objectiveText);
+                ResolveQuestObjectiveText(quest, objectiveText, instanceID);
 
             nlohmann::json entry;
             entry["questFormId"]    = formIdStr(quest->GetFormID());
@@ -797,7 +947,8 @@ namespace PlayerReader
                         if (!matchedObj)
                             continue;
 
-                        if (emitTargetEntry(quest, matchedObj, target))
+                        const auto instanceID = FindDisplayedObjectiveInstanceID(player, matchedObj);
+                        if (emitTargetEntry(quest, matchedObj, target, instanceID))
                             ++fromQuestTargets;
                     }
                 }
@@ -825,7 +976,7 @@ namespace PlayerReader
                         auto* target = objective->targets ? objective->targets[i] : nullptr;
                         if (!target)
                             continue;
-                        if (emitTargetEntry(quest, objective, target))
+                        if (emitTargetEntry(quest, objective, target, inst.instanceID))
                             ++fromInstanced;
                     }
                 }
@@ -852,7 +1003,7 @@ namespace PlayerReader
                         auto* target = objective->targets ? objective->targets[i] : nullptr;
                         if (!target)
                             continue;
-                        if (emitTargetEntry(quest, objective, target))
+                        if (emitTargetEntry(quest, objective, target, quest->currentInstanceID))
                             ++fromStaticFallback;
                     }
                 }
