@@ -9,6 +9,9 @@ on:
 
 env:
   VCPKG_COMMIT: "77df67cfff9c12ccfdb52284e07c87c75092f723"
+  VCPKG_BINARY_CACHE: ${{ github.workspace }}/.vcpkg-binary-cache
+  VCPKG_BINARY_SOURCES: "clear;files,${{ github.workspace }}/.vcpkg-binary-cache,readwrite"
+  VCPKG_FEATURE_FLAGS: "manifests,binarycaching"
 
 permissions:
   contents: read
@@ -30,6 +33,30 @@ jobs:
         uses: lukka/run-vcpkg@v11
         with:
           vcpkgGitCommitId: ${{ env.VCPKG_COMMIT }}
+
+      - name: Compute vcpkg cache key
+        id: vcpkg-cache
+        shell: pwsh
+        run: |
+          $parts = @(
+            "vs$env:VSCMD_VER",
+            "msvc$env:VCToolsVersion",
+            "sdk$env:WindowsSDKVersion",
+            "ucrt$env:UCRTVersion",
+            "image$env:ImageVersion"
+          ) | ForEach-Object { $_ -replace '[^A-Za-z0-9_.-]', '-' }
+          "toolchain=$($parts -join '-')" >> $env:GITHUB_OUTPUT
+
+      - name: Cache vcpkg binary artifacts
+        uses: actions/cache@v4
+        with:
+          path: ${{ env.VCPKG_BINARY_CACHE }}
+          key: vcpkg-${{ runner.os }}-x64-windows-static-${{ env.VCPKG_COMMIT }}-${{ steps.vcpkg-cache.outputs.toolchain }}-${{ hashFiles('vcpkg.json', 'vcpkg-configuration.json', 'CMakePresets.json', 'cmake/**') }}
+          restore-keys: |
+            vcpkg-${{ runner.os }}-x64-windows-static-${{ env.VCPKG_COMMIT }}-${{ steps.vcpkg-cache.outputs.toolchain }}-
+
+      - name: Prepare vcpkg binary cache
+        run: cmake -E make_directory "${{ env.VCPKG_BINARY_CACHE }}"
 
       - name: Configure CMake (Release)
         run: cmake --preset release
