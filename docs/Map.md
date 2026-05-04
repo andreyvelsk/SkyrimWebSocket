@@ -10,7 +10,7 @@ Map fields expose the player's discovered locations and their metadata.
 |---|---|---|
 | `Map::Markers::Locations` | `array` | Map markers visible on the player's world map (discovered locations + pre-set city markers). |
 | `Map::Markers::All` | `array` | Same shape as `Map::Markers::Locations` but includes undiscovered/hidden markers in every loaded worldspace. |
-| `Map::Markers::Quests` | `array` | Active quest-objective targets (the floating quest arrows / quest-target icons). |
+| `Map::Markers::Quests` | `array` | Active quest-marker destinations (the floating quest arrows / quest-target icons). |
 
 ---
 
@@ -181,16 +181,21 @@ editors, or pre-rendering an offline atlas.
 
 ## `Map::Markers::Quests`
 
-Returns an array of **active quest-objective targets** — the markers Skyrim
+Returns an array of **active quest-marker destinations** — the markers Skyrim
 renders as the floating quest arrows on the compass and as quest-target icons
 on the world map. The list mirrors what the player actually sees on the map:
 
-* only quests flagged as **active** in the journal (the one(s) the player has
-  marked with the “Active” arrow — `TESQuest::IsActive()`),
+* on SE/AE, only targets present in `PlayerCharacter::PLAYER_RUNTIME_DATA::questTargets`,
+  the runtime map Skyrim uses for currently tracked compass/map targets,
 * only quests that are currently **running** and not completed,
 * one entry per visible quest-marker destination. A single objective can still
   produce multiple entries when Skyrim exposes multiple distinct destinations,
   but alternative aliases that resolve to the same marker are collapsed.
+
+`TESQuest::IsActive()` is not used for SE/AE filtering: in CommonLibSSE-NG it
+only checks `QuestFlag::kActive`, which is not the same thing as the player's
+journal tracking state. VR currently uses a best-effort static fallback because
+its quest-target runtime layout is different.
 
 Targets that resolve to non-ref aliases (location aliases, data aliases) or
 to unfilled / deleted refs are skipped.

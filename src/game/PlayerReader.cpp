@@ -754,25 +754,6 @@ namespace PlayerReader
             seed ^= value + 0x9E3779B97F4A7C15ull + (seed << 6) + (seed >> 2);
         }
 
-        struct QuestObjectiveKey
-        {
-            RE::FormID    questFormID{};
-            std::uint16_t objectiveIndex{};
-
-            bool operator==(const QuestObjectiveKey&) const = default;
-        };
-
-        struct QuestObjectiveKeyHash
-        {
-            std::size_t operator()(const QuestObjectiveKey& key) const noexcept
-            {
-                std::size_t seed = 0;
-                HashCombine(seed, std::hash<RE::FormID>{}(key.questFormID));
-                HashCombine(seed, std::hash<std::uint16_t>{}(key.objectiveIndex));
-                return seed;
-            }
-        };
-
         struct QuestMarkerDestinationKey
         {
             RE::FormID    questFormID{};
@@ -818,15 +799,6 @@ namespace PlayerReader
         };
 
         std::unordered_set<QuestMarkerDestinationKey, QuestMarkerDestinationKeyHash> seenDestinations;
-        std::unordered_set<QuestObjectiveKey, QuestObjectiveKeyHash>                 questTargetObjectives;
-        std::unordered_set<QuestObjectiveKey, QuestObjectiveKeyHash>                 instancedObjectives;
-
-        const auto makeObjectiveKey = [](RE::TESQuest* quest, RE::BGSQuestObjective* objective) {
-            return QuestObjectiveKey{
-                quest ? quest->GetFormID() : RE::FormID{0},
-                objective ? objective->index : std::uint16_t{0}
-            };
-        };
 
         const auto makeDestinationKey = [](RE::TESQuest* quest,
                                            RE::BGSQuestObjective* objective,
@@ -854,13 +826,6 @@ namespace PlayerReader
             if (!quest || !objective || !target)
                 return false;
 
-            // Skyrim's world map / compass only render quest-target arrows
-            // for the *active* (tracked) quest in the journal. The kActive
-            // flag is what the journal toggles when the player taps the
-            // "Active" arrow next to a quest. Filtering by it gives us the
-            // same visual set the player sees on the map.
-            if (!quest->IsActive())
-                return false;
             if (!quest->IsRunning() || quest->IsCompleted())
                 return false;
 
@@ -945,27 +910,25 @@ namespace PlayerReader
             return true;
         };
 
-        // We feed `result` from up to three sources. Runtime questTargets is
-        // authoritative when present; the objective/static walks are fallback
-        // sources and must not add extra conditional aliases for an objective
-        // already represented by a higher-priority source. Exact same marker
-        // destinations are deduped across all sources.
+        // For SE/AE, PLAYER_RUNTIME_DATA::questTargets is the authoritative
+        // map/compass source. TESQuest::IsActive() only checks QuestFlag::kActive
+        // and is not the player's journal tracking state, so filtering by it
+        // hides normal tracked quests and lets unrelated Misc objectives leak in.
+        // VR has a different runtime layout, so it keeps a best-effort static
+        // fallback gated by that quest flag.
         //
         //  1. PLAYER_RUNTIME_DATA::questTargets — a runtime BSTHashMap keyed
         //     by TESQuest*; the values are BSTArrays of TESQuestTarget* that
         //     the engine itself uses to draw compass arrows / quest-target
-        //     icons. This is the source we trust most.
+        //     icons.
         //
         //  2. PLAYER_RUNTIME_DATA::objectives — a BSTArray of
         //     BGSInstancedQuestObjective. Tells us which objectives are in
-        //     the kDisplayed runtime state for the current playthrough. We use
-        //     it only for objectives not already covered by (1), because its
-        //     static `targets[]` can contain conditional alternatives.
+        //     the kDisplayed runtime state for the current playthrough. We only
+        //     query it to find the objective instance ID for text resolution.
         //
-        //  3. Static fallback: TESQuest::objectives walked with the
-        //     non-instanced state field. Required for radiant / Misc quests
-        //     and for VR (which has a different runtime data layout we
-        //     don't translate yet).
+        //  3. Static fallback: VR only, because we don't translate its quest
+        //     target runtime layout yet.
         //
         // PLAYER_RUNTIME_DATA fields are not exposed as struct members in
         // multi-targeting builds; we resolve by absolute offsets.
@@ -973,102 +936,60 @@ namespace PlayerReader
         //   questTargets  : SE 0x598, AE 1.6.629+ 0x5A0
 
         std::size_t fromQuestTargets   = 0;
-        std::size_t fromInstanced      = 0;
         std::size_t fromStaticFallback = 0;
 
         if (!REL::Module::IsVR()) {
             const auto base = reinterpret_cast<std::uintptr_t>(player);
 
-            // ── (1) questTargets ─────────────────────────────────────────
-            {
-                const std::size_t off = REL::Module::IsAE() ? 0x5A0 : 0x598;
-                const auto&       map =
-                    *reinterpret_cast<const RE::BSTHashMap<RE::TESQuest*, RE::BSTArray<RE::TESQuestTarget*>*>*>(
-                        base + off);
+            const std::size_t off = REL::Module::IsAE() ? 0x5A0 : 0x598;
+            const auto&       map =
+                *reinterpret_cast<const RE::BSTHashMap<RE::TESQuest*, RE::BSTArray<RE::TESQuestTarget*>*>*>(
+                    base + off);
 
-                for (const auto& kv : map) {
-                    auto* quest = kv.first;
-                    if (!quest)
-                        continue;
-                    auto* targetArray = kv.second;
-                    if (!targetArray)
+            for (const auto& kv : map) {
+                auto* quest = kv.first;
+                if (!quest)
+                    continue;
+                auto* targetArray = kv.second;
+                if (!targetArray)
+                    continue;
+
+                for (auto* target : *targetArray) {
+                    if (!target)
                         continue;
 
-                    for (auto* target : *targetArray) {
-                        if (!target)
+                    // We need an objective for the entry's index/displayText,
+                    // but questTargets has only (quest, target) and target
+                    // carries no objective back-pointer. Walk the quest's
+                    // objectives and pick the one whose `targets[]` contains
+                    // this target pointer.
+                    RE::BGSQuestObjective* matchedObj = nullptr;
+                    for (auto* obj : quest->objectives) {
+                        if (!obj || !obj->targets)
                             continue;
-
-                        // We need an objective for the entry's
-                        // index/displayText, but questTargets has only
-                        // (quest, target) and target carries no objective
-                        // back-pointer. Walk the quest's objectives and
-                        // pick the one whose `targets[]` contains this
-                        // target pointer. Cheap (objectives count is small
-                        // per quest) and gives accurate metadata.
-                        RE::BGSQuestObjective* matchedObj = nullptr;
-                        for (auto* obj : quest->objectives) {
-                            if (!obj || !obj->targets)
-                                continue;
-                            for (std::uint32_t i = 0; i < obj->numTargets; ++i) {
-                                if (obj->targets[i] == target) {
-                                    matchedObj = obj;
-                                    break;
-                                }
-                            }
-                            if (matchedObj)
+                        for (std::uint32_t i = 0; i < obj->numTargets; ++i) {
+                            if (obj->targets[i] == target) {
+                                matchedObj = obj;
                                 break;
+                            }
                         }
-                        if (!matchedObj)
-                            continue;
-
-                        const auto instanceID = FindDisplayedObjectiveInstanceID(player, matchedObj);
-                        if (emitTargetEntry(quest, matchedObj, target, instanceID)) {
-                            ++fromQuestTargets;
-                            questTargetObjectives.insert(makeObjectiveKey(quest, matchedObj));
-                        }
+                        if (matchedObj)
+                            break;
                     }
+                    if (!matchedObj)
+                        continue;
+
+                    const auto instanceID = FindDisplayedObjectiveInstanceID(player, matchedObj);
+                    if (emitTargetEntry(quest, matchedObj, target, instanceID))
+                        ++fromQuestTargets;
                 }
             }
-
-            // ── (2) instanced objectives ─────────────────────────────────
-            {
-                const std::size_t off = REL::Module::IsAE() ? 0x588 : 0x580;
-                const auto&       instances =
-                    *reinterpret_cast<const RE::BSTArray<RE::BGSInstancedQuestObjective>*>(base + off);
-
-                for (const auto& inst : instances) {
-                    if (inst.InstanceState != RE::QUEST_OBJECTIVE_STATE::kDisplayed)
-                        continue;
-
-                    auto* objective = inst.Objective;
-                    if (!objective)
-                        continue;
-                    auto* quest = objective->ownerQuest;
-                    if (!quest)
-                        continue;
-                    const auto objectiveKey = makeObjectiveKey(quest, objective);
-                    if (questTargetObjectives.contains(objectiveKey))
-                        continue;
-
-                    const auto numTargets = objective->numTargets;
-                    for (std::uint32_t i = 0; i < numTargets; ++i) {
-                        auto* target = objective->targets ? objective->targets[i] : nullptr;
-                        if (!target)
-                            continue;
-                        if (emitTargetEntry(quest, objective, target, inst.instanceID)) {
-                            ++fromInstanced;
-                            instancedObjectives.insert(objectiveKey);
-                        }
-                    }
-                }
-            }
-        }
-
-        // ── (3) static-state fallback over every TESQuest ────────────────
-        if (auto* handler = RE::TESDataHandler::GetSingleton()) {
+        } else if (auto* handler = RE::TESDataHandler::GetSingleton()) {
             const auto& quests = handler->GetFormArray<RE::TESQuest>();
             for (auto* quest : quests) {
                 if (!quest)
+                    continue;
+                if (!quest->IsActive())
                     continue;
                 if (!quest->IsRunning() || quest->IsCompleted())
                     continue;
@@ -1077,9 +998,6 @@ namespace PlayerReader
                     if (!objective)
                         continue;
                     if (objective->state != RE::QUEST_OBJECTIVE_STATE::kDisplayed)
-                        continue;
-                    const auto objectiveKey = makeObjectiveKey(quest, objective);
-                    if (questTargetObjectives.contains(objectiveKey) || instancedObjectives.contains(objectiveKey))
                         continue;
 
                     const auto numTargets = objective->numTargets;
@@ -1094,8 +1012,8 @@ namespace PlayerReader
             }
         }
 
-        logger::info("[Map::Markers::Quests] markers={} (questTargets={}, instanced={}, staticFallback={})",
-                     result.size(), fromQuestTargets, fromInstanced, fromStaticFallback);
+        logger::info("[Map::Markers::Quests] markers={} (questTargets={}, staticFallback={})",
+                     result.size(), fromQuestTargets, fromStaticFallback);
         return result;
     }
 

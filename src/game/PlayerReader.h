@@ -71,10 +71,10 @@ namespace PlayerReader
     // Must be called on the game thread.
     nlohmann::json ReadMapMarkersAll();
 
-    // Returns an array of active quest-objective targets — the markers the
-    // engine renders as floating quest arrows / quest-target icons. Walks
-    // the runtime quest-target map first, then falls back to displayed
-    // objectives/static quest state when runtime data is unavailable. Multiple
+    // Returns an array of active quest-marker destinations — the markers the
+    // engine renders as floating quest arrows / quest-target icons. On SE/AE,
+    // this uses PlayerCharacter::questTargets, the same runtime map the engine
+    // uses for tracked markers. VR uses a best-effort static fallback. Multiple
     // target aliases that resolve to the same marker destination are collapsed.
     // Each entry: { questFormId, questEditorId, questName, questType,
     //               objectiveIndex, objectiveText, objectiveTextResolved, aliasId,
