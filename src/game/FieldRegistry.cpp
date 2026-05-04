@@ -322,6 +322,10 @@ namespace FieldRegistry
           { "Array of active quest-marker destinations (the markers Skyrim renders as the floating quest arrows on the compass and as quest-target icons on the world map). On SE/AE this uses PlayerCharacter::questTargets, the runtime map Skyrim uses for tracked compass/map targets; alternative target aliases resolving to the same marker are collapsed. Each entry: { questFormId, questEditorId, questName, questType, isActive, objectiveIndex, objectiveText, objectiveTextResolved, aliasId, refId, name, x, y, z, worldspace, worldspaceFormId, parentWorldspace, parentWorldspaceFormId, cell, cellFormId, isInterior }. objectiveText keeps the raw template (may contain <Alias=...> placeholders for radiant quests); objectiveTextResolved resolves those aliases through the current quest instance data where possible.",
             "array",
             &PlayerReader::ReadQuestMarkers } },
+        { "Debug::Map::Markers::Quests",
+          { "Debug snapshot for quest marker diagnosis: runtime module, questTargets, runtime objectives, static active/displayed objectives, and current Map::Markers::Quests output.",
+            "object",
+            &PlayerReader::ReadQuestMarkersDebug } },
 
         // Player-placed custom map marker (the marker the player drops on
         // the world map by clicking on it).

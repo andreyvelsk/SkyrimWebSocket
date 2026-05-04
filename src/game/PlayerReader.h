@@ -85,6 +85,12 @@ namespace PlayerReader
     // Must be called on the game thread.
     nlohmann::json ReadQuestMarkers();
 
+    // Debug snapshot for diagnosing quest marker sources. Returns raw
+    // PlayerCharacter questTargets/objectives summaries plus current
+    // ReadQuestMarkers output. Intended for troubleshooting only.
+    // Must be called on the game thread.
+    nlohmann::json ReadQuestMarkersDebug();
+
     // Returns a JSON object describing the player-placed custom map marker
     // (the marker the player can drop on the world map by clicking on it):
     // { "isSet", "x", "y", "z",

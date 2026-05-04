@@ -572,6 +572,153 @@ namespace PlayerReader
             return {};
         }
 
+        std::string PtrString(const void* ptr)
+        {
+            return std::format("0x{:016X}", reinterpret_cast<std::uintptr_t>(ptr));
+        }
+
+        const char* ObjectiveStateName(RE::QUEST_OBJECTIVE_STATE state)
+        {
+            switch (state) {
+            case RE::QUEST_OBJECTIVE_STATE::kDormant:            return "Dormant";
+            case RE::QUEST_OBJECTIVE_STATE::kDisplayed:          return "Displayed";
+            case RE::QUEST_OBJECTIVE_STATE::kCompleted:          return "Completed";
+            case RE::QUEST_OBJECTIVE_STATE::kCompletedDisplayed: return "CompletedDisplayed";
+            case RE::QUEST_OBJECTIVE_STATE::kFailed:             return "Failed";
+            case RE::QUEST_OBJECTIVE_STATE::kFailedDisplayed:    return "FailedDisplayed";
+            default:                                             return "Unknown";
+            }
+        }
+
+        bool QuestFlagSet(RE::TESQuest* quest, RE::QuestFlag flag)
+        {
+            return quest && quest->data.flags.all(flag);
+        }
+
+        nlohmann::json QuestDebugJson(RE::TESQuest* quest)
+        {
+            nlohmann::json out = nlohmann::json::object();
+            if (!quest)
+                return out;
+
+            const char* editorID = quest->GetFormEditorID();
+            const char* name     = quest->GetFullName();
+            out["ptr"]            = PtrString(quest);
+            out["formId"]         = std::format("0x{:08X}", quest->GetFormID());
+            out["editorId"]       = editorID ? std::string(editorID) : std::string();
+            out["name"]           = name ? std::string(name) : std::string();
+            out["type"]           = std::string(QuestTypeName(quest->GetType()));
+            out["flagsRaw"]       = static_cast<std::uint16_t>(quest->data.flags.underlying());
+            out["isActiveFlag"]   = quest->IsActive();
+            out["isDisplayedHUD"] = QuestFlagSet(quest, RE::QuestFlag::kDisplayedInHUD);
+            out["isEnabled"]      = quest->IsEnabled();
+            out["isRunning"]      = quest->IsRunning();
+            out["isCompleted"]    = quest->IsCompleted();
+            out["currentStage"]   = quest->GetCurrentStageID();
+            out["currentInstanceID"] = quest->currentInstanceID;
+            return out;
+        }
+
+        nlohmann::json ObjectiveDebugJson(RE::BGSQuestObjective* objective,
+                                          std::uint32_t instanceID = 0)
+        {
+            nlohmann::json out = nlohmann::json::object();
+            if (!objective)
+                return out;
+
+            const std::string text = objective->displayText.c_str()
+                                         ? objective->displayText.c_str()
+                                         : "";
+            out["ptr"]          = PtrString(objective);
+            out["index"]        = objective->index;
+            out["state"]        = ObjectiveStateName(static_cast<RE::QUEST_OBJECTIVE_STATE>(objective->state.underlying()));
+            out["stateRaw"]     = static_cast<std::uint8_t>(objective->state.underlying());
+            out["flagsRaw"]     = objective->flags.underlying();
+            out["numTargets"]   = objective->numTargets;
+            out["text"]         = text;
+            out["instanceID"]   = instanceID;
+            if (auto* quest = objective->ownerQuest) {
+                out["questFormId"]  = std::format("0x{:08X}", quest->GetFormID());
+                out["questEditorId"] = quest->GetFormEditorID() ? quest->GetFormEditorID() : "";
+                out["questType"]     = std::string(QuestTypeName(quest->GetType()));
+            }
+            return out;
+        }
+
+        nlohmann::json QuestTargetDebugJson(RE::TESQuest* quest,
+                                            RE::BGSQuestObjective* objective,
+                                            RE::TESQuestTarget* target,
+                                            std::uint32_t instanceID)
+        {
+            nlohmann::json out = nlohmann::json::object();
+            if (!target)
+                return out;
+
+            out["ptr"]           = PtrString(target);
+            out["aliasId"]       = target->alias;
+            out["hasConditions"] = static_cast<bool>(target->conditions);
+            out["unk00"]         = std::format("0x{:016X}", target->unk00);
+            out["unk11"]         = target->unk11;
+            out["unk12"]         = target->unk12;
+            out["unk14"]         = target->unk14;
+
+            if (quest)
+                out["quest"] = QuestDebugJson(quest);
+            if (objective)
+                out["objective"] = ObjectiveDebugJson(objective, instanceID);
+
+            if (auto* refAlias = FindRefAlias(quest, target->alias)) {
+                out["refAliasFound"] = true;
+                auto* ref = refAlias->GetReference();
+                if (ref) {
+                    out["ref"] = {
+                        { "ptr", PtrString(ref) },
+                        { "formId", std::format("0x{:08X}", ref->GetFormID()) },
+                        { "name", RefDisplayName(ref) },
+                        { "isDeleted", ref->IsDeleted() },
+                        { "x", ref->GetPositionX() },
+                        { "y", ref->GetPositionY() },
+                        { "z", ref->GetPositionZ() }
+                    };
+                    if (auto* cell = ref->GetParentCell()) {
+                        out["ref"]["cellFormId"] = std::format("0x{:08X}", cell->GetFormID());
+                        out["ref"]["cell"] = cell->GetFormEditorID() ? cell->GetFormEditorID() : "";
+                    }
+                    if (auto* world = ref->GetWorldspace()) {
+                        out["ref"]["worldspaceFormId"] = std::format("0x{:08X}", world->GetFormID());
+                        out["ref"]["worldspace"] = world->GetFormEditorID() ? world->GetFormEditorID() : "";
+                    }
+                    if (target->conditions) {
+                        auto* player = RE::PlayerCharacter::GetSingleton();
+                        out["conditionsTruePlayerRef"] = player ? target->conditions.IsTrue(player, ref) : nullptr;
+                    }
+                } else {
+                    out["ref"] = nullptr;
+                }
+            } else {
+                out["refAliasFound"] = false;
+                out["ref"] = nullptr;
+            }
+
+            return out;
+        }
+
+        RE::BGSQuestObjective* FindObjectiveForTarget(RE::TESQuest* quest, RE::TESQuestTarget* target)
+        {
+            if (!quest || !target)
+                return nullptr;
+
+            for (auto* objective : quest->objectives) {
+                if (!objective || !objective->targets)
+                    continue;
+                for (std::uint32_t i = 0; i < objective->numTargets; ++i) {
+                    if (objective->targets[i] == target)
+                        return objective;
+                }
+            }
+            return nullptr;
+        }
+
         RE::BGSQuestInstanceText* FindQuestInstanceText(RE::TESQuest* quest, std::uint32_t instanceID)
         {
             if (!quest)
@@ -963,19 +1110,7 @@ namespace PlayerReader
                     // carries no objective back-pointer. Walk the quest's
                     // objectives and pick the one whose `targets[]` contains
                     // this target pointer.
-                    RE::BGSQuestObjective* matchedObj = nullptr;
-                    for (auto* obj : quest->objectives) {
-                        if (!obj || !obj->targets)
-                            continue;
-                        for (std::uint32_t i = 0; i < obj->numTargets; ++i) {
-                            if (obj->targets[i] == target) {
-                                matchedObj = obj;
-                                break;
-                            }
-                        }
-                        if (matchedObj)
-                            break;
-                    }
+                    auto* matchedObj = FindObjectiveForTarget(quest, target);
                     if (!matchedObj)
                         continue;
 
@@ -1015,6 +1150,138 @@ namespace PlayerReader
         logger::info("[Map::Markers::Quests] markers={} (questTargets={}, staticFallback={})",
                      result.size(), fromQuestTargets, fromStaticFallback);
         return result;
+    }
+
+    nlohmann::json ReadQuestMarkersDebug()
+    {
+        nlohmann::json out = nlohmann::json::object();
+
+        out["module"] = {
+            { "isAE", REL::Module::IsAE() },
+            { "isVR", REL::Module::IsVR() }
+        };
+        out["module"]["questTargetsOffset"] = REL::Module::IsVR() ? nullptr : nlohmann::json(REL::Module::IsAE() ? "0x5A0" : "0x598");
+        out["module"]["objectivesOffset"] = REL::Module::IsVR() ? nullptr : nlohmann::json(REL::Module::IsAE() ? "0x588" : "0x580");
+        out["notes"] = nlohmann::json::array({
+            "For SE/AE, compare questTargets entries with the quest arrows visible in-game.",
+            "runtimeObjectives shows displayed objectives but does not by itself mean the player tracks them.",
+            "staticDisplayedObjectives is intentionally broad and is useful for finding which quest/objective is missing from questTargets."
+        });
+
+        auto* player = RE::PlayerCharacter::GetSingleton();
+        if (!player) {
+            out["error"] = "no PlayerCharacter";
+            out["markers"] = nlohmann::json::array();
+            return out;
+        }
+
+        std::unordered_set<RE::TESQuestTarget*> questTargetPointers;
+        std::unordered_set<RE::BGSQuestObjective*> questTargetObjectives;
+
+        out["questTargets"] = nlohmann::json::array();
+        out["runtimeObjectives"] = nlohmann::json::array();
+        out["staticDisplayedObjectives"] = nlohmann::json::array();
+
+        if (!REL::Module::IsVR()) {
+            const auto base = reinterpret_cast<std::uintptr_t>(player);
+
+            const std::size_t questTargetsOff = REL::Module::IsAE() ? 0x5A0 : 0x598;
+            const auto&       map =
+                *reinterpret_cast<const RE::BSTHashMap<RE::TESQuest*, RE::BSTArray<RE::TESQuestTarget*>*>*>(
+                    base + questTargetsOff);
+
+            for (const auto& kv : map) {
+                auto* quest = kv.first;
+                auto* targetArray = kv.second;
+                nlohmann::json group = nlohmann::json::object();
+                group["quest"] = QuestDebugJson(quest);
+                group["targetArrayPtr"] = PtrString(targetArray);
+                group["targets"] = nlohmann::json::array();
+
+                if (targetArray) {
+                    for (auto* target : *targetArray) {
+                        questTargetPointers.insert(target);
+                        auto* objective = FindObjectiveForTarget(quest, target);
+                        if (objective)
+                            questTargetObjectives.insert(objective);
+                        const auto instanceID = FindDisplayedObjectiveInstanceID(player, objective);
+                        group["targets"].push_back(QuestTargetDebugJson(quest, objective, target, instanceID));
+                    }
+                }
+                out["questTargets"].push_back(std::move(group));
+            }
+
+            const std::size_t objectivesOff = REL::Module::IsAE() ? 0x588 : 0x580;
+            const auto&       instances =
+                *reinterpret_cast<const RE::BSTArray<RE::BGSInstancedQuestObjective>*>(base + objectivesOff);
+
+            nlohmann::json stateCounts = nlohmann::json::object();
+            for (const auto& inst : instances) {
+                const auto* stateName = ObjectiveStateName(inst.InstanceState);
+                stateCounts[stateName] = stateCounts.value(stateName, 0) + 1;
+
+                auto* objective = inst.Objective;
+                if (!objective)
+                    continue;
+
+                nlohmann::json entry = ObjectiveDebugJson(objective, inst.instanceID);
+                entry["instanceState"] = ObjectiveStateName(inst.InstanceState);
+                entry["inQuestTargets"] = questTargetObjectives.contains(objective);
+                entry["quest"] = QuestDebugJson(objective->ownerQuest);
+                entry["targets"] = nlohmann::json::array();
+
+                for (std::uint32_t i = 0; objective->targets && i < objective->numTargets; ++i) {
+                    auto* target = objective->targets[i];
+                    auto targetJson = QuestTargetDebugJson(objective->ownerQuest, objective, target, inst.instanceID);
+                    targetJson["inQuestTargets"] = questTargetPointers.contains(target);
+                    entry["targets"].push_back(std::move(targetJson));
+                }
+
+                out["runtimeObjectives"].push_back(std::move(entry));
+            }
+            out["runtimeObjectiveStateCounts"] = std::move(stateCounts);
+        }
+
+        if (auto* handler = RE::TESDataHandler::GetSingleton()) {
+            const auto& quests = handler->GetFormArray<RE::TESQuest>();
+            nlohmann::json displayedByType = nlohmann::json::object();
+
+            for (auto* quest : quests) {
+                if (!quest || !quest->IsRunning() || quest->IsCompleted())
+                    continue;
+
+                for (auto* objective : quest->objectives) {
+                    if (!objective || objective->state != RE::QUEST_OBJECTIVE_STATE::kDisplayed)
+                        continue;
+
+                    const auto type = std::string(QuestTypeName(quest->GetType()));
+                    displayedByType[type] = displayedByType.value(type, 0) + 1;
+
+                    nlohmann::json entry = ObjectiveDebugJson(objective, quest->currentInstanceID);
+                    entry["quest"] = QuestDebugJson(quest);
+                    entry["inQuestTargets"] = questTargetObjectives.contains(objective);
+                    entry["targets"] = nlohmann::json::array();
+                    for (std::uint32_t i = 0; objective->targets && i < objective->numTargets; ++i) {
+                        auto* target = objective->targets[i];
+                        auto targetJson = QuestTargetDebugJson(quest, objective, target, quest->currentInstanceID);
+                        targetJson["inQuestTargets"] = questTargetPointers.contains(target);
+                        entry["targets"].push_back(std::move(targetJson));
+                    }
+                    out["staticDisplayedObjectives"].push_back(std::move(entry));
+                }
+            }
+
+            out["staticDisplayedByType"] = std::move(displayedByType);
+        }
+
+        out["markers"] = ReadQuestMarkers();
+        out["counts"] = {
+            { "questTargets", out["questTargets"].size() },
+            { "runtimeObjectives", out["runtimeObjectives"].size() },
+            { "staticDisplayedObjectives", out["staticDisplayedObjectives"].size() },
+            { "markers", out["markers"].size() }
+        };
+        return out;
     }
 
     nlohmann::json ReadGameStatus()
