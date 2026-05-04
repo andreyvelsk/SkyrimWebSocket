@@ -689,8 +689,11 @@ namespace PlayerReader
                         out["ref"]["worldspace"] = world->GetFormEditorID() ? world->GetFormEditorID() : "";
                     }
                     if (target->conditions) {
-                        auto* player = RE::PlayerCharacter::GetSingleton();
-                        out["conditionsTruePlayerRef"] = player ? target->conditions.IsTrue(player, ref) : nullptr;
+                        auto* condPlayer = RE::PlayerCharacter::GetSingleton();
+                        if (condPlayer)
+                            out["conditionsTruePlayerRef"] = target->conditions.IsTrue(condPlayer, ref);
+                        else
+                            out["conditionsTruePlayerRef"] = nullptr;
                     }
                 } else {
                     out["ref"] = nullptr;
