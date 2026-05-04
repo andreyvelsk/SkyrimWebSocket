@@ -2,6 +2,7 @@
 
 #include "../../logger.h"
 
+#include <array>
 #include <cctype>
 #include <optional>
 #include <unordered_set>
@@ -458,6 +459,20 @@ namespace PlayerReader
             bool        cachedKnown   = false;
             bool        cachedVisible = true;
             bool        journalOpen   = false;
+            bool        scaleformKnown = false;
+            bool        scaleformVisible = true;
+            bool        nativeKnown   = false;
+            bool        nativeVisible = true;
+        };
+
+        struct MiscObjectivesVisibilityRead
+        {
+            bool        visible = true;
+            const char* source  = "unknown";
+            bool        scaleformKnown = false;
+            bool        scaleformVisible = true;
+            bool        nativeKnown = false;
+            bool        nativeVisible = true;
         };
 
         std::string_view QuestTypeName(RE::QUEST_DATA::Type t)
@@ -480,7 +495,87 @@ namespace PlayerReader
             }
         }
 
-        std::optional<bool> ReadJournalMiscObjectivesVisible()
+        std::optional<bool> ReadBoolLike(const RE::GFxValue& value)
+        {
+            if (value.IsBool())
+                return value.GetBool();
+            if (value.IsNumber())
+                return value.GetNumber() != 0.0;
+            return std::nullopt;
+        }
+
+        bool IsZeroNumber(const RE::GFxValue& value)
+        {
+            return value.IsNumber() && value.GetNumber() == 0.0;
+        }
+
+        std::optional<bool> ReadMiscObjectivesVisibleFromEntry(const RE::GFxValue& entry)
+        {
+            if (!entry.IsObject())
+                return std::nullopt;
+
+            RE::GFxValue formID;
+            if (!entry.GetMember("formID", &formID) || !IsZeroNumber(formID))
+                return std::nullopt;
+
+            RE::GFxValue active;
+            if (!entry.GetMember("active", &active))
+                return std::nullopt;
+            return ReadBoolLike(active);
+        }
+
+        std::optional<bool> ReadScaleformMiscObjectivesVisible(RE::GFxMovieView* movie)
+        {
+            if (!movie)
+                return std::nullopt;
+
+            constexpr std::array kEntryListPaths{
+                "_root.QuestJournalFader.QuestsFader.Page_mc.TitleList.entryList",
+                "_root.QuestJournalFader.QuestsFader.Page_mc.TitleList_mc.List_mc.entryList"
+            };
+
+            for (const char* path : kEntryListPaths) {
+                RE::GFxValue entries;
+                if (!movie->GetVariable(&entries, path) || !entries.IsArray())
+                    continue;
+
+                const auto size = entries.GetArraySize();
+                for (std::uint32_t i = 0; i < size; ++i) {
+                    RE::GFxValue entry;
+                    if (!entries.GetElement(i, &entry))
+                        continue;
+                    if (auto visible = ReadMiscObjectivesVisibleFromEntry(entry))
+                        return visible;
+                }
+            }
+
+            constexpr std::array kSelectedEntryPaths{
+                "_root.QuestJournalFader.QuestsFader.Page_mc.TitleList.selectedEntry",
+                "_root.QuestJournalFader.QuestsFader.Page_mc.TitleList.centeredEntry",
+                "_root.QuestJournalFader.QuestsFader.Page_mc.TitleList_mc.List_mc.selectedEntry",
+                "_root.QuestJournalFader.QuestsFader.Page_mc.TitleList_mc.List_mc.centeredEntry"
+            };
+
+            for (const char* path : kSelectedEntryPaths) {
+                RE::GFxValue entry;
+                if (!movie->GetVariable(&entry, path))
+                    continue;
+                if (auto visible = ReadMiscObjectivesVisibleFromEntry(entry))
+                    return visible;
+            }
+
+            return std::nullopt;
+        }
+
+        std::optional<bool> ReadNativeJournalMiscObjectivesVisible(RE::JournalMenu* journal)
+        {
+            if (!journal)
+                return std::nullopt;
+
+            return journal->GetRuntimeData().questsTab.unk30;
+        }
+
+        std::optional<MiscObjectivesVisibilityRead> ReadJournalMiscObjectivesVisible()
         {
             auto* ui = RE::UI::GetSingleton();
             if (!ui)
@@ -490,10 +585,28 @@ namespace PlayerReader
             if (!journal)
                 return std::nullopt;
 
-            // SkyUI receives this as `abMiscQuestActive` in RequestQuestsData
-            // and toggles it through the native ToggleShowMiscObjectives
-            // callback. CommonLib currently exposes the native bool as unk30.
-            return journal->GetRuntimeData().questsTab.unk30;
+            MiscObjectivesVisibilityRead result;
+            if (auto native = ReadNativeJournalMiscObjectivesVisible(journal.get())) {
+                result.nativeKnown   = true;
+                result.nativeVisible = *native;
+            }
+
+            auto movie = ui->GetMovieView(RE::JournalMenu::MENU_NAME);
+            if (auto scaleform = ReadScaleformMiscObjectivesVisible(movie.get())) {
+                result.visible          = *scaleform;
+                result.source           = "SkyUI TitleList.entryList Misc.active";
+                result.scaleformKnown   = true;
+                result.scaleformVisible = *scaleform;
+                return result;
+            }
+
+            if (result.nativeKnown) {
+                result.visible = result.nativeVisible;
+                result.source  = "Journal_QuestsTab::unk30";
+                return result;
+            }
+
+            return std::nullopt;
         }
 
         void StoreMiscObjectivesVisible(bool visible)
@@ -509,20 +622,24 @@ namespace PlayerReader
             state.cachedVisible = g_miscObjectivesVisible;
 
             if (auto live = ReadJournalMiscObjectivesVisible()) {
-                StoreMiscObjectivesVisible(*live);
-                state.visible       = *live;
-                state.known         = true;
-                state.source        = "Journal_QuestsTab::unk30";
-                state.cachedKnown   = true;
-                state.cachedVisible = *live;
-                state.journalOpen   = true;
+                StoreMiscObjectivesVisible(live->visible);
+                state.visible          = live->visible;
+                state.known            = true;
+                state.source           = live->source;
+                state.cachedKnown      = true;
+                state.cachedVisible    = live->visible;
+                state.journalOpen      = true;
+                state.scaleformKnown   = live->scaleformKnown;
+                state.scaleformVisible = live->scaleformVisible;
+                state.nativeKnown      = live->nativeKnown;
+                state.nativeVisible    = live->nativeVisible;
                 return state;
             }
 
             if (g_miscObjectivesVisibilityKnown) {
                 state.visible = g_miscObjectivesVisible;
                 state.known   = true;
-                state.source  = "cached Journal_QuestsTab::unk30";
+                state.source  = "cached misc objectives visibility";
                 return state;
             }
 
@@ -537,7 +654,11 @@ namespace PlayerReader
                 { "source", state.source },
                 { "journalOpen", state.journalOpen },
                 { "cachedKnown", state.cachedKnown },
-                { "cachedVisible", state.cachedVisible }
+                { "cachedVisible", state.cachedVisible },
+                { "scaleformKnown", state.scaleformKnown },
+                { "scaleformVisible", state.scaleformVisible },
+                { "nativeKnown", state.nativeKnown },
+                { "nativeVisible", state.nativeVisible }
             };
         }
 
@@ -1012,8 +1133,9 @@ namespace PlayerReader
     void CaptureQuestJournalState()
     {
         if (auto visible = ReadJournalMiscObjectivesVisible()) {
-            StoreMiscObjectivesVisible(*visible);
-            logger::trace("[Map::Markers::Quests] captured misc objectives visibility={}", *visible);
+            StoreMiscObjectivesVisible(visible->visible);
+            logger::trace("[Map::Markers::Quests] captured misc objectives visibility={} source={}",
+                          visible->visible, visible->source);
         }
     }
 
