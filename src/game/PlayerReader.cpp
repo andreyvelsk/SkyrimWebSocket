@@ -949,6 +949,18 @@ namespace PlayerReader
             const char*                     source = "targetRef";
         };
 
+        QuestMarkerCoordinates CoordinatesForLocationMarker(RE::BGSLocation* location,
+                                                            RE::NiPointer<RE::TESObjectREFR> markerRef,
+                                                            const char* source)
+        {
+            QuestMarkerCoordinates out;
+            out.ref               = markerRef.get();
+            out.location          = location;
+            out.locationMarkerRef = markerRef;
+            out.source            = source;
+            return out;
+        }
+
         RE::BGSLocation* ResolveReferenceLocation(RE::TESObjectREFR* ref)
         {
             if (!ref)
@@ -1080,10 +1092,198 @@ namespace PlayerReader
             return out;
         }
 
+        nlohmann::json LocationDebugJson(RE::BGSLocation* location)
+        {
+            const auto formIdStr = [](RE::FormID id) {
+                return std::format("0x{:08X}", id);
+            };
+
+            if (!location)
+                return nullptr;
+
+            const char* editorId = location->GetFormEditorID();
+            const char* name     = location->GetFullName();
+
+            nlohmann::json out;
+            out["formId"]            = formIdStr(location->GetFormID());
+            out["editorId"]          = editorId ? std::string(editorId) : std::string();
+            out["name"]              = name ? std::string(name) : std::string();
+            out["worldLocRadius"]    = location->worldLocRadius;
+            out["worldLocMarker"]    = QuestMarkerCoordinatesJson(
+                CoordinatesForLocationMarker(location, location->worldLocMarker.get(), "BGSLocation::worldLocMarker"));
+            out["horseLocMarker"]    = QuestMarkerCoordinatesJson(
+                CoordinatesForLocationMarker(location, location->horseLocMarker.get(), "BGSLocation::horseLocMarker"));
+            out["specialRefsCount"]  = location->specialRefs.size();
+            out["specialRefsSample"] = nlohmann::json::array();
+
+            std::size_t emitted = 0;
+            for (const auto& specialRef : location->specialRefs) {
+                if (emitted >= 12)
+                    break;
+
+                nlohmann::json item;
+                if (specialRef.type) {
+                    const char* typeEditorId = specialRef.type->GetFormEditorID();
+                    item["typeFormId"]  = formIdStr(specialRef.type->GetFormID());
+                    item["typeEditorId"] = typeEditorId ? std::string(typeEditorId) : std::string();
+                } else {
+                    item["typeFormId"]  = nullptr;
+                    item["typeEditorId"] = nullptr;
+                }
+                item["refId"]         = formIdStr(specialRef.refData.refID);
+                item["parentSpaceId"] = formIdStr(specialRef.refData.parentSpaceID);
+                item["cellKeyRaw"]    = specialRef.refData.cellKey.raw;
+                out["specialRefsSample"].push_back(std::move(item));
+                ++emitted;
+            }
+
+            return out;
+        }
+
+        nlohmann::json ReferenceCoordinateCandidateJson(const char* source, RE::TESObjectREFR* ref)
+        {
+            const auto formIdStr = [](RE::FormID id) {
+                return std::format("0x{:08X}", id);
+            };
+
+            nlohmann::json out;
+            out["source"]    = source;
+            out["available"] = ref != nullptr;
+            if (!ref)
+                return out;
+
+            out["ptr"]       = PtrString(ref);
+            out["refId"]     = formIdStr(ref->GetFormID());
+            out["name"]      = RefDisplayName(ref);
+            out["isDeleted"] = ref->IsDeleted();
+            out["isDisabled"] = ref->IsDisabled();
+
+            if (auto* base = ref->GetBaseObject()) {
+                const char* baseName = base->GetName();
+                out["baseFormId"] = formIdStr(base->GetFormID());
+                out["baseName"]   = baseName ? std::string(baseName) : std::string();
+            } else {
+                out["baseFormId"] = nullptr;
+                out["baseName"]   = nullptr;
+            }
+
+            WriteReferenceSpatialJson(out, ref);
+
+            if (auto* extra = ref->extraList.GetByType<RE::ExtraMapMarker>(); extra && extra->mapData) {
+                using Flag = RE::MapMarkerData::Flag;
+                auto* data = extra->mapData;
+                const char* markerName = data->locationName.GetFullName();
+                out["mapMarker"] = {
+                    { "name", markerName ? std::string(markerName) : std::string() },
+                    { "typeId", static_cast<std::uint32_t>(data->type.underlying()) },
+                    { "flagsRaw", static_cast<std::uint8_t>(data->flags.underlying()) },
+                    { "isVisible", data->flags.any(Flag::kVisible) },
+                    { "canFastTravel", data->flags.any(Flag::kCanTravelTo) }
+                };
+            } else {
+                out["mapMarker"] = nullptr;
+            }
+
+            auto* currentLocation = ref->GetCurrentLocation();
+            auto* editorLocation  = ref->GetEditorLocation();
+            auto* cellLocation    = ref->GetParentCell() ? ref->GetParentCell()->GetLocation() : nullptr;
+            out["currentLocation"] = LocationDebugJson(currentLocation);
+            out["editorLocation"]  = LocationDebugJson(editorLocation);
+            out["cellLocation"]    = LocationDebugJson(cellLocation);
+
+            auto linkedDoor = ref->extraList.GetTeleportLinkedDoor().get();
+            out["teleportLinkedDoorRefId"] = linkedDoor ? nlohmann::json(formIdStr(linkedDoor->GetFormID())) : nullptr;
+
+            if (auto* randomMarker = ref->extraList.GetByType<RE::ExtraRandomTeleportMarker>(); randomMarker && randomMarker->marker)
+                out["randomTeleportMarkerRefId"] = formIdStr(randomMarker->marker->GetFormID());
+            else
+                out["randomTeleportMarkerRefId"] = nullptr;
+
+            return out;
+        }
+
+        nlohmann::json EditorLocationCandidateJson(RE::TESObjectREFR* ref)
+        {
+            const auto formIdStr = [](RE::FormID id) {
+                return std::format("0x{:08X}", id);
+            };
+
+            nlohmann::json out;
+            out["source"] = "TESObjectREFR::GetEditorLocation(out)";
+            if (!ref) {
+                out["available"] = false;
+                return out;
+            }
+
+            RE::NiPoint3 pos;
+            RE::NiPoint3 rot;
+            RE::TESForm* worldOrCell = nullptr;
+            auto* fallbackCell = ref->GetParentCell();
+            const bool available = ref->GetEditorLocation(pos, rot, worldOrCell, fallbackCell);
+            out["available"] = available;
+            if (!available)
+                return out;
+
+            out["x"] = pos.x;
+            out["y"] = pos.y;
+            out["z"] = pos.z;
+            out["rotationX"] = rot.x;
+            out["rotationY"] = rot.y;
+            out["rotationZ"] = rot.z;
+
+            if (worldOrCell) {
+                out["worldOrCellFormId"] = formIdStr(worldOrCell->GetFormID());
+                if (auto* world = worldOrCell->As<RE::TESWorldSpace>()) {
+                    const char* edid = world->GetFormEditorID();
+                    out["worldOrCellType"] = "TESWorldSpace";
+                    out["worldOrCellEditorId"] = edid ? std::string(edid) : std::string();
+                } else if (auto* cell = worldOrCell->As<RE::TESObjectCELL>()) {
+                    const char* edid = cell->GetFormEditorID();
+                    out["worldOrCellType"] = cell->IsInteriorCell() ? "TESObjectCELL:Interior" : "TESObjectCELL:Exterior";
+                    out["worldOrCellEditorId"] = edid ? std::string(edid) : std::string();
+                    out["cellLocation"] = LocationDebugJson(cell->GetLocation());
+                } else {
+                    out["worldOrCellType"] = "TESForm";
+                    out["worldOrCellEditorId"] = worldOrCell->GetFormEditorID() ? worldOrCell->GetFormEditorID() : "";
+                }
+            } else {
+                out["worldOrCellFormId"] = nullptr;
+                out["worldOrCellType"] = nullptr;
+                out["worldOrCellEditorId"] = nullptr;
+            }
+
+            return out;
+        }
+
+        nlohmann::json QuestCoordinateDiagnosticsJson(RE::TESObjectREFR* targetRef,
+                                                      const QuestMarkerCoordinates& selected)
+        {
+            nlohmann::json out;
+            out["selected"] = QuestMarkerCoordinatesJson(selected);
+            out["resolvedLocation"] = LocationDebugJson(selected.location);
+            out["candidates"] = nlohmann::json::array();
+            out["candidates"].push_back(ReferenceCoordinateCandidateJson("targetRef", targetRef));
+            out["candidates"].push_back(EditorLocationCandidateJson(targetRef));
+
+            if (selected.location) {
+                out["candidates"].push_back(ReferenceCoordinateCandidateJson("BGSLocation::worldLocMarker", selected.location->worldLocMarker.get().get()));
+                out["candidates"].push_back(ReferenceCoordinateCandidateJson("BGSLocation::horseLocMarker", selected.location->horseLocMarker.get().get()));
+            }
+
+            if (targetRef) {
+                out["candidates"].push_back(ReferenceCoordinateCandidateJson("targetRef.teleportLinkedDoor", targetRef->extraList.GetTeleportLinkedDoor().get().get()));
+                if (auto* randomMarker = targetRef->extraList.GetByType<RE::ExtraRandomTeleportMarker>())
+                    out["candidates"].push_back(ReferenceCoordinateCandidateJson("targetRef.randomTeleportMarker", randomMarker->marker));
+            }
+
+            return out;
+        }
+
         nlohmann::json QuestTargetDebugJson(RE::TESQuest* quest,
                                             RE::BGSQuestObjective* objective,
                                             RE::TESQuestTarget* target,
-                                            std::uint32_t instanceID)
+                                            std::uint32_t instanceID,
+                                            bool includeCoordinateDiagnostics = false)
         {
             nlohmann::json out = nlohmann::json::object();
             if (!target)
@@ -1123,7 +1323,10 @@ namespace PlayerReader
                         out["ref"]["worldspaceFormId"] = std::format("0x{:08X}", world->GetFormID());
                         out["ref"]["worldspace"] = world->GetFormEditorID() ? world->GetFormEditorID() : "";
                     }
-                    out["mapCoordinates"] = QuestMarkerCoordinatesJson(ResolveQuestMarkerCoordinates(ref));
+                    const auto coordinates = ResolveQuestMarkerCoordinates(ref);
+                    out["mapCoordinates"] = QuestMarkerCoordinatesJson(coordinates);
+                    if (includeCoordinateDiagnostics)
+                        out["coordinateDiagnostics"] = QuestCoordinateDiagnosticsJson(ref, coordinates);
                     if (target->conditions) {
                         auto* condPlayer = RE::PlayerCharacter::GetSingleton();
                         if (condPlayer)
@@ -1628,6 +1831,7 @@ namespace PlayerReader
             "runtimeObjectives shows displayed objectives but does not by itself mean the player tracks them.",
             "Miscellaneous markers require both the individual active quest flag and the journal's master Miscellaneous toggle.",
             "questTargets[].targets[].mapCoordinates shows the map-facing coordinate ref used by Map::Markers::Quests.",
+            "questTargets[].targets[].coordinateDiagnostics lists alternative coordinate candidates (target ref, editor location, location markers, linked doors) for mismatched map positions.",
             "staticDisplayedObjectives is intentionally broad and is useful for finding which quest/objective is missing from questTargets."
         });
 
@@ -1668,7 +1872,7 @@ namespace PlayerReader
                         if (objective)
                             questTargetObjectives.insert(objective);
                         const auto instanceID = FindDisplayedObjectiveInstanceID(player, objective);
-                        group["targets"].push_back(QuestTargetDebugJson(quest, objective, target, instanceID));
+                        group["targets"].push_back(QuestTargetDebugJson(quest, objective, target, instanceID, true));
                     }
                 }
                 out["questTargets"].push_back(std::move(group));

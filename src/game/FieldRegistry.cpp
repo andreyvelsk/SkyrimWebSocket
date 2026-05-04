@@ -323,7 +323,7 @@ namespace FieldRegistry
             "array",
             &PlayerReader::ReadQuestMarkers } },
         { "Debug::Map::Markers::Quests",
-          { "Debug snapshot for quest marker diagnosis: runtime module, Miscellaneous master-toggle state (including Scaleform/native source), questTargets, runtime objectives, static active/displayed objectives, and current Map::Markers::Quests output.",
+          { "Debug snapshot for quest marker diagnosis: runtime module, Miscellaneous master-toggle state (including Scaleform/native source), questTargets with coordinate candidates, runtime objectives, static active/displayed objectives, and current Map::Markers::Quests output.",
             "object",
             &PlayerReader::ReadQuestMarkersDebug } },
 

@@ -202,6 +202,12 @@ journal UI. `questTargets` by itself is broader and can contain displayed but
 untracked objectives, especially Miscellaneous objectives. VR currently uses a
 best-effort static fallback because its quest-target runtime layout is different.
 
+For coordinate troubleshooting, query `Debug::Map::Markers::Quests` and inspect
+`questTargets[].targets[].coordinateDiagnostics`. It lists the selected map
+coordinate plus alternative candidates such as the raw target reference,
+`TESObjectREFR::GetEditorLocation(out)`, location world/horse markers, linked
+teleport doors, and random teleport markers.
+
 Miscellaneous has two layers of tracking in Skyrim's journal: each individual
 Misc objective can be active, and the top-level Miscellaneous row has its own
 master toggle controlled by the native `ToggleShowMiscObjectives` callback. The
