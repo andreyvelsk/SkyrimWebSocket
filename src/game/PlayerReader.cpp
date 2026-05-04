@@ -748,6 +748,59 @@ namespace PlayerReader
             }
             return 0;
         }
+
+        void HashCombine(std::size_t& seed, std::size_t value) noexcept
+        {
+            seed ^= value + 0x9E3779B97F4A7C15ull + (seed << 6) + (seed >> 2);
+        }
+
+        struct QuestObjectiveKey
+        {
+            RE::FormID    questFormID{};
+            std::uint16_t objectiveIndex{};
+
+            bool operator==(const QuestObjectiveKey&) const = default;
+        };
+
+        struct QuestObjectiveKeyHash
+        {
+            std::size_t operator()(const QuestObjectiveKey& key) const noexcept
+            {
+                std::size_t seed = 0;
+                HashCombine(seed, std::hash<RE::FormID>{}(key.questFormID));
+                HashCombine(seed, std::hash<std::uint16_t>{}(key.objectiveIndex));
+                return seed;
+            }
+        };
+
+        struct QuestMarkerDestinationKey
+        {
+            RE::FormID    questFormID{};
+            std::uint16_t objectiveIndex{};
+            RE::FormID    worldspaceFormID{};
+            RE::FormID    cellFormID{};
+            float         x{};
+            float         y{};
+            float         z{};
+
+            bool operator==(const QuestMarkerDestinationKey&) const = default;
+        };
+
+        struct QuestMarkerDestinationKeyHash
+        {
+            std::size_t operator()(const QuestMarkerDestinationKey& key) const noexcept
+            {
+                std::size_t seed = 0;
+                HashCombine(seed, std::hash<RE::FormID>{}(key.questFormID));
+                HashCombine(seed, std::hash<std::uint16_t>{}(key.objectiveIndex));
+                HashCombine(seed, std::hash<RE::FormID>{}(key.worldspaceFormID));
+                HashCombine(seed, std::hash<RE::FormID>{}(key.cellFormID));
+                HashCombine(seed, std::hash<float>{}(key.x));
+                HashCombine(seed, std::hash<float>{}(key.y));
+                HashCombine(seed, std::hash<float>{}(key.z));
+                return seed;
+            }
+        };
     }  // namespace
 
     nlohmann::json ReadQuestMarkers()
@@ -764,12 +817,31 @@ namespace PlayerReader
             return std::format("0x{:08X}", id);
         };
 
-        // Dedup key: quest formId + objective index + alias id.
-        std::unordered_set<std::uint64_t> seen;
-        const auto makeKey = [](RE::FormID qid, std::uint16_t obj, std::uint32_t alias) {
-            return (static_cast<std::uint64_t>(qid) << 32)
-                 ^ (static_cast<std::uint64_t>(obj) << 16)
-                 ^  static_cast<std::uint64_t>(alias);
+        std::unordered_set<QuestMarkerDestinationKey, QuestMarkerDestinationKeyHash> seenDestinations;
+        std::unordered_set<QuestObjectiveKey, QuestObjectiveKeyHash>                 questTargetObjectives;
+        std::unordered_set<QuestObjectiveKey, QuestObjectiveKeyHash>                 instancedObjectives;
+
+        const auto makeObjectiveKey = [](RE::TESQuest* quest, RE::BGSQuestObjective* objective) {
+            return QuestObjectiveKey{
+                quest ? quest->GetFormID() : 0,
+                objective ? objective->index : 0
+            };
+        };
+
+        const auto makeDestinationKey = [](RE::TESQuest* quest,
+                                           RE::BGSQuestObjective* objective,
+                                           RE::TESObjectREFR* ref) {
+            auto* world = ref ? ref->GetWorldspace() : nullptr;
+            auto* cell  = ref ? ref->GetParentCell() : nullptr;
+            return QuestMarkerDestinationKey{
+                quest ? quest->GetFormID() : 0,
+                objective ? objective->index : 0,
+                world ? world->GetFormID() : 0,
+                cell ? cell->GetFormID() : 0,
+                ref ? ref->GetPositionX() : 0.0f,
+                ref ? ref->GetPositionY() : 0.0f,
+                ref ? ref->GetPositionZ() : 0.0f
+            };
         };
 
         // Build one JSON entry from a BGSQuestObjective + a TESQuestTarget +
@@ -793,16 +865,15 @@ namespace PlayerReader
                 return false;
 
             const std::uint32_t aliasID = target->alias;
-            const auto          dedup  = makeKey(quest->GetFormID(), objective->index, aliasID);
-            if (!seen.insert(dedup).second)
-                return false;
-
             auto* refAlias = FindRefAlias(quest, aliasID);
             if (!refAlias)
                 return false;
 
             auto* ref = refAlias->GetReference();
             if (!ref || ref->IsDeleted())
+                return false;
+
+            if (!seenDestinations.insert(makeDestinationKey(quest, objective, ref)).second)
                 return false;
 
             const char* questEditorIdC = quest->GetFormEditorID();
@@ -874,8 +945,11 @@ namespace PlayerReader
             return true;
         };
 
-        // We feed `result` from up to three sources and dedup by
-        // (quest, objectiveIndex, aliasId):
+        // We feed `result` from up to three sources. Runtime questTargets is
+        // authoritative when present; the objective/static walks are fallback
+        // sources and must not add extra conditional aliases for an objective
+        // already represented by a higher-priority source. Exact same marker
+        // destinations are deduped across all sources.
         //
         //  1. PLAYER_RUNTIME_DATA::questTargets — a runtime BSTHashMap keyed
         //     by TESQuest*; the values are BSTArrays of TESQuestTarget* that
@@ -884,9 +958,9 @@ namespace PlayerReader
         //
         //  2. PLAYER_RUNTIME_DATA::objectives — a BSTArray of
         //     BGSInstancedQuestObjective. Tells us which objectives are in
-        //     the kDisplayed runtime state for the current playthrough. We
-        //     cross every displayed objective's `targets[]` through the
-        //     dedup set so they land in the result if (1) missed them.
+        //     the kDisplayed runtime state for the current playthrough. We use
+        //     it only for objectives not already covered by (1), because its
+        //     static `targets[]` can contain conditional alternatives.
         //
         //  3. Static fallback: TESQuest::objectives walked with the
         //     non-instanced state field. Required for radiant / Misc quests
@@ -948,8 +1022,10 @@ namespace PlayerReader
                             continue;
 
                         const auto instanceID = FindDisplayedObjectiveInstanceID(player, matchedObj);
-                        if (emitTargetEntry(quest, matchedObj, target, instanceID))
+                        if (emitTargetEntry(quest, matchedObj, target, instanceID)) {
                             ++fromQuestTargets;
+                            questTargetObjectives.insert(makeObjectiveKey(quest, matchedObj));
+                        }
                     }
                 }
             }
@@ -970,14 +1046,19 @@ namespace PlayerReader
                     auto* quest = objective->ownerQuest;
                     if (!quest)
                         continue;
+                    const auto objectiveKey = makeObjectiveKey(quest, objective);
+                    if (questTargetObjectives.contains(objectiveKey))
+                        continue;
 
                     const auto numTargets = objective->numTargets;
                     for (std::uint32_t i = 0; i < numTargets; ++i) {
                         auto* target = objective->targets ? objective->targets[i] : nullptr;
                         if (!target)
                             continue;
-                        if (emitTargetEntry(quest, objective, target, inst.instanceID))
+                        if (emitTargetEntry(quest, objective, target, inst.instanceID)) {
                             ++fromInstanced;
+                            instancedObjectives.insert(objectiveKey);
+                        }
                     }
                 }
             }
@@ -996,6 +1077,9 @@ namespace PlayerReader
                     if (!objective)
                         continue;
                     if (objective->state != RE::QUEST_OBJECTIVE_STATE::kDisplayed)
+                        continue;
+                    const auto objectiveKey = makeObjectiveKey(quest, objective);
+                    if (questTargetObjectives.contains(objectiveKey) || instancedObjectives.contains(objectiveKey))
                         continue;
 
                     const auto numTargets = objective->numTargets;

@@ -73,9 +73,9 @@ namespace PlayerReader
 
     // Returns an array of active quest-objective targets — the markers the
     // engine renders as floating quest arrows / quest-target icons. Walks
-    // every TESQuest, picks running quests, picks objectives in the
-    // kDisplayed state, resolves each TESQuestTarget through the quest's
-    // ref alias to a live TESObjectREFR and reports its world position.
+    // the runtime quest-target map first, then falls back to displayed
+    // objectives/static quest state when runtime data is unavailable. Multiple
+    // target aliases that resolve to the same marker destination are collapsed.
     // Each entry: { questFormId, questEditorId, questName, questType,
     //               objectiveIndex, objectiveText, objectiveTextResolved, aliasId,
     //               refId, name, x, y, z,

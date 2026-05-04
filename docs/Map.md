@@ -188,9 +188,9 @@ on the world map. The list mirrors what the player actually sees on the map:
 * only quests flagged as **active** in the journal (the one(s) the player has
   marked with the “Active” arrow — `TESQuest::IsActive()`),
 * only quests that are currently **running** and not completed,
-* one entry per `TESQuestTarget`. A single objective with multiple targets
-  produces multiple entries that share the same `questFormId` /
-  `objectiveIndex`.
+* one entry per visible quest-marker destination. A single objective can still
+  produce multiple entries when Skyrim exposes multiple distinct destinations,
+  but alternative aliases that resolve to the same marker are collapsed.
 
 Targets that resolve to non-ref aliases (location aliases, data aliases) or
 to unfilled / deleted refs are skipped.
