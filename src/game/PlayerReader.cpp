@@ -941,6 +941,145 @@ namespace PlayerReader
             return out;
         }
 
+        struct QuestMarkerCoordinates
+        {
+            RE::TESObjectREFR*              ref = nullptr;
+            RE::BGSLocation*                location = nullptr;
+            RE::NiPointer<RE::TESObjectREFR> locationMarkerRef;
+            const char*                     source = "targetRef";
+        };
+
+        RE::BGSLocation* ResolveReferenceLocation(RE::TESObjectREFR* ref)
+        {
+            if (!ref)
+                return nullptr;
+
+            if (auto* location = ref->GetCurrentLocation())
+                return location;
+            if (auto* location = ref->GetEditorLocation())
+                return location;
+            if (auto* cell = ref->GetParentCell())
+                return cell->GetLocation();
+            return nullptr;
+        }
+
+        QuestMarkerCoordinates ResolveQuestMarkerCoordinates(RE::TESObjectREFR* targetRef)
+        {
+            QuestMarkerCoordinates out;
+            out.ref = targetRef;
+
+            if (!targetRef)
+                return out;
+
+            auto* cell = targetRef->GetParentCell();
+            const bool needsLocationMarker = targetRef->IsDeleted() ||
+                                             !targetRef->GetWorldspace() ||
+                                             (cell && cell->IsInteriorCell());
+            if (!needsLocationMarker)
+                return out;
+
+            auto* location = ResolveReferenceLocation(targetRef);
+            if (!location)
+                return out;
+
+            out.location = location;
+            out.locationMarkerRef = location->worldLocMarker.get();
+            if (out.locationMarkerRef) {
+                out.ref = out.locationMarkerRef.get();
+                out.source = "BGSLocation::worldLocMarker";
+            } else {
+                out.source = "targetRef:noLocationMarker";
+            }
+
+            return out;
+        }
+
+        void WriteReferenceSpatialJson(nlohmann::json& out, RE::TESObjectREFR* ref)
+        {
+            const auto formIdStr = [](RE::FormID id) {
+                return std::format("0x{:08X}", id);
+            };
+
+            if (!ref) {
+                out["x"]                      = nullptr;
+                out["y"]                      = nullptr;
+                out["z"]                      = nullptr;
+                out["worldspace"]             = nullptr;
+                out["worldspaceFormId"]       = nullptr;
+                out["parentWorldspace"]       = nullptr;
+                out["parentWorldspaceFormId"] = nullptr;
+                out["cell"]                   = nullptr;
+                out["cellFormId"]             = nullptr;
+                out["isInterior"]             = false;
+                return;
+            }
+
+            out["x"] = ref->GetPositionX();
+            out["y"] = ref->GetPositionY();
+            out["z"] = ref->GetPositionZ();
+
+            if (auto* world = ref->GetWorldspace()) {
+                const char* edid = world->GetFormEditorID();
+                out["worldspace"]       = edid ? std::string(edid) : std::string();
+                out["worldspaceFormId"] = formIdStr(world->GetFormID());
+
+                auto* root = world;
+                while (root->parentWorld)
+                    root = root->parentWorld;
+                const char* rootEdid = root->GetFormEditorID();
+                out["parentWorldspace"]       = rootEdid ? std::string(rootEdid) : std::string();
+                out["parentWorldspaceFormId"] = formIdStr(root->GetFormID());
+            } else {
+                out["worldspace"]             = nullptr;
+                out["worldspaceFormId"]       = nullptr;
+                out["parentWorldspace"]       = nullptr;
+                out["parentWorldspaceFormId"] = nullptr;
+            }
+
+            if (auto* cell = ref->GetParentCell()) {
+                const char* cedid = cell->GetFormEditorID();
+                out["cell"]       = cedid ? std::string(cedid) : std::string();
+                out["cellFormId"] = formIdStr(cell->GetFormID());
+                out["isInterior"] = cell->IsInteriorCell();
+            } else {
+                out["cell"]       = nullptr;
+                out["cellFormId"] = nullptr;
+                out["isInterior"] = false;
+            }
+        }
+
+        nlohmann::json QuestMarkerCoordinatesJson(const QuestMarkerCoordinates& coordinates)
+        {
+            const auto formIdStr = [](RE::FormID id) {
+                return std::format("0x{:08X}", id);
+            };
+
+            nlohmann::json out = nlohmann::json::object();
+            out["source"] = coordinates.source;
+            if (coordinates.ref) {
+                out["refId"] = formIdStr(coordinates.ref->GetFormID());
+                out["name"]  = RefDisplayName(coordinates.ref);
+            } else {
+                out["refId"] = nullptr;
+                out["name"]  = std::string();
+            }
+
+            if (coordinates.location) {
+                const char* locationEditorId = coordinates.location->GetFormEditorID();
+                const char* locationName = coordinates.location->GetFullName();
+                out["locationFormId"]  = formIdStr(coordinates.location->GetFormID());
+                out["locationEditorId"] = locationEditorId ? std::string(locationEditorId) : std::string();
+                out["locationName"]     = locationName ? std::string(locationName) : std::string();
+            } else {
+                out["locationFormId"]  = nullptr;
+                out["locationEditorId"] = nullptr;
+                out["locationName"]     = nullptr;
+            }
+
+            WriteReferenceSpatialJson(out, coordinates.ref);
+            return out;
+        }
+
         nlohmann::json QuestTargetDebugJson(RE::TESQuest* quest,
                                             RE::BGSQuestObjective* objective,
                                             RE::TESQuestTarget* target,
@@ -984,6 +1123,7 @@ namespace PlayerReader
                         out["ref"]["worldspaceFormId"] = std::format("0x{:08X}", world->GetFormID());
                         out["ref"]["worldspace"] = world->GetFormEditorID() ? world->GetFormEditorID() : "";
                     }
+                    out["mapCoordinates"] = QuestMarkerCoordinatesJson(ResolveQuestMarkerCoordinates(ref));
                     if (target->conditions) {
                         auto* condPlayer = RE::PlayerCharacter::GetSingleton();
                         if (condPlayer)
@@ -1310,8 +1450,10 @@ namespace PlayerReader
                 return false;
 
             const bool refIsDeleted = ref->IsDeleted();
+            const auto coordinates = ResolveQuestMarkerCoordinates(ref);
+            auto* coordinateRef = coordinates.ref ? coordinates.ref : ref;
 
-            if (!seenDestinations.insert(makeDestinationKey(quest, objective, ref)).second)
+            if (!seenDestinations.insert(makeDestinationKey(quest, objective, coordinateRef)).second)
                 return false;
 
             const char* questEditorIdC = quest->GetFormEditorID();
@@ -1348,43 +1490,28 @@ namespace PlayerReader
                 refNameC = ref->GetName();
             entry["name"] = refNameC ? std::string(refNameC) : std::string();
 
-            entry["x"] = ref->GetPositionX();
-            entry["y"] = ref->GetPositionY();
-            entry["z"] = ref->GetPositionZ();
-
-            if (auto* world = ref->GetWorldspace()) {
-                const char* edid = world->GetFormEditorID();
-                entry["worldspace"]       = edid ? std::string(edid) : std::string();
-                entry["worldspaceFormId"] = formIdStr(world->GetFormID());
-
-                auto* root = world;
-                while (root->parentWorld)
-                    root = root->parentWorld;
-                const char* rootEdid = root->GetFormEditorID();
-                entry["parentWorldspace"]       = rootEdid ? std::string(rootEdid) : std::string();
-                entry["parentWorldspaceFormId"] = formIdStr(root->GetFormID());
+            entry["coordinateSource"] = coordinates.source;
+            entry["coordinateRefId"]  = formIdStr(coordinateRef->GetFormID());
+            entry["coordinateRefName"] = RefDisplayName(coordinateRef);
+            if (coordinates.location) {
+                const char* locationEditorId = coordinates.location->GetFormEditorID();
+                const char* locationName = coordinates.location->GetFullName();
+                entry["locationFormId"]  = formIdStr(coordinates.location->GetFormID());
+                entry["locationEditorId"] = locationEditorId ? std::string(locationEditorId) : std::string();
+                entry["locationName"]     = locationName ? std::string(locationName) : std::string();
             } else {
-                entry["worldspace"]             = nullptr;
-                entry["worldspaceFormId"]       = nullptr;
-                entry["parentWorldspace"]       = nullptr;
-                entry["parentWorldspaceFormId"] = nullptr;
+                entry["locationFormId"]  = nullptr;
+                entry["locationEditorId"] = nullptr;
+                entry["locationName"]     = nullptr;
             }
 
-            if (auto* cell = ref->GetParentCell()) {
-                const char* cedid = cell->GetFormEditorID();
-                entry["cell"]       = cedid ? std::string(cedid) : std::string();
-                entry["cellFormId"] = formIdStr(cell->GetFormID());
-                entry["isInterior"] = cell->IsInteriorCell();
-            } else {
-                entry["cell"]       = nullptr;
-                entry["cellFormId"] = nullptr;
-                entry["isInterior"] = false;
-            }
+            WriteReferenceSpatialJson(entry, coordinateRef);
 
-            logger::debug("[Map::Markers::Quests] emit quest='{}' (type={}, formId={}) obj#{} alias={} ref={} '{}'",
+            logger::debug("[Map::Markers::Quests] emit quest='{}' (type={}, formId={}) obj#{} alias={} ref={} '{}' coordRef={} source={}",
                           questEditorId, std::string(QuestTypeName(quest->GetType())),
                           formIdStr(quest->GetFormID()), objective->index, aliasID,
-                          formIdStr(ref->GetFormID()), entry["name"].get<std::string>());
+                          formIdStr(ref->GetFormID()), entry["name"].get<std::string>(),
+                          formIdStr(coordinateRef->GetFormID()), coordinates.source);
 
             result.push_back(std::move(entry));
             return true;
@@ -1500,6 +1627,7 @@ namespace PlayerReader
             "For SE/AE, compare questTargets entries with the quest arrows visible in-game.",
             "runtimeObjectives shows displayed objectives but does not by itself mean the player tracks them.",
             "Miscellaneous markers require both the individual active quest flag and the journal's master Miscellaneous toggle.",
+            "questTargets[].targets[].mapCoordinates shows the map-facing coordinate ref used by Map::Markers::Quests.",
             "staticDisplayedObjectives is intentionally broad and is useful for finding which quest/objective is missing from questTargets."
         });
 
