@@ -979,6 +979,10 @@ namespace PlayerReader
             if (!quest->IsRunning() || quest->IsCompleted())
                 return false;
 
+            const bool questIsActive = quest->IsActive();
+            if (!questIsActive)
+                return false;
+
             const std::uint32_t aliasID = target->alias;
             auto* refAlias = FindRefAlias(quest, aliasID);
             if (!refAlias)
@@ -1008,7 +1012,7 @@ namespace PlayerReader
             entry["questEditorId"]  = questEditorId;
             entry["questName"]      = questName;
             entry["questType"]      = std::string(QuestTypeName(quest->GetType()));
-            entry["isActive"]       = true;
+            entry["isActive"]       = questIsActive;
             entry["objectiveIndex"] = objective->index;
             entry["objectiveText"]  = objectiveText;
             entry["objectiveTextResolved"] = objectiveTextResolved;
@@ -1063,10 +1067,10 @@ namespace PlayerReader
             return true;
         };
 
-        // For SE/AE, PLAYER_RUNTIME_DATA::questTargets is the authoritative
-        // map/compass source. TESQuest::IsActive() only checks QuestFlag::kActive
-        // and is not the player's journal tracking state, so filtering by it
-        // hides normal tracked quests and lets unrelated Misc objectives leak in.
+        // For SE/AE, PLAYER_RUNTIME_DATA::questTargets contains the engine's
+        // current quest-target candidates. QuestFlag::kActive is the journal
+        // tracking bit set by the user via SetActiveQuest / the journal UI; use
+        // both so displayed-but-untracked objectives don't leak into clients.
         // VR has a different runtime layout, so it keeps a best-effort static
         // fallback gated by that quest flag.
         //

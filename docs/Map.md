@@ -186,16 +186,19 @@ renders as the floating quest arrows on the compass and as quest-target icons
 on the world map. The list mirrors what the player actually sees on the map:
 
 * on SE/AE, only targets present in `PlayerCharacter::PLAYER_RUNTIME_DATA::questTargets`,
-  the runtime map Skyrim uses for currently tracked compass/map targets,
+  the runtime map Skyrim uses for quest-target candidates,
+* only quests whose `TESQuest::IsActive()` / `QuestFlag::kActive` bit is set
+  by the journal UI / `SetActiveQuest`,
 * only quests that are currently **running** and not completed,
 * one entry per visible quest-marker destination. A single objective can still
   produce multiple entries when Skyrim exposes multiple distinct destinations,
   but alternative aliases that resolve to the same marker are collapsed.
 
-`TESQuest::IsActive()` is not used for SE/AE filtering: in CommonLibSSE-NG it
-only checks `QuestFlag::kActive`, which is not the same thing as the player's
-journal tracking state. VR currently uses a best-effort static fallback because
-its quest-target runtime layout is different.
+In CommonLibSSE-NG, `TESQuest::IsActive()` checks `QuestFlag::kActive`; runtime
+testing shows that this bit tracks normal quests marked active through the
+journal UI. `questTargets` by itself is broader and can contain displayed but
+untracked objectives, especially Miscellaneous objectives. VR currently uses a
+best-effort static fallback because its quest-target runtime layout is different.
 
 Targets that resolve to non-ref aliases (location aliases, data aliases) or
 to unfilled refs are skipped. References flagged as deleted are still returned
@@ -210,7 +213,7 @@ those runtime targets for active quest markers.
 | `questEditorId` | `string` | Editor ID of the quest (e.g. `"MQ101"`). Empty if not present. |
 | `questName` | `string` | Localised quest name. Empty if unnamed. |
 | `questType` | `string` | Quest category — one of `MainQuest`, `MagesGuild`, `ThievesGuild`, `DarkBrotherhood`, `Companions`, `Miscellaneous`, `Daedric`, `SideQuest`, `CivilWar`, `DLC01_Vampire`, `DLC02_Dragonborn`, `None`. |
-| `isActive` | `bool` | Always `true` for entries returned here — included so clients can carry the same field into their UI. Only active (tracked) quests are returned. |
+| `isActive` | `bool` | `TESQuest::IsActive()` / `QuestFlag::kActive`. Only active (tracked) quests are returned. |
 | `objectiveIndex` | `integer` | The objective's `QOBJ` index inside the quest. |
 | `objectiveText` | `string` | Localised objective description as stored on the quest — may contain unresolved placeholders for radiant/templated quests, e.g. `"<Alias=BanditCamp>: kill the leader"`. |
 | `objectiveTextResolved` | `string` | Same text with `<Alias=...>` / `<Alias.ShortName=...>` etc. tokens replaced through the current quest instance data (`aliasName -> aliasID -> fullNameFormID`) when available, e.g. the bandit camp's actual location name. Tokens we can't resolve (unknown aliases, `<Global=...>`, `<Spouse>`, ...) are left untouched. Identical to `objectiveText` when there are no placeholders. |
