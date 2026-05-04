@@ -78,7 +78,7 @@ namespace PlayerReader
     // target aliases that resolve to the same marker destination are collapsed.
     // Each entry: { questFormId, questEditorId, questName, questType,
     //               objectiveIndex, objectiveText, objectiveTextResolved, aliasId,
-    //               refId, name, x, y, z,
+    //               refId, isDeleted, name, x, y, z,
     //               worldspace, worldspaceFormId,
     //               parentWorldspace, parentWorldspaceFormId,
     //               cell, cellFormId, isInterior }.

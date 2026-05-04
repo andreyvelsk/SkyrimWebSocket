@@ -985,8 +985,10 @@ namespace PlayerReader
                 return false;
 
             auto* ref = refAlias->GetReference();
-            if (!ref || ref->IsDeleted())
+            if (!ref)
                 return false;
+
+            const bool refIsDeleted = ref->IsDeleted();
 
             if (!seenDestinations.insert(makeDestinationKey(quest, objective, ref)).second)
                 return false;
@@ -1012,6 +1014,7 @@ namespace PlayerReader
             entry["objectiveTextResolved"] = objectiveTextResolved;
             entry["aliasId"]        = aliasID;
             entry["refId"]          = formIdStr(ref->GetFormID());
+            entry["isDeleted"]      = refIsDeleted;
 
             const char* refNameC = ref->GetDisplayFullName();
             if (!refNameC || !*refNameC)

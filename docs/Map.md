@@ -198,7 +198,9 @@ journal tracking state. VR currently uses a best-effort static fallback because
 its quest-target runtime layout is different.
 
 Targets that resolve to non-ref aliases (location aliases, data aliases) or
-to unfilled / deleted refs are skipped.
+to unfilled refs are skipped. References flagged as deleted are still returned
+when Skyrim itself keeps them in `questTargets`, because the engine can use
+those runtime targets for active quest markers.
 
 ### Entry shape
 
@@ -214,6 +216,7 @@ to unfilled / deleted refs are skipped.
 | `objectiveTextResolved` | `string` | Same text with `<Alias=...>` / `<Alias.ShortName=...>` etc. tokens replaced through the current quest instance data (`aliasName -> aliasID -> fullNameFormID`) when available, e.g. the bandit camp's actual location name. Tokens we can't resolve (unknown aliases, `<Global=...>`, `<Spouse>`, ...) are left untouched. Identical to `objectiveText` when there are no placeholders. |
 | `aliasId` | `integer` | The quest alias ID this target points at. |
 | `refId` | `string` | Hex form ID of the resolved reference (NPC, door, container, etc.). |
+| `isDeleted` | `bool` | `true` when the resolved reference has the form deleted flag set. Some vanilla quest targets still use such refs and are kept if Skyrim exposes them through `questTargets`. |
 | `name` | `string` | Display name of the reference. Empty if unnamed. |
 | `x` | `float` | Reference X coordinate (local to its current worldspace / cell). |
 | `y` | `float` | Reference Y coordinate. |
