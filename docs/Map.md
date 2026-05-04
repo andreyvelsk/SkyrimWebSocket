@@ -189,6 +189,8 @@ on the world map. The list mirrors what the player actually sees on the map:
   the runtime map Skyrim uses for quest-target candidates,
 * only quests whose `TESQuest::IsActive()` / `QuestFlag::kActive` bit is set
   by the journal UI / `SetActiveQuest`,
+* for `Miscellaneous` quests, only when the journal's master Miscellaneous
+  toggle is enabled,
 * only quests that are currently **running** and not completed,
 * one entry per visible quest-marker destination. A single objective can still
   produce multiple entries when Skyrim exposes multiple distinct destinations,
@@ -199,6 +201,14 @@ testing shows that this bit tracks normal quests marked active through the
 journal UI. `questTargets` by itself is broader and can contain displayed but
 untracked objectives, especially Miscellaneous objectives. VR currently uses a
 best-effort static fallback because its quest-target runtime layout is different.
+
+Miscellaneous has two layers of tracking in Skyrim's journal: each individual
+Misc objective can be active, and the top-level Miscellaneous row has its own
+master toggle controlled by the native `ToggleShowMiscObjectives` callback. The
+reader observes that master state from `Journal_QuestsTab::unk30` while the
+journal menu is open and caches the latest value after the menu closes. Until
+that UI state has been observed in the current plugin session, the reader
+defaults to visible so it does not hide valid Misc targets unexpectedly.
 
 Targets that resolve to non-ref aliases (location aliases, data aliases) or
 to unfilled refs are skipped. References flagged as deleted are still returned
@@ -214,6 +224,10 @@ those runtime targets for active quest markers.
 | `questName` | `string` | Localised quest name. Empty if unnamed. |
 | `questType` | `string` | Quest category — one of `MainQuest`, `MagesGuild`, `ThievesGuild`, `DarkBrotherhood`, `Companions`, `Miscellaneous`, `Daedric`, `SideQuest`, `CivilWar`, `DLC01_Vampire`, `DLC02_Dragonborn`, `None`. |
 | `isActive` | `bool` | `TESQuest::IsActive()` / `QuestFlag::kActive`. Only active (tracked) quests are returned. |
+| `isMiscellaneous` | `bool` | `true` for quests in the Miscellaneous journal section. |
+| `miscObjectivesVisible` | `bool` | Present on Miscellaneous entries. Latest observed state of the journal's master Miscellaneous toggle. |
+| `miscObjectivesVisibilityKnown` | `bool` | Present on Miscellaneous entries. `true` after the master Miscellaneous toggle has been observed from the journal UI in this plugin session. |
+| `miscObjectivesVisibilitySource` | `string` | Present on Miscellaneous entries. Source for the master toggle value (`Journal_QuestsTab::unk30`, cached value, or default). |
 | `objectiveIndex` | `integer` | The objective's `QOBJ` index inside the quest. |
 | `objectiveText` | `string` | Localised objective description as stored on the quest — may contain unresolved placeholders for radiant/templated quests, e.g. `"<Alias=BanditCamp>: kill the leader"`. |
 | `objectiveTextResolved` | `string` | Same text with `<Alias=...>` / `<Alias.ShortName=...>` etc. tokens replaced through the current quest instance data (`aliasName -> aliasID -> fullNameFormID`) when available, e.g. the bandit camp's actual location name. Tokens we can't resolve (unknown aliases, `<Global=...>`, `<Spouse>`, ...) are left untouched. Identical to `objectiveText` when there are no placeholders. |
@@ -287,9 +301,11 @@ for a marker in the same exterior cell).
 
 ### Example — live subscription
 
-Quest markers change whenever a quest stage advances or the player enters a
-new cell, so this field is wired to the same event-driven cache as
-`Map::Markers::Locations`:
+Quest markers can change from quest stages, cell transitions, and direct journal
+UI toggles. Unlike location markers, this field is intentionally re-read at the
+subscription interval and emitted only when the serialised value changes; that
+keeps `sendOnChange` responsive to Journal Menu toggles that do not produce a
+stable native event.
 
 ```json
 {

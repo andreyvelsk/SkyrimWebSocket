@@ -3,6 +3,7 @@
 #include "../../logger.h"
 
 #include <cctype>
+#include <optional>
 #include <unordered_set>
 
 namespace PlayerReader
@@ -446,6 +447,19 @@ namespace PlayerReader
 
     namespace
     {
+        bool g_miscObjectivesVisibilityKnown = false;
+        bool g_miscObjectivesVisible         = true;
+
+        struct MiscObjectivesVisibility
+        {
+            bool        visible       = true;
+            bool        known         = false;
+            const char* source        = "default-visible";
+            bool        cachedKnown   = false;
+            bool        cachedVisible = true;
+            bool        journalOpen   = false;
+        };
+
         std::string_view QuestTypeName(RE::QUEST_DATA::Type t)
         {
             using T = RE::QUEST_DATA::Type;
@@ -464,6 +478,67 @@ namespace PlayerReader
             case T::kDLC02_Dragonborn: return "DLC02_Dragonborn";
             default:                   return "Unknown";
             }
+        }
+
+        std::optional<bool> ReadJournalMiscObjectivesVisible()
+        {
+            auto* ui = RE::UI::GetSingleton();
+            if (!ui)
+                return std::nullopt;
+
+            auto journal = ui->GetMenu<RE::JournalMenu>();
+            if (!journal)
+                return std::nullopt;
+
+            // SkyUI receives this as `abMiscQuestActive` in RequestQuestsData
+            // and toggles it through the native ToggleShowMiscObjectives
+            // callback. CommonLib currently exposes the native bool as unk30.
+            return journal->GetRuntimeData().questsTab.unk30;
+        }
+
+        void StoreMiscObjectivesVisible(bool visible)
+        {
+            g_miscObjectivesVisibilityKnown = true;
+            g_miscObjectivesVisible         = visible;
+        }
+
+        MiscObjectivesVisibility GetMiscObjectivesVisibility()
+        {
+            MiscObjectivesVisibility state;
+            state.cachedKnown   = g_miscObjectivesVisibilityKnown;
+            state.cachedVisible = g_miscObjectivesVisible;
+
+            if (auto live = ReadJournalMiscObjectivesVisible()) {
+                StoreMiscObjectivesVisible(*live);
+                state.visible       = *live;
+                state.known         = true;
+                state.source        = "Journal_QuestsTab::unk30";
+                state.cachedKnown   = true;
+                state.cachedVisible = *live;
+                state.journalOpen   = true;
+                return state;
+            }
+
+            if (g_miscObjectivesVisibilityKnown) {
+                state.visible = g_miscObjectivesVisible;
+                state.known   = true;
+                state.source  = "cached Journal_QuestsTab::unk30";
+                return state;
+            }
+
+            return state;
+        }
+
+        nlohmann::json MiscObjectivesVisibilityJson(const MiscObjectivesVisibility& state)
+        {
+            return {
+                { "visible", state.visible },
+                { "known", state.known },
+                { "source", state.source },
+                { "journalOpen", state.journalOpen },
+                { "cachedKnown", state.cachedKnown },
+                { "cachedVisible", state.cachedVisible }
+            };
         }
 
         // Find the BGSRefAlias in `quest` whose aliasID matches the
@@ -934,6 +1009,21 @@ namespace PlayerReader
         };
     }  // namespace
 
+    void CaptureQuestJournalState()
+    {
+        if (auto visible = ReadJournalMiscObjectivesVisible()) {
+            StoreMiscObjectivesVisible(*visible);
+            logger::trace("[Map::Markers::Quests] captured misc objectives visibility={}", *visible);
+        }
+    }
+
+    void ResetQuestJournalState()
+    {
+        g_miscObjectivesVisibilityKnown = false;
+        g_miscObjectivesVisible         = true;
+        logger::trace("[Map::Markers::Quests] reset cached quest-journal state");
+    }
+
     nlohmann::json ReadQuestMarkers()
     {
         nlohmann::json result = nlohmann::json::array();
@@ -949,6 +1039,7 @@ namespace PlayerReader
         };
 
         std::unordered_set<QuestMarkerDestinationKey, QuestMarkerDestinationKeyHash> seenDestinations;
+        const auto miscObjectivesVisibility = GetMiscObjectivesVisibility();
 
         const auto makeDestinationKey = [](RE::TESQuest* quest,
                                            RE::BGSQuestObjective* objective,
@@ -983,6 +1074,10 @@ namespace PlayerReader
             if (!questIsActive)
                 return false;
 
+            const bool isMiscellaneousQuest = quest->GetType() == RE::QUEST_DATA::Type::kMiscellaneous;
+            if (isMiscellaneousQuest && !miscObjectivesVisibility.visible)
+                return false;
+
             const std::uint32_t aliasID = target->alias;
             auto* refAlias = FindRefAlias(quest, aliasID);
             if (!refAlias)
@@ -1013,6 +1108,12 @@ namespace PlayerReader
             entry["questName"]      = questName;
             entry["questType"]      = std::string(QuestTypeName(quest->GetType()));
             entry["isActive"]       = questIsActive;
+            entry["isMiscellaneous"] = isMiscellaneousQuest;
+            if (isMiscellaneousQuest) {
+                entry["miscObjectivesVisible"]          = miscObjectivesVisibility.visible;
+                entry["miscObjectivesVisibilityKnown"] = miscObjectivesVisibility.known;
+                entry["miscObjectivesVisibilitySource"] = miscObjectivesVisibility.source;
+            }
             entry["objectiveIndex"] = objective->index;
             entry["objectiveText"]  = objectiveText;
             entry["objectiveTextResolved"] = objectiveTextResolved;
@@ -1172,9 +1273,11 @@ namespace PlayerReader
         };
         out["module"]["questTargetsOffset"] = REL::Module::IsVR() ? nullptr : nlohmann::json(REL::Module::IsAE() ? "0x5A0" : "0x598");
         out["module"]["objectivesOffset"] = REL::Module::IsVR() ? nullptr : nlohmann::json(REL::Module::IsAE() ? "0x588" : "0x580");
+        out["miscObjectivesVisibility"] = MiscObjectivesVisibilityJson(GetMiscObjectivesVisibility());
         out["notes"] = nlohmann::json::array({
             "For SE/AE, compare questTargets entries with the quest arrows visible in-game.",
             "runtimeObjectives shows displayed objectives but does not by itself mean the player tracks them.",
+            "Miscellaneous markers require both the individual active quest flag and the journal's master Miscellaneous toggle.",
             "staticDisplayedObjectives is intentionally broad and is useful for finding which quest/objective is missing from questTargets."
         });
 

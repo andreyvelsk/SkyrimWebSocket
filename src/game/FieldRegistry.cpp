@@ -319,11 +319,11 @@ namespace FieldRegistry
             "array",
             &PlayerReader::ReadMapMarkersAll } },
         { "Map::Markers::Quests",
-          { "Array of active quest-marker destinations (the markers Skyrim renders as the floating quest arrows on the compass and as quest-target icons on the world map). On SE/AE this uses PlayerCharacter::questTargets plus TESQuest::IsActive()/QuestFlag::kActive, the journal tracking bit set through SetActiveQuest / the journal UI; alternative target aliases resolving to the same marker are collapsed. Each entry: { questFormId, questEditorId, questName, questType, isActive, objectiveIndex, objectiveText, objectiveTextResolved, aliasId, refId, isDeleted, name, x, y, z, worldspace, worldspaceFormId, parentWorldspace, parentWorldspaceFormId, cell, cellFormId, isInterior }. objectiveText keeps the raw template (may contain <Alias=...> placeholders for radiant quests); objectiveTextResolved resolves those aliases through the current quest instance data where possible.",
+          { "Array of active quest-marker destinations (the markers Skyrim renders as the floating quest arrows on the compass and as quest-target icons on the world map). On SE/AE this uses PlayerCharacter::questTargets plus TESQuest::IsActive()/QuestFlag::kActive, the journal tracking bit set through SetActiveQuest / the journal UI; Miscellaneous targets also honor the journal's master Miscellaneous toggle when observed. Alternative target aliases resolving to the same marker are collapsed. Each entry: { questFormId, questEditorId, questName, questType, isActive, isMiscellaneous, objectiveIndex, objectiveText, objectiveTextResolved, aliasId, refId, isDeleted, name, x, y, z, worldspace, worldspaceFormId, parentWorldspace, parentWorldspaceFormId, cell, cellFormId, isInterior }. objectiveText keeps the raw template (may contain <Alias=...> placeholders for radiant quests); objectiveTextResolved resolves those aliases through the current quest instance data where possible.",
             "array",
             &PlayerReader::ReadQuestMarkers } },
         { "Debug::Map::Markers::Quests",
-          { "Debug snapshot for quest marker diagnosis: runtime module, questTargets, runtime objectives, static active/displayed objectives, and current Map::Markers::Quests output.",
+          { "Debug snapshot for quest marker diagnosis: runtime module, Miscellaneous master-toggle state, questTargets, runtime objectives, static active/displayed objectives, and current Map::Markers::Quests output.",
             "object",
             &PlayerReader::ReadQuestMarkersDebug } },
 

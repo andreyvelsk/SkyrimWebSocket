@@ -73,10 +73,13 @@ namespace PlayerReader
 
     // Returns an array of active quest-marker destinations — the markers the
     // engine renders as floating quest arrows / quest-target icons. On SE/AE,
-    // this uses PlayerCharacter::questTargets, the same runtime map the engine
-    // uses for tracked markers. VR uses a best-effort static fallback. Multiple
+    // this uses PlayerCharacter::questTargets as the runtime target-candidate
+    // source, then filters by the journal tracking flags. Miscellaneous quest
+    // targets also honor the journal's master "Miscellaneous" toggle when its
+    // state has been observed. VR uses a best-effort static fallback. Multiple
     // target aliases that resolve to the same marker destination are collapsed.
     // Each entry: { questFormId, questEditorId, questName, questType,
+    //               isActive, isMiscellaneous,
     //               objectiveIndex, objectiveText, objectiveTextResolved, aliasId,
     //               refId, isDeleted, name, x, y, z,
     //               worldspace, worldspaceFormId,
@@ -84,6 +87,15 @@ namespace PlayerReader
     //               cell, cellFormId, isInterior }.
     // Must be called on the game thread.
     nlohmann::json ReadQuestMarkers();
+
+    // Captures live quest-journal UI state that is not otherwise exposed in
+    // quest/runtime data (currently the master Miscellaneous objective toggle).
+    // Safe to call from menu/event callbacks on the game thread.
+    void CaptureQuestJournalState();
+
+    // Clears cached quest-journal UI state after loading a different save.
+    // Must be called on the game thread.
+    void ResetQuestJournalState();
 
     // Debug snapshot for diagnosing quest marker sources. Returns raw
     // PlayerCharacter questTargets/objectives summaries plus current

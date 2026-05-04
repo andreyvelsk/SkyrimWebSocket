@@ -1,5 +1,7 @@
 #include "EventBus.h"
 
+#include "PlayerReader.h"
+
 #include "../../logger.h"
 
 #include <atomic>
@@ -70,14 +72,7 @@ namespace EventBus
         //
         // All sinks are stateless singletons.  ProcessEvent runs on the game
         // thread; we keep the work to a couple of atomic increments so this
-        // is safe to register globally.        //
-        // We deliberately do NOT subscribe to TESQuestStageEvent: it fires
-        // on every quest-stage change in the game (very frequent), and the
-        // vast majority of stages do not reveal map markers.  Bumping on
-        // every stage forces a full re-walk of all worldspaces on the next
-        // poll, which is the exact freeze we are trying to avoid.  Markers
-        // that are script-revealed mid-quest will refresh on the next cell
-        // load or when the player opens MapMenu.
+        // is safe to register globally.
         class CellLoadSink final : public RE::BSTEventSink<RE::TESCellFullyLoadedEvent>
         {
         public:
@@ -91,7 +86,7 @@ namespace EventBus
                 const RE::TESCellFullyLoadedEvent*,
                 RE::BSTEventSource<RE::TESCellFullyLoadedEvent>*) override
             {
-                BumpKeys({"Map::Markers::Locations", "Map::Markers::All", "Map::Markers::Quests"},
+                BumpKeys({"Map::Markers::Locations", "Map::Markers::All"},
                          "TESCellFullyLoaded");
                 return RE::BSEventNotifyControl::kContinue;
             }
@@ -112,6 +107,14 @@ namespace EventBus
             {
                 if (!event)
                     return RE::BSEventNotifyControl::kContinue;
+
+                if (event->menuName == RE::JournalMenu::MENU_NAME) {
+                    if (!event->opening)
+                        PlayerReader::CaptureQuestJournalState();
+                    logger::trace("[EventBus] observed JournalMenu {}", event->opening ? "open" : "close");
+                    return RE::BSEventNotifyControl::kContinue;
+                }
+
                 if (event->menuName != RE::MapMenu::MENU_NAME)
                     return RE::BSEventNotifyControl::kContinue;
 
@@ -119,7 +122,7 @@ namespace EventBus
                 //  * opening the map pushes fresh data even if the player
                 //    fast-travelled between polls,
                 //  * closing the map captures any player-placed marker change.
-                BumpKeys({"Map::Markers::Locations", "Map::Markers::All", "Map::Markers::Quests"},
+                BumpKeys({"Map::Markers::Locations", "Map::Markers::All"},
                          event->opening ? "MapMenu open" : "MapMenu close");
                 return RE::BSEventNotifyControl::kContinue;
             }
@@ -144,7 +147,7 @@ namespace EventBus
                 const RE::LocationDiscovery::Event*,
                 RE::BSTEventSource<RE::LocationDiscovery::Event>*) override
             {
-                BumpKeys({"Map::Markers::Locations", "Map::Markers::All", "Map::Markers::Quests"},
+                BumpKeys({"Map::Markers::Locations", "Map::Markers::All"},
                          "LocationDiscovery");
                 return RE::BSEventNotifyControl::kContinue;
             }
@@ -168,7 +171,7 @@ namespace EventBus
                 const RE::TESQuestStageEvent*,
                 RE::BSTEventSource<RE::TESQuestStageEvent>*) override
             {
-                BumpKeys({"Map::Markers::Locations", "Map::Markers::All", "Map::Markers::Quests"},
+                BumpKeys({"Map::Markers::Locations", "Map::Markers::All"},
                          "TESQuestStage");
                 return RE::BSEventNotifyControl::kContinue;
             }
@@ -188,6 +191,7 @@ namespace EventBus
                 RE::BSTEventSource<RE::TESLoadGameEvent>*) override
             {
                 // A new save invalidates every cached value.
+                PlayerReader::ResetQuestJournalState();
                 BumpAll("TESLoadGame");
                 return RE::BSEventNotifyControl::kContinue;
             }
@@ -201,11 +205,13 @@ namespace EventBus
         g_installed = true;
 
         // ── Register the event-driven registry keys ──────────────────────
-        // For now we expose this only for map-marker fields; other heavy
-        // resolvers (Inventory::*, Magic::*) can opt in later.
+        // For now we expose this only for heavy worldspace map-marker fields;
+        // other expensive resolvers can opt in later. Quest markers are
+        // intentionally polled and JSON-compared because the journal UI can
+        // change tracking state through Scaleform callbacks without a stable
+        // native event for every toggle.
         RegisterKey("Map::Markers::Locations");
         RegisterKey("Map::Markers::All");
-        RegisterKey("Map::Markers::Quests");
 
         // ── Install SKSE event sinks ─────────────────────────────────────
         if (auto* src = RE::ScriptEventSourceHolder::GetSingleton()) {
