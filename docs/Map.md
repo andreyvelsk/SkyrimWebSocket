@@ -206,11 +206,12 @@ Miscellaneous has two layers of tracking in Skyrim's journal: each individual
 Misc objective can be active, and the top-level Miscellaneous row has its own
 master toggle controlled by the native `ToggleShowMiscObjectives` callback. The
 reader observes the top-level Miscellaneous row in the journal Scaleform list
-(`TitleList.entryList`, the row with `formID == 0`) while the journal menu is
-open and caches the latest value after the menu closes. If that UI list is not
-available, it falls back to `Journal_QuestsTab::unk30`. Until that UI state has
-been observed in the current plugin session, the reader defaults to visible so
-it does not hide valid Misc targets unexpectedly.
+(`Journal_QuestsTab::unk18` first, then `TitleList.entryList` paths, using the
+row with `formID == 0`) while the journal menu is open and caches the latest
+value after the menu closes. If that UI list is not available, it falls back to
+`Journal_QuestsTab::unk30`. Until that UI state has been observed in the current
+plugin session, the reader defaults to visible so it does not hide valid Misc
+targets unexpectedly.
 
 Targets that resolve to non-ref aliases (location aliases, data aliases) or
 to unfilled refs are skipped. References flagged as deleted are still returned

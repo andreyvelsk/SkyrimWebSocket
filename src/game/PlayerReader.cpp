@@ -461,8 +461,15 @@ namespace PlayerReader
             bool        journalOpen   = false;
             bool        scaleformKnown = false;
             bool        scaleformVisible = true;
+            const char* scaleformSource = "none";
             bool        nativeKnown   = false;
             bool        nativeVisible = true;
+        };
+
+        struct ScaleformMiscVisibilityRead
+        {
+            bool        visible = true;
+            const char* source  = "unknown Scaleform source";
         };
 
         struct MiscObjectivesVisibilityRead
@@ -471,6 +478,7 @@ namespace PlayerReader
             const char* source  = "unknown";
             bool        scaleformKnown = false;
             bool        scaleformVisible = true;
+            const char* scaleformSource = "none";
             bool        nativeKnown = false;
             bool        nativeVisible = true;
         };
@@ -524,43 +532,133 @@ namespace PlayerReader
             return ReadBoolLike(active);
         }
 
-        std::optional<bool> ReadScaleformMiscObjectivesVisible(RE::GFxMovieView* movie)
+        std::optional<ScaleformMiscVisibilityRead> ReadScaleformMiscObjectivesVisibleFromValue(
+            const RE::GFxValue& value,
+            const char*         source,
+            std::uint32_t       depth = 0)
         {
+            if (value.IsArray()) {
+                const auto size = value.GetArraySize();
+                for (std::uint32_t i = 0; i < size; ++i) {
+                    RE::GFxValue entry;
+                    if (!value.GetElement(i, &entry))
+                        continue;
+                    if (auto visible = ReadMiscObjectivesVisibleFromEntry(entry))
+                        return ScaleformMiscVisibilityRead{ *visible, source };
+                }
+                return std::nullopt;
+            }
+
+            if (!value.IsObject())
+                return std::nullopt;
+
+            if (auto visible = ReadMiscObjectivesVisibleFromEntry(value))
+                return ScaleformMiscVisibilityRead{ *visible, source };
+
+            RE::GFxValue entries;
+            if (value.GetMember("entryList", &entries)) {
+                if (auto visible = ReadScaleformMiscObjectivesVisibleFromValue(entries, source, depth + 1))
+                    return visible;
+            }
+
+            constexpr std::array kEntryMembers{
+                "selectedEntry",
+                "centeredEntry"
+            };
+            for (const char* member : kEntryMembers) {
+                RE::GFxValue entry;
+                if (!value.GetMember(member, &entry))
+                    continue;
+                if (auto visible = ReadMiscObjectivesVisibleFromEntry(entry))
+                    return ScaleformMiscVisibilityRead{ *visible, source };
+            }
+
+            if (depth >= 4)
+                return std::nullopt;
+
+            constexpr std::array kChildMembers{
+                "QuestJournalFader",
+                "QuestsFader",
+                "Page_mc",
+                "TitleList",
+                "TitleList_mc",
+                "List_mc"
+            };
+            for (const char* member : kChildMembers) {
+                RE::GFxValue child;
+                if (!value.GetMember(member, &child))
+                    continue;
+                if (auto visible = ReadScaleformMiscObjectivesVisibleFromValue(child, source, depth + 1))
+                    return visible;
+            }
+
+            return std::nullopt;
+        }
+
+        std::optional<ScaleformMiscVisibilityRead> ReadScaleformMiscObjectivesVisible(RE::JournalMenu* journal)
+        {
+            if (!journal)
+                return std::nullopt;
+
+            auto& questsTab = journal->GetRuntimeData().questsTab;
+            if (auto visible = ReadScaleformMiscObjectivesVisibleFromValue(
+                    questsTab.unk18,
+                    "Journal_QuestsTab::unk18")) {
+                return visible;
+            }
+
+            auto movie = questsTab.view;
+            if (!movie) {
+                auto* ui = RE::UI::GetSingleton();
+                if (ui)
+                    movie = ui->GetMovieView(RE::JournalMenu::MENU_NAME);
+            }
             if (!movie)
                 return std::nullopt;
 
             constexpr std::array kEntryListPaths{
+                "QuestJournalFader.QuestsFader.Page_mc.TitleList.entryList",
+                "QuestJournalFader.QuestsFader.Page_mc.TitleList_mc.List_mc.entryList",
+                "QuestsFader.Page_mc.TitleList.entryList",
+                "QuestsFader.Page_mc.TitleList_mc.List_mc.entryList",
                 "_root.QuestJournalFader.QuestsFader.Page_mc.TitleList.entryList",
-                "_root.QuestJournalFader.QuestsFader.Page_mc.TitleList_mc.List_mc.entryList"
+                "_root.QuestJournalFader.QuestsFader.Page_mc.TitleList_mc.List_mc.entryList",
+                "_root.QuestsFader.Page_mc.TitleList.entryList",
+                "_root.QuestsFader.Page_mc.TitleList_mc.List_mc.entryList"
             };
 
             for (const char* path : kEntryListPaths) {
                 RE::GFxValue entries;
                 if (!movie->GetVariable(&entries, path) || !entries.IsArray())
                     continue;
-
-                const auto size = entries.GetArraySize();
-                for (std::uint32_t i = 0; i < size; ++i) {
-                    RE::GFxValue entry;
-                    if (!entries.GetElement(i, &entry))
-                        continue;
-                    if (auto visible = ReadMiscObjectivesVisibleFromEntry(entry))
-                        return visible;
-                }
+                if (auto visible = ReadScaleformMiscObjectivesVisibleFromValue(entries, path))
+                    return visible;
             }
 
             constexpr std::array kSelectedEntryPaths{
+                "QuestJournalFader.QuestsFader.Page_mc.TitleList.selectedEntry",
+                "QuestJournalFader.QuestsFader.Page_mc.TitleList.centeredEntry",
+                "QuestJournalFader.QuestsFader.Page_mc.TitleList_mc.List_mc.selectedEntry",
+                "QuestJournalFader.QuestsFader.Page_mc.TitleList_mc.List_mc.centeredEntry",
+                "QuestsFader.Page_mc.TitleList.selectedEntry",
+                "QuestsFader.Page_mc.TitleList.centeredEntry",
+                "QuestsFader.Page_mc.TitleList_mc.List_mc.selectedEntry",
+                "QuestsFader.Page_mc.TitleList_mc.List_mc.centeredEntry",
                 "_root.QuestJournalFader.QuestsFader.Page_mc.TitleList.selectedEntry",
                 "_root.QuestJournalFader.QuestsFader.Page_mc.TitleList.centeredEntry",
                 "_root.QuestJournalFader.QuestsFader.Page_mc.TitleList_mc.List_mc.selectedEntry",
-                "_root.QuestJournalFader.QuestsFader.Page_mc.TitleList_mc.List_mc.centeredEntry"
+                "_root.QuestJournalFader.QuestsFader.Page_mc.TitleList_mc.List_mc.centeredEntry",
+                "_root.QuestsFader.Page_mc.TitleList.selectedEntry",
+                "_root.QuestsFader.Page_mc.TitleList.centeredEntry",
+                "_root.QuestsFader.Page_mc.TitleList_mc.List_mc.selectedEntry",
+                "_root.QuestsFader.Page_mc.TitleList_mc.List_mc.centeredEntry"
             };
 
             for (const char* path : kSelectedEntryPaths) {
                 RE::GFxValue entry;
                 if (!movie->GetVariable(&entry, path))
                     continue;
-                if (auto visible = ReadMiscObjectivesVisibleFromEntry(entry))
+                if (auto visible = ReadScaleformMiscObjectivesVisibleFromValue(entry, path))
                     return visible;
             }
 
@@ -591,12 +689,12 @@ namespace PlayerReader
                 result.nativeVisible = *native;
             }
 
-            auto movie = ui->GetMovieView(RE::JournalMenu::MENU_NAME);
-            if (auto scaleform = ReadScaleformMiscObjectivesVisible(movie.get())) {
-                result.visible          = *scaleform;
-                result.source           = "SkyUI TitleList.entryList Misc.active";
+            if (auto scaleform = ReadScaleformMiscObjectivesVisible(journal.get())) {
+                result.visible          = scaleform->visible;
+                result.source           = scaleform->source;
                 result.scaleformKnown   = true;
-                result.scaleformVisible = *scaleform;
+                result.scaleformVisible = scaleform->visible;
+                result.scaleformSource  = scaleform->source;
                 return result;
             }
 
@@ -631,6 +729,7 @@ namespace PlayerReader
                 state.journalOpen      = true;
                 state.scaleformKnown   = live->scaleformKnown;
                 state.scaleformVisible = live->scaleformVisible;
+                state.scaleformSource  = live->scaleformSource;
                 state.nativeKnown      = live->nativeKnown;
                 state.nativeVisible    = live->nativeVisible;
                 return state;
@@ -657,6 +756,7 @@ namespace PlayerReader
                 { "cachedVisible", state.cachedVisible },
                 { "scaleformKnown", state.scaleformKnown },
                 { "scaleformVisible", state.scaleformVisible },
+                { "scaleformSource", state.scaleformSource },
                 { "nativeKnown", state.nativeKnown },
                 { "nativeVisible", state.nativeVisible }
             };
