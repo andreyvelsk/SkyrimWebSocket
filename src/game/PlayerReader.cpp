@@ -132,50 +132,68 @@ namespace PlayerReader
         if (!player)
             return nlohmann::json::object();
 
-        // PLAYER_RUNTIME_DATA fields are not exposed as struct members in
-        // multi-targeting builds (HAS_SKYRIM_MULTI_TARGETING=1), so we resolve
-        // them by absolute offsets from the PlayerCharacter base. Offsets are
-        // taken from CommonLibSSE-NG's PlayerCharacter.h:
-        //   cachedWorldSpace : SE 0x628, AE 0x630, VR 0xC18
-        //   exteriorPosition : SE 0x630, AE 0x638, VR 0xC20
-        std::size_t worldOff = 0;
-        std::size_t posOff   = 0;
-        if (REL::Module::IsVR()) {
-            worldOff = 0xC18;
-            posOff   = 0xC20;
-        } else if (REL::Module::IsAE()) {
-            worldOff = 0x630;
-            posOff   = 0x638;
-        } else {  // SE
-            worldOff = 0x628;
-            posOff   = 0x630;
-        }
+        const auto formIdStr = [](RE::FormID id) {
+            return std::format("0x{:08X}", id);
+        };
 
-        const auto base    = reinterpret_cast<std::uintptr_t>(player);
-        auto*       world  = *reinterpret_cast<RE::TESWorldSpace**>(base + worldOff);
-        const auto& extPos = *reinterpret_cast<const RE::NiPoint3*>(base + posOff);
+        const auto buildWorldspaceFields = [&](nlohmann::json& obj, RE::TESWorldSpace* world) {
+            if (world) {
+                const char* edid = world->GetFormEditorID();
+                obj["worldspace"]       = edid ? std::string(edid) : std::string();
+                obj["worldspaceFormId"] = formIdStr(world->GetFormID());
+
+                auto* root = world;
+                while (root->parentWorld)
+                    root = root->parentWorld;
+                const char* rootEdid = root->GetFormEditorID();
+                obj["parentWorldspace"]       = rootEdid ? std::string(rootEdid) : std::string();
+                obj["parentWorldspaceFormId"] = formIdStr(root->GetFormID());
+            } else {
+                obj["worldspace"]             = nullptr;
+                obj["worldspaceFormId"]       = nullptr;
+                obj["parentWorldspace"]       = nullptr;
+                obj["parentWorldspaceFormId"] = nullptr;
+            }
+        };
 
         nlohmann::json out;
-        out["x"] = extPos.x;
-        out["y"] = extPos.y;
-        out["z"] = extPos.z;
+        auto* world = player->GetWorldspace();
+        auto* cell  = player->GetParentCell();
 
-        if (world) {
-            const char* edid = world->GetFormEditorID();
-            out["worldspace"]       = edid ? std::string(edid) : std::string();
-            out["worldspaceFormId"] = std::format("0x{:08X}", world->GetFormID());
+        // Player is in a top-level exterior worldspace (Tamriel, Solstheim, etc.) —
+        // return live coordinates directly. No caching involved, so fast travel
+        // cannot produce stale values.
+        if (world && !world->parentWorld && cell && !cell->IsInteriorCell()) {
+            out["x"] = player->GetPositionX();
+            out["y"] = player->GetPositionY();
+            out["z"] = player->GetPositionZ();
+            buildWorldspaceFields(out, world);
+            return out;
+        }
 
-            auto* root = world;
-            while (root->parentWorld)
-                root = root->parentWorld;
-            const char* rootEdid = root->GetFormEditorID();
-            out["parentWorldspace"]       = rootEdid ? std::string(rootEdid) : std::string();
-            out["parentWorldspaceFormId"] = std::format("0x{:08X}", root->GetFormID());
+        // Player is in an interior cell or a city sub-worldspace.
+        // Resolve the BGSLocation's world-map marker reference to get the
+        // location's fixed exterior coordinates (e.g. the cave entrance on
+        // Tamriel, or the city gate on the Tamriel map).  Walk up the location
+        // hierarchy until a marker is found.
+        RE::BGSLocation*   loc       = cell ? cell->GetLocation() : nullptr;
+        RE::TESObjectREFR* markerRef = nullptr;
+        while (loc && !markerRef) {
+            markerRef = loc->worldLocMarker.get().get();
+            if (!markerRef)
+                loc = loc->parentLoc;
+        }
+
+        if (markerRef) {
+            out["x"] = markerRef->GetPositionX();
+            out["y"] = markerRef->GetPositionY();
+            out["z"] = markerRef->GetPositionZ();
+            buildWorldspaceFields(out, markerRef->GetWorldspace());
         } else {
-            out["worldspace"]             = nullptr;
-            out["worldspaceFormId"]       = nullptr;
-            out["parentWorldspace"]       = nullptr;
-            out["parentWorldspaceFormId"] = nullptr;
+            out["x"] = nullptr;
+            out["y"] = nullptr;
+            out["z"] = nullptr;
+            buildWorldspaceFields(out, nullptr);
         }
 
         return out;

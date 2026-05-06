@@ -47,13 +47,22 @@ namespace PlayerReader
     // Must be called on the game thread.
     nlohmann::json ReadPosition();
 
-    // Returns the last known exterior position cached by the game (used by the
-    // compass / world map). Useful for placing the player on the global map while
-    // they are inside an interior cell or a city sub-worldspace.
+    // Returns the map-position to use when rendering the player on a global world map.
+    //
+    // - If the player is in a top-level exterior worldspace (Tamriel, Solstheim, etc.),
+    //   returns the live player coordinates and that worldspace.
+    // - If the player is inside an interior cell or a city sub-worldspace, resolves
+    //   the BGSLocation::worldLocMarker reference (walking up the location hierarchy
+    //   if needed) and returns the marker's coordinates in the exterior worldspace.
+    //   This is the fixed entrance point visible on the world map (e.g. the cave
+    //   door on Tamriel, or the city gate).  No engine cache is involved, so values
+    //   are always correct — including during and immediately after fast travel.
+    //
     // Shape: { "x", "y", "z",
     //          "worldspace", "worldspaceFormId",
     //          "parentWorldspace", "parentWorldspaceFormId" }
-    // worldspace fields are null until the game has cached an exterior location.
+    // x/y/z and worldspace fields are null when no BGSLocation marker can be found
+    // (rare: small hand-placed cells with no location assignment).
     // Must be called on the game thread.
     nlohmann::json ReadExteriorPosition();
 

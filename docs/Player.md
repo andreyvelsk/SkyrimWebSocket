@@ -174,21 +174,33 @@ of the city / dungeon they entered).
 
 ## `Player::ExteriorPosition`
 
-Returns the **last known exterior position** that the game itself caches for
-the compass and world map. Useful for keeping a marker on the global map
-pinned to the city / dungeon entrance while the player is inside.
+Returns the position to use when rendering the player on the global world map.
+
+- **In a top-level exterior worldspace** (Tamriel, Solstheim, …) — live player
+  coordinates and that worldspace.  No caching, always up-to-date.
+- **In an interior cell or a city sub-worldspace** (cave, dungeon, inn, Whiterun,
+  …) — the fixed coordinates of the location's map marker (`BGSLocation::worldLocMarker`),
+  i.e. the entrance point visible on the world map (e.g. the dungeon door on Tamriel,
+  or the city gate marker).  The location hierarchy is walked upward until a marker is
+  found, so even deeply nested locations are covered.
+
+This replaces the previous approach of reading the engine's `exteriorPosition` cache,
+which could be stale immediately after fast travel.
 
 ### Object shape
 
 | Field | Type | Description |
 |---|---|---|
-| `x` | `float` | Last exterior X (in `worldspace` coordinates). |
-| `y` | `float` | Last exterior Y. |
-| `z` | `float` | Last exterior Z. |
-| `worldspace` | `string \| null` | EditorID of the cached worldspace, or `null` if the game has not cached one yet. |
-| `worldspaceFormId` | `string \| null` | Hex form ID. |
+| `x` | `float \| null` | Map X coordinate. |
+| `y` | `float \| null` | Map Y coordinate. |
+| `z` | `float \| null` | Map Z coordinate. |
+| `worldspace` | `string \| null` | EditorID of the worldspace. |
+| `worldspaceFormId` | `string \| null` | Hex form ID of the worldspace. |
 | `parentWorldspace` | `string \| null` | EditorID of the root worldspace (see `Player::Position`). |
 | `parentWorldspaceFormId` | `string \| null` | Hex form ID of the root worldspace. |
+
+All fields are `null` only when the player is in a cell that has no `BGSLocation`
+assignment at all (very rare; typically hand-placed test cells).
 
 ### Recommended client logic for a global Tamriel map
 
