@@ -87,11 +87,11 @@ namespace PlayerReader
     // targets also honor the journal's master "Miscellaneous" toggle when its
     // state has been observed. VR uses a best-effort static fallback. Multiple
     // target aliases that resolve to the same map-facing destination are
-    // collapsed. Interior/deleted/child-worldspace targets are projected through
-    // the nearest BGSLocation::worldLocMarker in their location hierarchy when
-    // available, so x/y/z match the world-map marker rather than the target's
-    // local interior coordinates. localX/localY/localZ keep the raw target
-    // reference coordinates for clients that need the in-location position.
+    // collapsed. When a target belongs to a BGSLocation, x/y/z are projected
+    // through the nearest BGSLocation::worldLocMarker in that location hierarchy
+    // so they point to the location marker/entrance on the world map rather than
+    // the target ref's exact in-location coordinates. localX/localY/localZ keep
+    // the raw target reference coordinates for clients that need them.
     // Each entry: { questFormId, questEditorId, questName, questType,
     //               isActive, isMiscellaneous,
     //               objectiveIndex, objectiveText, objectiveTextResolved, aliasId,

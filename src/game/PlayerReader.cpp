@@ -979,20 +979,6 @@ namespace PlayerReader
             return out;
         }
 
-        RE::BGSLocation* ResolveReferenceLocation(RE::TESObjectREFR* ref)
-        {
-            if (!ref)
-                return nullptr;
-
-            if (auto* location = ref->GetCurrentLocation())
-                return location;
-            if (auto* location = ref->GetEditorLocation())
-                return location;
-            if (auto* cell = ref->GetParentCell())
-                return cell->GetLocation();
-            return nullptr;
-        }
-
         QuestMarkerCoordinates ResolveQuestMarkerCoordinates(RE::TESObjectREFR* targetRef)
         {
             QuestMarkerCoordinates out;
@@ -1002,32 +988,34 @@ namespace PlayerReader
                 return out;
 
             auto* cell = targetRef->GetParentCell();
-            auto* world = targetRef->GetWorldspace();
-            const bool needsLocationMarker = targetRef->IsDeleted() ||
-                                             !world ||
-                                             world->parentWorld ||
-                                             (cell && cell->IsInteriorCell());
-            if (!needsLocationMarker)
-                return out;
+            RE::BGSLocation* locationCandidates[] = {
+                targetRef->GetCurrentLocation(),
+                targetRef->GetEditorLocation(),
+                cell ? cell->GetLocation() : nullptr
+            };
 
-            auto* location = ResolveReferenceLocation(targetRef);
-            if (!location)
-                return out;
+            for (auto* location : locationCandidates) {
+                if (!location)
+                    continue;
 
-            out.location = location;
-            for (auto* candidate = location; candidate; candidate = candidate->parentLoc) {
-                out.locationMarkerRef = candidate->worldLocMarker.get();
-                if (out.locationMarkerRef) {
-                    out.location = candidate;
-                    out.ref = out.locationMarkerRef.get();
-                    out.source = candidate == location
-                                     ? "BGSLocation::worldLocMarker"
-                                     : "BGSLocation::parentLoc.worldLocMarker";
-                    return out;
+                if (!out.location)
+                    out.location = location;
+
+                for (auto* candidate = location; candidate; candidate = candidate->parentLoc) {
+                    out.locationMarkerRef = candidate->worldLocMarker.get();
+                    if (out.locationMarkerRef) {
+                        out.location = candidate;
+                        out.ref = out.locationMarkerRef.get();
+                        out.source = candidate == location
+                                         ? "BGSLocation::worldLocMarker"
+                                         : "BGSLocation::parentLoc.worldLocMarker";
+                        return out;
+                    }
                 }
             }
 
-            out.source = "targetRef:noLocationMarker";
+            if (out.location)
+                out.source = "targetRef:noLocationMarker";
             return out;
         }
 

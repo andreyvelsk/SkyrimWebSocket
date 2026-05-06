@@ -228,13 +228,12 @@ those runtime targets for active quest markers.
 container, etc.). `localX` / `localY` / `localZ` preserve that reference's raw
 coordinates inside its current worldspace or interior cell. The spatial fields
 (`x`, `y`, `z`, `worldspace`, `cell`, ...) describe where the quest marker
-should be drawn on the world map. For targets inside interiors, targets in child
-worldspaces, targets without a worldspace, and deleted runtime targets, the
-reader walks the target's `BGSLocation` parent hierarchy and uses the nearest
-available `BGSLocation::worldLocMarker`. That makes quest marker coordinates
-line up with the location markers returned by `Map::Markers::Locations` /
-`Map::Markers::All`, instead of leaking local coordinates such as an NPC's
-position inside a house.
+should be drawn on the world map. When the target belongs to a `BGSLocation`,
+the reader walks that location's parent hierarchy and uses the nearest available
+`BGSLocation::worldLocMarker`. That makes quest marker coordinates line up with
+the location markers returned by `Map::Markers::Locations` / `Map::Markers::All`,
+instead of leaking local coordinates such as an NPC's position inside a house or
+within an exterior sub-location.
 
 ### Entry shape
 
@@ -256,7 +255,7 @@ position inside a house.
 | `refId` | `string` | Hex form ID of the resolved reference (NPC, door, container, etc.). |
 | `isDeleted` | `bool` | `true` when the resolved reference has the form deleted flag set. Some vanilla quest targets still use such refs and are kept if Skyrim exposes them through `questTargets`. |
 | `name` | `string` | Display name of the reference. Empty if unnamed. |
-| `coordinateSource` | `string` | Source used for `x`/`y`/`z`: `targetRef` for direct target coordinates, `BGSLocation::worldLocMarker` for direct location projection, `BGSLocation::parentLoc.worldLocMarker` when a parent location supplied the map marker, or `targetRef:noLocationMarker` when no map marker could be found. |
+| `coordinateSource` | `string` | Source used for `x`/`y`/`z`: `BGSLocation::worldLocMarker` for direct location projection, `BGSLocation::parentLoc.worldLocMarker` when a parent location supplied the map marker, `targetRef:noLocationMarker` when a location was found but no marker could be found, or `targetRef` when no usable location was resolved. |
 | `coordinateRefId` | `string` | Hex form ID of the reference used for the spatial fields. Usually the same as `refId`; for interior targets this is usually the location's map marker reference. |
 | `coordinateRefName` | `string` | Display name of `coordinateRefId`, when available. |
 | `locationFormId` | `string \| null` | Hex form ID of the `BGSLocation` considered for map-marker projection, or `null` when no location was resolved. |
@@ -272,7 +271,7 @@ position inside a house.
 | `localCell` | `string \| null` | EditorID of the actual target reference's parent cell. |
 | `localCellFormId` | `string \| null` | Hex form ID of the actual target reference's parent cell. |
 | `localIsInterior` | `bool` | `true` if the actual target reference's parent cell is an interior. |
-| `x` | `float` | Map-facing X coordinate of the quest marker. For interior targets this is the location world marker coordinate when available. |
+| `x` | `float` | Map-facing X coordinate of the quest marker. When a location marker is available, this is the location/entrance marker coordinate. |
 | `y` | `float` | Map-facing Y coordinate of the quest marker. |
 | `z` | `float` | Map-facing Z coordinate of the quest marker. |
 | `worldspace` | `string \| null` | EditorID of the coordinate reference's worldspace. `null` only when no map-facing worldspace could be resolved. |
@@ -283,11 +282,12 @@ position inside a house.
 | `cellFormId` | `string \| null` | Hex form ID of the cell. |
 | `isInterior` | `bool` | `true` if the coordinate reference's parent cell is an interior. |
 
-Use `parentWorldspace` to plot quest markers on a global Tamriel/Solstheim map
-(see [`Player::ExteriorPosition`](Player.md) for the same convention applied
-to the player). In normal exterior cases `coordinateSource` is `targetRef`. In
-interior cases, a successful `BGSLocation::worldLocMarker` projection means the
-coordinates already point at the location marker / entrance on the world map.
+Use `parentWorldspace` to plot quest markers on a global Tamriel/Solstheim map.
+When `coordinateSource` is `BGSLocation::worldLocMarker` or
+`BGSLocation::parentLoc.worldLocMarker`, the coordinates already point at the
+location marker / entrance on the world map. `coordinateSource: "targetRef"`
+means no usable `BGSLocation` marker was found, so the target reference itself is
+used as a fallback.
 
 ### Example — query active quest markers
 
