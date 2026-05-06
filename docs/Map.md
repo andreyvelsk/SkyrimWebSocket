@@ -205,8 +205,8 @@ best-effort static fallback because its quest-target runtime layout is different
 For coordinate troubleshooting, query `Debug::Map::Markers::Quests` and inspect
 `questTargets[].targets[].coordinateDiagnostics`. It lists the selected map
 coordinate plus alternative candidates such as the raw target reference,
-`TESObjectREFR::GetEditorLocation(out)`, location world/horse markers, linked
-teleport doors, and random teleport markers.
+`TESObjectREFR::GetEditorLocation(out)`, resolved or parent location world/horse
+markers, linked teleport doors, and random teleport markers.
 
 Miscellaneous has two layers of tracking in Skyrim's journal: each individual
 Misc objective can be active, and the top-level Miscellaneous row has its own
@@ -225,13 +225,16 @@ when Skyrim itself keeps them in `questTargets`, because the engine can use
 those runtime targets for active quest markers.
 
 `refId` and `name` describe the actual quest target reference (NPC, item, door,
-container, etc.). The spatial fields (`x`, `y`, `z`, `worldspace`, `cell`, ...)
-describe where the quest marker should be drawn on the map. For targets inside
-interiors, targets without a worldspace, and deleted runtime targets, the reader
-uses the target's `BGSLocation::worldLocMarker` when available. That makes quest
-marker coordinates line up with the location markers returned by
-`Map::Markers::Locations` / `Map::Markers::All`, instead of leaking local
-interior-cell coordinates such as an NPC's position inside a house.
+container, etc.). `localX` / `localY` / `localZ` preserve that reference's raw
+coordinates inside its current worldspace or interior cell. The spatial fields
+(`x`, `y`, `z`, `worldspace`, `cell`, ...) describe where the quest marker
+should be drawn on the world map. For targets inside interiors, targets in child
+worldspaces, targets without a worldspace, and deleted runtime targets, the
+reader walks the target's `BGSLocation` parent hierarchy and uses the nearest
+available `BGSLocation::worldLocMarker`. That makes quest marker coordinates
+line up with the location markers returned by `Map::Markers::Locations` /
+`Map::Markers::All`, instead of leaking local coordinates such as an NPC's
+position inside a house.
 
 ### Entry shape
 
@@ -253,12 +256,22 @@ interior-cell coordinates such as an NPC's position inside a house.
 | `refId` | `string` | Hex form ID of the resolved reference (NPC, door, container, etc.). |
 | `isDeleted` | `bool` | `true` when the resolved reference has the form deleted flag set. Some vanilla quest targets still use such refs and are kept if Skyrim exposes them through `questTargets`. |
 | `name` | `string` | Display name of the reference. Empty if unnamed. |
-| `coordinateSource` | `string` | Source used for `x`/`y`/`z`: `targetRef` for direct target coordinates, `BGSLocation::worldLocMarker` when an interior/deleted/no-worldspace target was projected to its map marker, or `targetRef:noLocationMarker` when a location was found but it had no world marker. |
+| `coordinateSource` | `string` | Source used for `x`/`y`/`z`: `targetRef` for direct target coordinates, `BGSLocation::worldLocMarker` for direct location projection, `BGSLocation::parentLoc.worldLocMarker` when a parent location supplied the map marker, or `targetRef:noLocationMarker` when no map marker could be found. |
 | `coordinateRefId` | `string` | Hex form ID of the reference used for the spatial fields. Usually the same as `refId`; for interior targets this is usually the location's map marker reference. |
 | `coordinateRefName` | `string` | Display name of `coordinateRefId`, when available. |
 | `locationFormId` | `string \| null` | Hex form ID of the `BGSLocation` considered for map-marker projection, or `null` when no location was resolved. |
 | `locationEditorId` | `string \| null` | Editor ID of that `BGSLocation`, or `null`. |
 | `locationName` | `string \| null` | Localised name of that `BGSLocation`, or `null`. |
+| `localX` | `float` | Raw X coordinate of the actual quest target reference. For interior targets this is local to the interior cell. |
+| `localY` | `float` | Raw Y coordinate of the actual quest target reference. |
+| `localZ` | `float` | Raw Z coordinate of the actual quest target reference. |
+| `localWorldspace` | `string \| null` | EditorID of the actual target reference's worldspace. `null` for interior targets. |
+| `localWorldspaceFormId` | `string \| null` | Hex form ID of the actual target reference's worldspace. |
+| `localParentWorldspace` | `string \| null` | EditorID of the root worldspace for the actual target reference, when it has a worldspace. |
+| `localParentWorldspaceFormId` | `string \| null` | Hex form ID of that root worldspace. |
+| `localCell` | `string \| null` | EditorID of the actual target reference's parent cell. |
+| `localCellFormId` | `string \| null` | Hex form ID of the actual target reference's parent cell. |
+| `localIsInterior` | `bool` | `true` if the actual target reference's parent cell is an interior. |
 | `x` | `float` | Map-facing X coordinate of the quest marker. For interior targets this is the location world marker coordinate when available. |
 | `y` | `float` | Map-facing Y coordinate of the quest marker. |
 | `z` | `float` | Map-facing Z coordinate of the quest marker. |
@@ -314,6 +327,14 @@ coordinates already point at the location marker / entrance on the world map.
         "locationFormId": "0x00018A4A",
         "locationEditorId": "WhiterunLocation",
         "locationName": "Whiterun",
+        "localX": 128.0, "localY": -512.0, "localZ": 64.0,
+        "localWorldspace": null,
+        "localWorldspaceFormId": null,
+        "localParentWorldspace": null,
+        "localParentWorldspaceFormId": null,
+        "localCell": "WhiterunDragonsreach",
+        "localCellFormId": "0x000165A8",
+        "localIsInterior": true,
         "x": 18142.5, "y": -14520.3, "z": 0.0,
         "worldspace": "Tamriel",
         "worldspaceFormId": "0x0000003C",

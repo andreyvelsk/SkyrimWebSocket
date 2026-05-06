@@ -1002,8 +1002,10 @@ namespace PlayerReader
                 return out;
 
             auto* cell = targetRef->GetParentCell();
+            auto* world = targetRef->GetWorldspace();
             const bool needsLocationMarker = targetRef->IsDeleted() ||
-                                             !targetRef->GetWorldspace() ||
+                                             !world ||
+                                             world->parentWorld ||
                                              (cell && cell->IsInteriorCell());
             if (!needsLocationMarker)
                 return out;
@@ -1013,69 +1015,124 @@ namespace PlayerReader
                 return out;
 
             out.location = location;
-            out.locationMarkerRef = location->worldLocMarker.get();
-            if (out.locationMarkerRef) {
-                out.ref = out.locationMarkerRef.get();
-                out.source = "BGSLocation::worldLocMarker";
-            } else {
-                out.source = "targetRef:noLocationMarker";
+            for (auto* candidate = location; candidate; candidate = candidate->parentLoc) {
+                out.locationMarkerRef = candidate->worldLocMarker.get();
+                if (out.locationMarkerRef) {
+                    out.location = candidate;
+                    out.ref = out.locationMarkerRef.get();
+                    out.source = candidate == location
+                                     ? "BGSLocation::worldLocMarker"
+                                     : "BGSLocation::parentLoc.worldLocMarker";
+                    return out;
+                }
             }
 
+            out.source = "targetRef:noLocationMarker";
             return out;
         }
 
-        void WriteReferenceSpatialJson(nlohmann::json& out, RE::TESObjectREFR* ref)
+        struct ReferenceSpatialJsonKeys
+        {
+            const char* x;
+            const char* y;
+            const char* z;
+            const char* worldspace;
+            const char* worldspaceFormId;
+            const char* parentWorldspace;
+            const char* parentWorldspaceFormId;
+            const char* cell;
+            const char* cellFormId;
+            const char* isInterior;
+        };
+
+        void WriteReferenceSpatialJson(nlohmann::json& out,
+                                       RE::TESObjectREFR* ref,
+                                       const ReferenceSpatialJsonKeys& keys)
         {
             const auto formIdStr = [](RE::FormID id) {
                 return std::format("0x{:08X}", id);
             };
 
             if (!ref) {
-                out["x"]                      = nullptr;
-                out["y"]                      = nullptr;
-                out["z"]                      = nullptr;
-                out["worldspace"]             = nullptr;
-                out["worldspaceFormId"]       = nullptr;
-                out["parentWorldspace"]       = nullptr;
-                out["parentWorldspaceFormId"] = nullptr;
-                out["cell"]                   = nullptr;
-                out["cellFormId"]             = nullptr;
-                out["isInterior"]             = false;
+                out[keys.x]                      = nullptr;
+                out[keys.y]                      = nullptr;
+                out[keys.z]                      = nullptr;
+                out[keys.worldspace]             = nullptr;
+                out[keys.worldspaceFormId]       = nullptr;
+                out[keys.parentWorldspace]       = nullptr;
+                out[keys.parentWorldspaceFormId] = nullptr;
+                out[keys.cell]                   = nullptr;
+                out[keys.cellFormId]             = nullptr;
+                out[keys.isInterior]             = false;
                 return;
             }
 
-            out["x"] = ref->GetPositionX();
-            out["y"] = ref->GetPositionY();
-            out["z"] = ref->GetPositionZ();
+            out[keys.x] = ref->GetPositionX();
+            out[keys.y] = ref->GetPositionY();
+            out[keys.z] = ref->GetPositionZ();
 
             if (auto* world = ref->GetWorldspace()) {
                 const char* edid = world->GetFormEditorID();
-                out["worldspace"]       = edid ? std::string(edid) : std::string();
-                out["worldspaceFormId"] = formIdStr(world->GetFormID());
+                out[keys.worldspace]       = edid ? std::string(edid) : std::string();
+                out[keys.worldspaceFormId] = formIdStr(world->GetFormID());
 
                 auto* root = world;
                 while (root->parentWorld)
                     root = root->parentWorld;
                 const char* rootEdid = root->GetFormEditorID();
-                out["parentWorldspace"]       = rootEdid ? std::string(rootEdid) : std::string();
-                out["parentWorldspaceFormId"] = formIdStr(root->GetFormID());
+                out[keys.parentWorldspace]       = rootEdid ? std::string(rootEdid) : std::string();
+                out[keys.parentWorldspaceFormId] = formIdStr(root->GetFormID());
             } else {
-                out["worldspace"]             = nullptr;
-                out["worldspaceFormId"]       = nullptr;
-                out["parentWorldspace"]       = nullptr;
-                out["parentWorldspaceFormId"] = nullptr;
+                out[keys.worldspace]             = nullptr;
+                out[keys.worldspaceFormId]       = nullptr;
+                out[keys.parentWorldspace]       = nullptr;
+                out[keys.parentWorldspaceFormId] = nullptr;
             }
 
             if (auto* cell = ref->GetParentCell()) {
                 const char* cedid = cell->GetFormEditorID();
-                out["cell"]       = cedid ? std::string(cedid) : std::string();
-                out["cellFormId"] = formIdStr(cell->GetFormID());
-                out["isInterior"] = cell->IsInteriorCell();
+                out[keys.cell]       = cedid ? std::string(cedid) : std::string();
+                out[keys.cellFormId] = formIdStr(cell->GetFormID());
+                out[keys.isInterior] = cell->IsInteriorCell();
             } else {
-                out["cell"]       = nullptr;
-                out["cellFormId"] = nullptr;
-                out["isInterior"] = false;
+                out[keys.cell]       = nullptr;
+                out[keys.cellFormId] = nullptr;
+                out[keys.isInterior] = false;
             }
+        }
+
+        void WriteReferenceSpatialJson(nlohmann::json& out, RE::TESObjectREFR* ref)
+        {
+            static constexpr ReferenceSpatialJsonKeys keys{
+                "x",
+                "y",
+                "z",
+                "worldspace",
+                "worldspaceFormId",
+                "parentWorldspace",
+                "parentWorldspaceFormId",
+                "cell",
+                "cellFormId",
+                "isInterior"
+            };
+            WriteReferenceSpatialJson(out, ref, keys);
+        }
+
+        void WriteReferenceLocalSpatialJson(nlohmann::json& out, RE::TESObjectREFR* ref)
+        {
+            static constexpr ReferenceSpatialJsonKeys keys{
+                "localX",
+                "localY",
+                "localZ",
+                "localWorldspace",
+                "localWorldspaceFormId",
+                "localParentWorldspace",
+                "localParentWorldspaceFormId",
+                "localCell",
+                "localCellFormId",
+                "localIsInterior"
+            };
+            WriteReferenceSpatialJson(out, ref, keys);
         }
 
         nlohmann::json QuestMarkerCoordinatesJson(const QuestMarkerCoordinates& coordinates)
@@ -1726,13 +1783,16 @@ namespace PlayerReader
                 entry["locationName"]     = nullptr;
             }
 
+            WriteReferenceLocalSpatialJson(entry, ref);
             WriteReferenceSpatialJson(entry, coordinateRef);
 
-            logger::debug("[Map::Markers::Quests] emit quest='{}' (type={}, formId={}) obj#{} alias={} ref={} '{}' coordRef={} source={}",
+            logger::debug("[Map::Markers::Quests] emit quest='{}' (type={}, formId={}) obj#{} alias={} ref={} '{}' local=({}, {}, {}) coordRef={} source={} map=({}, {}, {})",
                           questEditorId, std::string(QuestTypeName(quest->GetType())),
                           formIdStr(quest->GetFormID()), objective->index, aliasID,
                           formIdStr(ref->GetFormID()), entry["name"].get<std::string>(),
-                          formIdStr(coordinateRef->GetFormID()), coordinates.source);
+                          ref->GetPositionX(), ref->GetPositionY(), ref->GetPositionZ(),
+                          formIdStr(coordinateRef->GetFormID()), coordinates.source,
+                          coordinateRef->GetPositionX(), coordinateRef->GetPositionY(), coordinateRef->GetPositionZ());
 
             result.push_back(std::move(entry));
             return true;
