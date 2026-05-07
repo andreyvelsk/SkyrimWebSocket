@@ -1,4 +1,5 @@
 #include "logger.h"
+#include "src/game/EventBus.h"
 #include "src/server/WsServer.h"
 
 #include <DbgHelp.h>
@@ -141,6 +142,11 @@ SKSEPluginLoad(const SKSE::LoadInterface* skse)
     // require an actual in-game session (see FieldRegistry::IsInGame).
     SKSE::GetMessagingInterface()->RegisterListener([](SKSE::MessagingInterface::Message* msg) {
         if (msg->type == SKSE::MessagingInterface::kDataLoaded && !g_server) {
+            // Wire up SKSE event sinks for the event-driven optimisation
+            // layer.  Must run on the game thread — kDataLoaded is delivered
+            // there.
+            EventBus::Install();
+
             std::string iniPath = GetIniPath();
 
             char addressBuf[64];

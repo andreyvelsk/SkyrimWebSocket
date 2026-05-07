@@ -110,46 +110,362 @@ the server is alive and reachable. The server replies immediately with a
 
 ### `command`
 
-Sends a game command (e.g. equip, unequip, use, drop, favorite, hotkey control). The server
-validates the request and executes it on the game thread, then replies with a
-`"commandResult"` message.
+Sends a game command. The server validates the request, executes it on the
+game thread, and replies with a `"commandResult"` message.
 
-```jsonc
-{
-  "type": "command",
-  "id": "cmd-1",            // unique request identifier (required)
-  "command": "equip",       // command name (required): equip | unequip | use | drop | favorite | equip_spell | unequip_spell | favorite_spell | hotkey_set | hotkey_clear | hotkey_trigger
-  "formId": "0x00012EB7",  // item or spell form ID as hex string (required for most commands, plus hotkey_set)
-  "hand": "right",          // equip/unequip hand: "right" or "left" (optional, default: "right")
-  "count": 1,               // drop count (optional, default: 1, only used by "drop")
-  "slot": 1                 // hotkey slot 1..8 (required for hotkey_set, hotkey_clear, hotkey_trigger)
-}
-```
+#### Common envelope
+
+Every `command` message shares the same three top-level fields. Additional
+fields are command-specific and are documented in the per-command sections
+below.
+
+| Field | Required | Description |
+|---|---|---|
+| `type` | **yes** | Always the literal string `"command"`. |
+| `id` | **yes** | Unique identifier echoed back in the `"commandResult"` response. |
+| `command` | **yes** | The command name. See the list below. |
+
+#### Command catalogue
+
+| Command | Purpose | Section |
+|---|---|---|
+| `equip` | Equip an inventory item (weapon / apparel / ammo). | [↓](#equip) |
+| `unequip` | Unequip an item. | [↓](#unequip) |
+| `use` | Consume a potion / food / ingredient / scroll. | [↓](#use) |
+| `drop` | Drop one or more inventory items onto the ground. | [↓](#drop) |
+| `favorite` | Toggle the favorite flag on an inventory item. | [↓](#favorite) |
+| `equip_spell` | Equip a known spell to a hand. | [↓](#equip_spell) |
+| `unequip_spell` | Unequip a spell from a hand. | [↓](#unequip_spell) |
+| `favorite_spell` | Toggle the favorite flag on a known spell. | [↓](#favorite_spell) |
+| `hotkey_set` | Bind an item or spell to one of the 8 hotkey slots. | [↓](#hotkey_set) |
+| `hotkey_clear` | Clear a hotkey slot. | [↓](#hotkey_clear) |
+| `hotkey_trigger` | Fire the action bound to a hotkey slot. | [↓](#hotkey_trigger) |
+| `player_marker_set` | Place / move the player's custom map marker. | [↓](#player_marker_set) |
+| `player_marker_clear` | Hide the player's custom map marker. | [↓](#player_marker_clear) |
+| `fast_travel` | Teleport the player to a discovered map marker. | [↓](#fast_travel) |
+
+---
+
+#### `equip`
+
+Equips an inventory item.
 
 | Field | Required | Default | Description |
 |---|---|---|---|
-| `id` | **yes** | — | Unique identifier echoed back in the `"commandResult"` response. |
-| `command` | **yes** | — | One of: `equip`, `unequip`, `use`, `drop`, `favorite`, `equip_spell`, `unequip_spell`, `favorite_spell`, `hotkey_set`, `hotkey_clear`, `hotkey_trigger`. |
-| `formId` | conditional | — | Hex form ID of the target item/spell. Required for all commands **except** `hotkey_clear` and `hotkey_trigger`. |
-| `hand` | no | `"right"` | Target hand for weapons and spells: `"right"` or `"left"`. Ignored for non-weapon items and non-spell commands. Two-handed weapons and master-level spells only accept `"right"`. |
-| `count` | no | `1` | Number of items to drop. Only used by the `drop` command. |
-| `slot` | conditional | — | Hotkey slot number in the range `1..8`. Required by `hotkey_set`, `hotkey_clear`, and `hotkey_trigger`. Ignored otherwise. |
+| `formId` | **yes** | — | Hex form ID of the item to equip. Must be present in inventory. |
+| `hand` | no | `"right"` | Weapons only: `"right"` or `"left"`. Two-handed weapons only accept `"right"`. Ignored for apparel and ammo (slot is auto-selected). |
 
-#### Command details
+**Applies to:** Weapons, Apparel, Ammo.
 
-| Command | Applies to | Behaviour |
-|---|---|---|
-| `equip` | Weapons, Apparel, Ammo | Equips the item. Weapons use the `hand` parameter to select left/right hand. Apparel and ammo auto-select the correct slot. |
-| `unequip` | Weapons, Apparel, Ammo | Removes the equipped item. For weapons, `hand` specifies which hand to unequip from. |
-| `use` | Potions, Food, Ingredients, Scrolls | Consumes the item (applies effect). Scrolls are equipped for casting. |
-| `drop` | Any item | Drops `count` items from inventory onto the ground. |
-| `favorite` | Any item | Toggles the item's favorite status on/off. |
-| `equip_spell` | Spells (must be known by player) | Equips a known spell to a hand slot for casting. The `hand` parameter specifies `"right"` or `"left"`. Master-level spells automatically equip to both hands and cannot be single-handed. |
-| `unequip_spell` | Spells (must be equipped) | Unequips a spell from a hand slot. If a non-master spell is dual-cast and unequipped from one hand, it remains equipped in the other hand. Master-level spells are removed from both hands. |
-| `favorite_spell` | Spells (must be known by player) | Toggles the spell's favorite status on/off. Favorited spells appear in the magic favorites list in the spell menu. |
-| `hotkey_set` | Inventory items *or* spells/shouts/powers | Binds the given `formId` to the given `slot` (1..8). For spells, the form must be known by the player and of a hotkeyable type (spell, power, lesser power, voice power, shout). For items, the form must be present in the inventory. Replaces any previous binding for that slot and automatically favourites the target if needed. Skyrim supports exactly eight hotkey slots — requests for slots outside `1..8` are rejected. |
-| `hotkey_clear` | — | Removes the binding on the given `slot` (1..8). No-op if the slot is already empty. |
-| `hotkey_trigger` | — | Fires the action bound to the given `slot` by synthesizing a `Hotkey<N>` button event and dispatching it through the engine's own `FavoritesHandler`. Behavior is bit-for-bit identical to the player physically pressing the corresponding number key in gameplay: spells toggle right-hand → left-hand → unequip, weapons toggle equip ↔ unequip (with the special two-handed/dual-wield rules), shouts/powers go to the voice slot, consumables are used, etc. Always succeeds when slot is valid (no error if the slot is empty — the engine simply does nothing, just like vanilla). |
+```json
+{
+  "type": "command",
+  "id": "equip-sword",
+  "command": "equip",
+  "formId": "0x00012EB7",
+  "hand": "left"
+}
+```
+
+---
+
+#### `unequip`
+
+Removes an equipped item.
+
+| Field | Required | Default | Description |
+|---|---|---|---|
+| `formId` | **yes** | — | Hex form ID of the item to unequip. |
+| `hand` | no | `"right"` | Weapons only: which hand to unequip from. Ignored for apparel and ammo. |
+
+**Applies to:** Weapons, Apparel, Ammo.
+
+```json
+{
+  "type": "command",
+  "id": "unequip-sword",
+  "command": "unequip",
+  "formId": "0x00012EB7",
+  "hand": "left"
+}
+```
+
+---
+
+#### `use`
+
+Consumes a usable item (applies its effect). Scrolls are equipped for casting
+instead of being consumed immediately.
+
+| Field | Required | Default | Description |
+|---|---|---|---|
+| `formId` | **yes** | — | Hex form ID of the item to use. Must be present in inventory. |
+
+**Applies to:** Potions, Food, Ingredients, Scrolls.
+
+```json
+{
+  "type": "command",
+  "id": "use-potion",
+  "command": "use",
+  "formId": "0x00039BE5"
+}
+```
+
+---
+
+#### `drop`
+
+Drops items from the inventory onto the ground in front of the player.
+
+| Field | Required | Default | Description |
+|---|---|---|---|
+| `formId` | **yes** | — | Hex form ID of the item to drop. |
+| `count` | no | `1` | Number of copies to drop. Clamped to the amount actually owned. |
+
+**Applies to:** Any inventory item.
+
+```json
+{
+  "type": "command",
+  "id": "drop-arrows",
+  "command": "drop",
+  "formId": "0x0003BE11",
+  "count": 10
+}
+```
+
+---
+
+#### `favorite`
+
+Toggles the favorite flag on an inventory item.
+
+| Field | Required | Default | Description |
+|---|---|---|---|
+| `formId` | **yes** | — | Hex form ID of the item. Must be present in inventory. |
+
+**Applies to:** Any inventory item.
+
+```json
+{
+  "type": "command",
+  "id": "fav-sword",
+  "command": "favorite",
+  "formId": "0x00012EB7"
+}
+```
+
+---
+
+#### `equip_spell`
+
+Equips a known spell to a hand for casting.
+
+| Field | Required | Default | Description |
+|---|---|---|---|
+| `formId` | **yes** | — | Hex form ID of the spell. Must be known by the player. |
+| `hand` | no | `"right"` | `"right"` or `"left"`. Master-level spells always equip to both hands and only accept `"right"`. Equipping a non-master spell to the opposite hand while it is already in the first will dual-cast it. |
+
+**Applies to:** Spells known by the player.
+
+```json
+{
+  "type": "command",
+  "id": "equip-fireball",
+  "command": "equip_spell",
+  "formId": "0x0000A23E",
+  "hand": "right"
+}
+```
+
+---
+
+#### `unequip_spell`
+
+Unequips a spell from a hand.
+
+| Field | Required | Default | Description |
+|---|---|---|---|
+| `formId` | **yes** | — | Hex form ID of the spell. Must currently be equipped. |
+| `hand` | no | `"right"` | `"right"` or `"left"`. For dual-cast non-master spells, only the specified hand is cleared. Master-level spells are always removed from both hands. |
+
+**Applies to:** Currently equipped spells.
+
+```json
+{
+  "type": "command",
+  "id": "unequip-fireball-right",
+  "command": "unequip_spell",
+  "formId": "0x0000A23E",
+  "hand": "right"
+}
+```
+
+---
+
+#### `favorite_spell`
+
+Toggles the favorite flag on a known spell. Favorited spells appear in the
+magic favorites list of the spell menu.
+
+| Field | Required | Default | Description |
+|---|---|---|---|
+| `formId` | **yes** | — | Hex form ID of the spell. Must be known by the player. |
+
+**Applies to:** Spells known by the player.
+
+```json
+{
+  "type": "command",
+  "id": "fav-spell",
+  "command": "favorite_spell",
+  "formId": "0x0000A23E"
+}
+```
+
+---
+
+#### `hotkey_set`
+
+Binds an item or spell to one of the 8 hotkey slots. Replaces any previous
+binding for the slot and automatically favourites the target if needed.
+
+| Field | Required | Default | Description |
+|---|---|---|---|
+| `slot` | **yes** | — | Hotkey slot in the range `1..8`. |
+| `formId` | **yes** | — | Hex form ID of the item or spell to bind. For items, must be present in inventory. For spells/shouts/powers, must be known by the player and of a hotkeyable type (spell, power, lesser power, voice power, shout). |
+
+**Applies to:** Inventory items, spells, shouts, powers.
+
+```json
+{
+  "type": "command",
+  "id": "hk-set-1",
+  "command": "hotkey_set",
+  "slot": 1,
+  "formId": "0x0000A23E"
+}
+```
+
+---
+
+#### `hotkey_clear`
+
+Removes the binding on the given hotkey slot. No-op if the slot is already
+empty.
+
+| Field | Required | Default | Description |
+|---|---|---|---|
+| `slot` | **yes** | — | Hotkey slot in the range `1..8`. |
+
+```json
+{
+  "type": "command",
+  "id": "hk-clear-1",
+  "command": "hotkey_clear",
+  "slot": 1
+}
+```
+
+---
+
+#### `hotkey_trigger`
+
+Fires the action bound to a hotkey slot by synthesizing a `Hotkey<N>` button
+event through the engine's own `FavoritesHandler`. Behaviour is bit-for-bit
+identical to the player physically pressing the corresponding number key:
+spells toggle right-hand → left-hand → unequip, weapons toggle equip ↔
+unequip (with two-handed / dual-wield rules), shouts and powers go to the
+voice slot, consumables are used, etc. Always succeeds when `slot` is valid;
+empty slots are silently ignored, just like vanilla.
+
+| Field | Required | Default | Description |
+|---|---|---|---|
+| `slot` | **yes** | — | Hotkey slot in the range `1..8`. |
+
+```json
+{
+  "type": "command",
+  "id": "hk-trigger-1",
+  "command": "hotkey_trigger",
+  "slot": 1
+}
+```
+
+---
+
+#### `player_marker_set`
+
+Places (or moves) the player's custom map marker and makes it visible /
+fast-travel-enabled. Coordinates are in the marker's worldspace — in vanilla
+play that is the global parent worldspace (Tamriel). Returns the new marker
+state in `data` (same shape as the `Player::Marker` field). Fails if the
+marker reference has not been initialized yet — open the world map at least
+once in the save before calling this command.
+
+| Field | Required | Default | Description |
+|---|---|---|---|
+| `x` | **yes** | — | X coordinate in the marker's worldspace. |
+| `y` | **yes** | — | Y coordinate in the marker's worldspace. |
+| `z` | no | `0` | Z coordinate. The marker is displayed on the world map regardless of Z. |
+
+```json
+{
+  "type": "command",
+  "id": "marker-set",
+  "command": "player_marker_set",
+  "x": 18000.0,
+  "y": -15200.0
+}
+```
+
+See [docs/Player.md](docs/Player.md) for full response details.
+
+---
+
+#### `player_marker_clear`
+
+Hides the player's custom map marker. The underlying reference is preserved
+and reused next time `player_marker_set` is called. Always succeeds. Returns
+the resulting marker state in `data` (with `isSet: false`).
+
+This command takes no parameters beyond the common envelope.
+
+```json
+{
+  "type": "command",
+  "id": "marker-clear",
+  "command": "player_marker_clear"
+}
+```
+
+---
+
+#### `fast_travel`
+
+Teleports the player to a discovered map marker. Mirrors the engine's
+pre-flight checks: the marker must exist, be visible (discovered), have
+`canFastTravel=true`, the player must not be in combat, and fast travel must
+not be globally disabled by the worldspace. Returns the destination marker
+info in `data` (`refId`, `name`, `typeId`, `x`, `y`, `isVisible`,
+`canFastTravel`).
+
+| Field | Required | Default | Description |
+|---|---|---|---|
+| `formId` | **yes** | — | Hex form ID of the map-marker reference. Use the `refId` value returned by `Map::Markers::Locations`. |
+
+```json
+{
+  "type": "command",
+  "id": "ft-1",
+  "command": "fast_travel",
+  "formId": "0x000136D5"
+}
+```
+
+See [docs/Map.md](docs/Map.md) for the full pre-flight check list and
+response details.
 
 ---
 
@@ -449,101 +765,11 @@ independent intervals. To stop only the skill subscription:
 
 ---
 
-### Example 7 — Equip a one-handed weapon to the left hand
+### Example 7 — Command validation error
 
-**Client sends:**
-```json
-{
-  "type": "command",
-  "id": "equip-sword",
-  "command": "equip",
-  "formId": "0x00012EB7",
-  "hand": "left"
-}
-```
-
-**Server replies:**
-```json
-{
-  "type": "commandResult",
-  "id": "equip-sword",
-  "success": true
-}
-```
-
----
-
-### Example 8 — Use a potion
-
-**Client sends:**
-```json
-{
-  "type": "command",
-  "id": "use-potion",
-  "command": "use",
-  "formId": "0x00039BE5"
-}
-```
-
-**Server replies:**
-```json
-{
-  "type": "commandResult",
-  "id": "use-potion",
-  "success": true
-}
-```
-
----
-
-### Example 9 — Drop multiple items
-
-**Client sends:**
-```json
-{
-  "type": "command",
-  "id": "drop-arrows",
-  "command": "drop",
-  "formId": "0x0003BE11",
-  "count": 10
-}
-```
-
-**Server replies:**
-```json
-{
-  "type": "commandResult",
-  "id": "drop-arrows",
-  "success": true
-}
-```
-
----
-
-### Example 10 — Toggle favorite on an item
-
-**Client sends:**
-```json
-{
-  "type": "command",
-  "id": "fav-sword",
-  "command": "favorite",
-  "formId": "0x00012EB7"
-}
-```
-
-**Server replies:**
-```json
-{
-  "type": "commandResult",
-  "id": "fav-sword",
-  "success": true
-}
-```
-
----
-
-### Example 11 — Command validation error
+Per-command request examples are inlined in each command's section above.
+This example shows the failure-response shape, which is the same for every
+command.
 
 **Client sends (item not in inventory):**
 ```json
@@ -562,126 +788,6 @@ independent intervals. To stop only the skill subscription:
   "id": "bad-equip",
   "success": false,
   "error": "Item not in inventory"
-}
-```
-
----
-
-### Example 12 — Equip a spell to the right hand
-
-**Client sends:**
-```json
-{
-  "type": "command",
-  "id": "equip-fireball",
-  "command": "equip_spell",
-  "formId": "0x0000A23E",
-  "hand": "right"
-}
-```
-
-**Server replies:**
-```json
-{
-  "type": "commandResult",
-  "id": "equip-fireball",
-  "success": true
-}
-```
-
----
-
-### Example 13 — Dual-cast a spell (equip to both hands)
-
-**Client sends (equip non-master spell to left hand, will dual-cast if already in right):**
-```json
-{
-  "type": "command",
-  "id": "dual-cast-spell",
-  "command": "equip_spell",
-  "formId": "0x0000A23E",
-  "hand": "left"
-}
-```
-
-**Server replies:**
-```json
-{
-  "type": "commandResult",
-  "id": "dual-cast-spell",
-  "success": true
-}
-```
-
----
-
-### Example 14 — Unequip a spell from one hand
-
-**Client sends (unequip from right hand, keeping left if it was dual-cast):**
-```json
-{
-  "type": "command",
-  "id": "unequip-fireball-right",
-  "command": "unequip_spell",
-  "formId": "0x0000A23E",
-  "hand": "right"
-}
-```
-
-**Server replies:**
-```json
-{
-  "type": "commandResult",
-  "id": "unequip-fireball-right",
-  "success": true
-}
-```
-
----
-
-### Example 15 — Spell equip validation error
-
-**Client sends (spell not known by player):**
-```json
-{
-  "type": "command",
-  "id": "bad-spell",
-  "command": "equip_spell",
-  "formId": "0xDEADBEEF",
-  "hand": "right"
-}
-```
-
-**Server replies:**
-```json
-{
-  "type": "commandResult",
-  "id": "bad-spell",
-  "success": false,
-  "error": "Spell not known by player"
-}
-```
-
----
-
-### Example 16 — Favorite a spell
-
-**Client sends:**
-```json
-{
-  "type": "command",
-  "id": "fav-spell",
-  "command": "favorite_spell",
-  "formId": "0x0000A23E"
-}
-```
-
-**Server replies:**
-```json
-{
-  "type": "commandResult",
-  "id": "fav-spell",
-  "success": true
 }
 ```
 

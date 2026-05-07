@@ -1,4 +1,5 @@
 #include "GameReader.h"
+#include "EventBus.h"
 #include "FieldRegistry.h"
 
 #include <chrono>
@@ -78,9 +79,42 @@ namespace GameReader
             // --- JSON fields (inventory, etc.) ---
             auto jsonEntryOpt = FieldRegistry::ResolveJson(registryKey);
             if (jsonEntryOpt) {
+                // Event-driven fast path: if the registry key is wired to
+                // EventBus and its version has not advanced since we last
+                // resolved this alias, skip the resolve+serialise entirely.
+                // Only valid in sendOnChange mode (otherwise we have to emit
+                // the cached value every tick, which defeats the purpose).
+                if (state.sendOnChange && EventBus::IsEventDriven(registryKey)) {
+                    const auto currentVersion = EventBus::GetVersion(registryKey);
+                    auto       lvIt           = state.lastVersions.find(alias);
+                    auto       cacheIt        = state.lastValues.find(alias);
+                    if (lvIt != state.lastVersions.end() &&
+                        lvIt->second == currentVersion &&
+                        cacheIt != state.lastValues.end()) {
+                        // No event since last resolve — value is guaranteed
+                        // unchanged from our perspective; skip without
+                        // touching the resolver or the shared cache.
+                        continue;
+                    }
+                }
+
                 nlohmann::json val;
                 if (jsonEntryOpt->requiresInGame && !inGame) {
                     val = nullptr;
+                    if (state.sendOnChange && EventBus::IsEventDriven(registryKey))
+                        state.lastVersions[alias] = EventBus::GetVersion(registryKey);
+                } else if (EventBus::IsEventDriven(registryKey)) {
+                    // Shared cache: the resolver runs at most once per
+                    // (key, version) across ALL subscribers.  This is what
+                    // makes the heavy walk (e.g. Map::Markers::Locations across every
+                    // worldspace) cost O(1) per poll once the value has
+                    // been computed for the current version.
+                    const auto& jsonEntry = *jsonEntryOpt;
+                    auto cached = EventBus::ResolveCached(registryKey,
+                                                          [&]() { return jsonEntry.resolve(); });
+                    val = std::move(cached.value);
+                    if (state.sendOnChange)
+                        state.lastVersions[alias] = cached.version;
                 } else {
                     val = jsonEntryOpt->resolve();
                 }

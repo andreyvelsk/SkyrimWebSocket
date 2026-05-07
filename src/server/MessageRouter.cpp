@@ -85,6 +85,56 @@ namespace MessageRouter
         const std::string cmdId   = msg["id"].get<std::string>();
         const std::string command = msg["command"].get<std::string>();
 
+        // Player-placed map marker commands have their own argument shape
+        // (coordinates, no formId). Dispatch them before the generic
+        // formId-required path.
+        if (command == "player_marker_set" || command == "player_marker_clear") {
+            if (command == "player_marker_set") {
+                const auto getNum = [&](const char* key, float& out) -> bool {
+                    if (!msg.contains(key) || !msg[key].is_number())
+                        return false;
+                    out = msg[key].get<float>();
+                    return true;
+                };
+                float x = 0, y = 0, z = 0;
+                if (!getNum("x", x) || !getNum("y", y)) {
+                    nlohmann::json err;
+                    err["type"]    = "commandResult";
+                    err["id"]      = cmdId;
+                    err["success"] = false;
+                    err["error"]   = "player_marker_set requires numeric 'x' and 'y' (and optional numeric 'z')";
+                    session->send(err.dump());
+                    return;
+                }
+                // 'z' is optional — defaults to 0 when omitted.
+                if (msg.contains("z")) {
+                    if (!msg["z"].is_number()) {
+                        nlohmann::json err;
+                        err["type"]    = "commandResult";
+                        err["id"]      = cmdId;
+                        err["success"] = false;
+                        err["error"]   = "player_marker_set 'z' must be numeric when present";
+                        session->send(err.dump());
+                        return;
+                    }
+                    z = msg["z"].get<float>();
+                }
+
+                SKSE::GetTaskInterface()->AddTask([session, cmdId, x, y, z]() {
+                    auto        result = GameWriter::SetPlayerMarker(x, y, z);
+                    std::string json   = BuildCommandResultJson(cmdId, result);
+                    asio::post(session->ioc(), [session, json] { session->send(json); });
+                });
+            } else {  // player_marker_clear
+                SKSE::GetTaskInterface()->AddTask([session, cmdId]() {
+                    auto        result = GameWriter::ClearPlayerMarker();
+                    std::string json   = BuildCommandResultJson(cmdId, result);
+                    asio::post(session->ioc(), [session, json] { session->send(json); });
+                });
+            }
+            return;
+        }
+
         // Hotkey commands have different argument shapes; dispatch them
         // separately so we don't force a formId on clear/trigger.
         if (command == "hotkey_set" || command == "hotkey_clear" ||
@@ -187,6 +237,8 @@ namespace MessageRouter
                 result = GameWriter::UnequipSpell(formId, hand);
             else if (command == "favorite_spell")
                 result = GameWriter::FavoriteSpell(formId);
+            else if (command == "fast_travel")
+                result = GameWriter::FastTravelToMarker(formId);
             else
                 result = {false, "Unknown command: '" + command + "'"};
 

@@ -3,6 +3,7 @@
 #include "InventoryReader.h"
 #include "MagicReader.h"
 #include "PlayerReader.h"
+#include "../AppFeatures.h"
 
 #include <nlohmann/json.hpp>
 
@@ -297,6 +298,53 @@ namespace FieldRegistry
         { "Game::Status",
           { "Current game/player state flags: paused, loading, inMainMenu, inDialogue, inCombat, dead, controlsEnabled, canAct", "object",
             &PlayerReader::ReadGameStatus, /*requiresInGame=*/false } },
+
+        // Player position and heading
+        { "Player::Position",
+          { "Player position and heading in the current worldspace/cell: { x, y, z, angle, worldspace, worldspaceFormId, parentWorldspace, parentWorldspaceFormId, cell, cellFormId, isInterior }. x/y/z are local to the current worldspace (or interior); worldspace fields are null in interiors. parentWorldspace walks up to the root world (e.g. Tamriel for city sub-worlds).", "object",
+            &PlayerReader::ReadPosition } },
+
+        // Last known exterior position (for placing the player on the global
+        // map while inside an interior or a city sub-worldspace)
+        { "Player::ExteriorPosition",
+          { "Last known exterior position cached by the game: { x, y, z, worldspace, worldspaceFormId, parentWorldspace, parentWorldspaceFormId }. Updated whenever the player is in an exterior cell; remains valid while in interiors. Useful for showing the player on a global (parent) worldspace map.", "object",
+            &PlayerReader::ReadExteriorPosition } },
+
+        // Map markers
+        { "Map::Markers::Locations",
+          { "Array of map markers currently shown on the player's world map (only entries with isVisible=true — i.e. pre-discovered cities, locations the player has discovered, and quest-script-revealed markers). Each entry: { refId, name, type, typeId, x, y, isVisible, canFastTravel }.",
+            "array",
+            &PlayerReader::ReadMapMarkers } },
+        { "Map::Markers::All",
+          { "Array of ALL map markers in every loaded worldspace, including undiscovered/hidden ones. Same entry shape as Map::Markers::Locations.",
+            "array",
+            &PlayerReader::ReadMapMarkersAll } },
+        { "Map::Markers::Quests",
+          { "Array of active quest-marker destinations (the markers Skyrim renders as the floating quest arrows on the compass and as quest-target icons on the world map). On SE/AE this uses PlayerCharacter::questTargets plus TESQuest::IsActive()/QuestFlag::kActive, the journal tracking bit set through SetActiveQuest / the journal UI; Miscellaneous targets also honor the journal's master Miscellaneous toggle when observed from the journal Scaleform list or native fallback. When a target belongs to a BGSLocation, x/y/z are resolved through a map-facing location marker: BGSLocation::worldLocMarker when usable, otherwise location specialRefs / persistent-cell ExtraMapMarker refs matching Map::Markers::Locations. localX/localY/localZ keep the raw target reference coordinates; unresolved interior or child-worldspace targets return null x/y/z instead of local coordinates. Alternative target aliases resolving to the same marker are collapsed. Each entry: { questFormId, questEditorId, questName, questType, isActive, isMiscellaneous, objectiveIndex, objectiveText, objectiveTextResolved, aliasId, refId, isDeleted, name, coordinateSource, coordinateRefId, coordinateRefName, locationFormId, locationEditorId, locationName, localX, localY, localZ, localWorldspace, localWorldspaceFormId, localParentWorldspace, localParentWorldspaceFormId, localCell, localCellFormId, localIsInterior, x, y, z, worldspace, worldspaceFormId, parentWorldspace, parentWorldspaceFormId, cell, cellFormId, isInterior }. objectiveText keeps the raw template (may contain <Alias=...> placeholders for radiant quests); objectiveTextResolved resolves those aliases through the current quest instance data where possible.",
+            "array",
+            &PlayerReader::ReadQuestMarkers } },
+        { "Debug::Map::Markers::Quests",
+          { "Debug snapshot for quest marker diagnosis: runtime module, Miscellaneous master-toggle state (including Scaleform/native source), questTargets with coordinate candidates, runtime objectives, static active/displayed objectives, and current Map::Markers::Quests output.",
+            "object",
+            &PlayerReader::ReadQuestMarkersDebug } },
+
+        // Plugin feature list (app capability discovery)
+        { "App::Features",
+          { "Array of feature identifiers supported by this plugin version. Use to conditionally enable UI modules in client apps.", "array",
+            []() {
+                nlohmann::json arr = nlohmann::json::array();
+                for (const auto& f : kAppFeatures)
+                    arr.push_back(std::string(f));
+                return arr;
+            },
+            /*requiresInGame=*/false } },
+
+        // Player-placed custom map marker (the marker the player drops on
+        // the world map by clicking on it).
+        { "Player::Marker",
+          { "Player-placed custom map marker state: { isSet, x, y, z, worldspace, worldspaceFormId, parentWorldspace, parentWorldspaceFormId }. When the player has not placed a marker (or has cleared it), isSet=false and spatial fields are null. Use the player_marker_set / player_marker_clear commands to modify it.",
+            "object",
+            &PlayerReader::ReadPlayerMarker } },
     };
     // clang-format on
 
