@@ -2,6 +2,14 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+## [1.12.0](https://github.com/andreyvelsk/SkyrimWebSocket/compare/v1.11.1...v1.12.0) (2026-05-07)
+
+
+### ✨ Features
+
+* **cicd:** cmake cache ([#39](https://github.com/andreyvelsk/SkyrimWebSocket/issues/39)) ([82ee029](https://github.com/andreyvelsk/SkyrimWebSocket/commits/82ee02979d15830ffebabbf5aa7f9b283a283645))
+* **map:** get player position, map markers ([#31](https://github.com/andreyvelsk/SkyrimWebSocket/issues/31)) ([06ac9dd](https://github.com/andreyvelsk/SkyrimWebSocket/commits/06ac9dd520500b4f7de6587f546ec117edb6d9aa))
+
 ### [1.11.1](https://github.com/andreyvelsk/SkyrimWebSocket/compare/v1.11.0...v1.11.1) (2026-04-26)
 
 
