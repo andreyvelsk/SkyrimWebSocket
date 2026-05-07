@@ -3,6 +3,7 @@
 #include "InventoryReader.h"
 #include "MagicReader.h"
 #include "PlayerReader.h"
+#include "../AppFeatures.h"
 
 #include <nlohmann/json.hpp>
 
@@ -326,6 +327,17 @@ namespace FieldRegistry
           { "Debug snapshot for quest marker diagnosis: runtime module, Miscellaneous master-toggle state (including Scaleform/native source), questTargets with coordinate candidates, runtime objectives, static active/displayed objectives, and current Map::Markers::Quests output.",
             "object",
             &PlayerReader::ReadQuestMarkersDebug } },
+
+        // Plugin feature list (app capability discovery)
+        { "App::Features",
+          { "Array of feature identifiers supported by this plugin version. Use to conditionally enable UI modules in client apps.", "array",
+            []() {
+                nlohmann::json arr = nlohmann::json::array();
+                for (const auto& f : kAppFeatures)
+                    arr.push_back(std::string(f));
+                return arr;
+            },
+            /*requiresInGame=*/false } },
 
         // Player-placed custom map marker (the marker the player drops on
         // the world map by clicking on it).
