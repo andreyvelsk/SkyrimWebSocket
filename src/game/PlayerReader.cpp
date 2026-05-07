@@ -488,62 +488,6 @@ namespace PlayerReader
         };
         static PersistentRefCache s_persistentCache;
 
-        static void BuildPersistentRefCache()
-        {
-            s_persistentCache.byFormId.clear();
-            s_persistentCache.markerByLocationId.clear();
-            s_persistentCache.markerByName.clear();
-
-            auto* handler = RE::TESDataHandler::GetSingleton();
-            if (!handler) {
-                s_persistentCache.built = true;
-                return;
-            }
-
-            for (auto* world : handler->GetFormArray<RE::TESWorldSpace>()) {
-                if (!world || !world->persistentCell)
-                    continue;
-
-                world->persistentCell->ForEachReference([&](RE::TESObjectREFR& ref) {
-                    const RE::FormID fid = ref.GetFormID();
-                    if (fid)
-                        s_persistentCache.byFormId.emplace(fid, &ref);
-
-                    // Only include map-markers in exterior top-level worldspaces
-                    // in the location-keyed maps (same filter as ReadMapMarkersImpl).
-                    if (IsMapMarkerRef(&ref) && HasGlobalMapCoordinates(&ref)) {
-                        if (auto* xl = ref.extraList.GetByType<RE::ExtraLocation>()) {
-                            if (xl->location) {
-                                s_persistentCache.markerByLocationId.emplace(
-                                    xl->location->GetFormID(), &ref);
-                            }
-                        }
-                        auto* extra = ref.extraList.GetByType<RE::ExtraMapMarker>();
-                        const char* raw = extra && extra->mapData
-                                              ? extra->mapData->locationName.GetFullName()
-                                              : nullptr;
-                        if (raw && *raw) {
-                            std::string key(raw);
-                            for (auto& c : key)
-                                c = static_cast<char>(
-                                    std::tolower(static_cast<unsigned char>(c)));
-                            s_persistentCache.markerByName.emplace(std::move(key), &ref);
-                        }
-                    }
-
-                    return RE::BSContainer::ForEachResult::kContinue;
-                });
-            }
-
-            s_persistentCache.built = true;
-        }
-
-        static inline void EnsurePersistentRefCache()
-        {
-            if (!s_persistentCache.built)
-                BuildPersistentRefCache();
-        }
-
         struct MiscObjectivesVisibility
         {
             bool        visible       = true;
@@ -1063,6 +1007,62 @@ namespace PlayerReader
         bool IsMapFacingCoordinateRef(RE::TESObjectREFR* ref)
         {
             return HasGlobalMapCoordinates(ref);
+        }
+
+        static void BuildPersistentRefCache()
+        {
+            s_persistentCache.byFormId.clear();
+            s_persistentCache.markerByLocationId.clear();
+            s_persistentCache.markerByName.clear();
+
+            auto* handler = RE::TESDataHandler::GetSingleton();
+            if (!handler) {
+                s_persistentCache.built = true;
+                return;
+            }
+
+            for (auto* world : handler->GetFormArray<RE::TESWorldSpace>()) {
+                if (!world || !world->persistentCell)
+                    continue;
+
+                world->persistentCell->ForEachReference([&](RE::TESObjectREFR& ref) {
+                    const RE::FormID fid = ref.GetFormID();
+                    if (fid)
+                        s_persistentCache.byFormId.emplace(fid, &ref);
+
+                    // Only include map-markers in exterior top-level worldspaces
+                    // in the location-keyed maps (same filter as ReadMapMarkersImpl).
+                    if (IsMapMarkerRef(&ref) && HasGlobalMapCoordinates(&ref)) {
+                        if (auto* xl = ref.extraList.GetByType<RE::ExtraLocation>()) {
+                            if (xl->location) {
+                                s_persistentCache.markerByLocationId.emplace(
+                                    xl->location->GetFormID(), &ref);
+                            }
+                        }
+                        auto* extra = ref.extraList.GetByType<RE::ExtraMapMarker>();
+                        const char* raw = extra && extra->mapData
+                                              ? extra->mapData->locationName.GetFullName()
+                                              : nullptr;
+                        if (raw && *raw) {
+                            std::string key(raw);
+                            for (auto& c : key)
+                                c = static_cast<char>(
+                                    std::tolower(static_cast<unsigned char>(c)));
+                            s_persistentCache.markerByName.emplace(std::move(key), &ref);
+                        }
+                    }
+
+                    return RE::BSContainer::ForEachResult::kContinue;
+                });
+            }
+
+            s_persistentCache.built = true;
+        }
+
+        static inline void EnsurePersistentRefCache()
+        {
+            if (!s_persistentCache.built)
+                BuildPersistentRefCache();
         }
 
         template <class Callback>
