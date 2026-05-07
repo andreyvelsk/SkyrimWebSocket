@@ -5,6 +5,7 @@
 #include <array>
 #include <cctype>
 #include <optional>
+#include <unordered_map>
 #include <unordered_set>
 
 namespace PlayerReader
@@ -468,6 +469,80 @@ namespace PlayerReader
     {
         bool g_miscObjectivesVisibilityKnown = false;
         bool g_miscObjectivesVisible         = true;
+
+        // ---------------------------------------------------------------------------
+        // Persistent-ref cache
+        // Built once on first quest-marker poll, reset on save load.
+        // Avoids iterating all worldspace persistent cells on every poll.
+        // ---------------------------------------------------------------------------
+        struct PersistentRefCache
+        {
+            // All persistent refs keyed by FormID.
+            std::unordered_map<RE::FormID, RE::TESObjectREFR*> byFormId;
+            // Map-marker refs (exterior + top-level worldspace) keyed by
+            // the BGSLocation FormID attached via ExtraLocation.
+            std::unordered_map<RE::FormID, RE::TESObjectREFR*> markerByLocationId;
+            // Same refs keyed by the map-marker name (lower-case).
+            std::unordered_map<std::string, RE::TESObjectREFR*> markerByName;
+            bool built = false;
+        };
+        static PersistentRefCache s_persistentCache;
+
+        static void BuildPersistentRefCache()
+        {
+            s_persistentCache.byFormId.clear();
+            s_persistentCache.markerByLocationId.clear();
+            s_persistentCache.markerByName.clear();
+
+            auto* handler = RE::TESDataHandler::GetSingleton();
+            if (!handler) {
+                s_persistentCache.built = true;
+                return;
+            }
+
+            for (auto* world : handler->GetFormArray<RE::TESWorldSpace>()) {
+                if (!world || !world->persistentCell)
+                    continue;
+
+                world->persistentCell->ForEachReference([&](RE::TESObjectREFR& ref) {
+                    const RE::FormID fid = ref.GetFormID();
+                    if (fid)
+                        s_persistentCache.byFormId.emplace(fid, &ref);
+
+                    // Only include map-markers in exterior top-level worldspaces
+                    // in the location-keyed maps (same filter as ReadMapMarkersImpl).
+                    if (IsMapMarkerRef(&ref) && HasGlobalMapCoordinates(&ref)) {
+                        if (auto* xl = ref.extraList.GetByType<RE::ExtraLocation>()) {
+                            if (xl->location) {
+                                s_persistentCache.markerByLocationId.emplace(
+                                    xl->location->GetFormID(), &ref);
+                            }
+                        }
+                        auto* extra = ref.extraList.GetByType<RE::ExtraMapMarker>();
+                        const char* raw = extra && extra->mapData
+                                              ? extra->mapData->locationName.GetFullName()
+                                              : nullptr;
+                        if (raw && *raw) {
+                            std::string key(raw);
+                            for (auto& c : key)
+                                c = static_cast<char>(
+                                    std::tolower(static_cast<unsigned char>(c)));
+                            s_persistentCache.markerByName.emplace(std::move(key), &ref);
+                        }
+                    }
+
+                    return RE::BSContainer::ForEachResult::kContinue;
+                });
+            }
+
+            s_persistentCache.built = true;
+        }
+
+        static inline void EnsurePersistentRefCache()
+        {
+            if (!s_persistentCache.built)
+                BuildPersistentRefCache();
+        }
 
         struct MiscObjectivesVisibility
         {
@@ -1032,14 +1107,9 @@ namespace PlayerReader
             if (auto* form = RE::TESForm::LookupByID<RE::TESObjectREFR>(formId))
                 return form;
 
-            RE::TESObjectREFR* found = nullptr;
-            ForEachPersistentWorldspaceRef([&](RE::TESObjectREFR& ref) {
-                if (ref.GetFormID() != formId)
-                    return false;
-                found = &ref;
-                return true;
-            });
-            return found;
+            EnsurePersistentRefCache();
+            const auto it = s_persistentCache.byFormId.find(formId);
+            return it != s_persistentCache.byFormId.end() ? it->second : nullptr;
         }
 
         bool SameTextFolded(const char* lhs, const char* rhs)
@@ -1062,29 +1132,28 @@ namespace PlayerReader
             if (!location)
                 return nullptr;
 
-            RE::TESObjectREFR* found = nullptr;
-            ForEachPersistentMapMarkerRef([&](RE::TESObjectREFR& ref) {
-                auto* extraLocation = ref.extraList.GetByType<RE::ExtraLocation>();
-                if (!extraLocation || extraLocation->location != location)
-                    return false;
-                found = &ref;
-                return true;
-            });
-            if (found)
-                return found;
+            EnsurePersistentRefCache();
 
+            // Primary: match by ExtraLocation attached to the map-marker ref.
+            {
+                const auto it = s_persistentCache.markerByLocationId.find(
+                    location->GetFormID());
+                if (it != s_persistentCache.markerByLocationId.end())
+                    return it->second;
+            }
+
+            // Fallback: match by location full name (case-insensitive).
             const char* locationName = location->GetFullName();
-            ForEachPersistentMapMarkerRef([&](RE::TESObjectREFR& ref) {
-                auto* extra = ref.extraList.GetByType<RE::ExtraMapMarker>();
-                const char* markerName = extra && extra->mapData
-                                             ? extra->mapData->locationName.GetFullName()
-                                             : nullptr;
-                if (!SameTextFolded(locationName, markerName))
-                    return false;
-                found = &ref;
-                return true;
-            });
-            return found;
+            if (locationName && *locationName) {
+                std::string key(locationName);
+                for (auto& c : key)
+                    c = static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
+                const auto it = s_persistentCache.markerByName.find(key);
+                if (it != s_persistentCache.markerByName.end())
+                    return it->second;
+            }
+
+            return nullptr;
         }
 
         RE::TESObjectREFR* FindLocationSpecialRefMarker(RE::BGSLocation* location,
@@ -1867,6 +1936,10 @@ namespace PlayerReader
     {
         g_miscObjectivesVisibilityKnown = false;
         g_miscObjectivesVisible         = true;
+        s_persistentCache.built = false;
+        s_persistentCache.byFormId.clear();
+        s_persistentCache.markerByLocationId.clear();
+        s_persistentCache.markerByName.clear();
         logger::trace("[Map::Markers::Quests] reset cached quest-journal state");
     }
 
