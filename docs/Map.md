@@ -205,8 +205,9 @@ best-effort static fallback because its quest-target runtime layout is different
 For coordinate troubleshooting, query `Debug::Map::Markers::Quests` and inspect
 `questTargets[].targets[].coordinateDiagnostics`. It lists the selected map
 coordinate plus alternative candidates such as the raw target reference,
-`TESObjectREFR::GetEditorLocation(out)`, resolved or parent location world/horse
-markers, linked teleport doors, and random teleport markers.
+`TESObjectREFR::GetEditorLocation(out)`, resolved or parent location markers,
+location `specialRefs`, persistent-cell `ExtraMapMarker` refs, linked teleport
+doors, and random teleport markers.
 
 Miscellaneous has two layers of tracking in Skyrim's journal: each individual
 Misc objective can be active, and the top-level Miscellaneous row has its own
@@ -229,11 +230,14 @@ container, etc.). `localX` / `localY` / `localZ` preserve that reference's raw
 coordinates inside its current worldspace or interior cell. The spatial fields
 (`x`, `y`, `z`, `worldspace`, `cell`, ...) describe where the quest marker
 should be drawn on the world map. When the target belongs to a `BGSLocation`,
-the reader walks that location's parent hierarchy and uses the nearest available
-`BGSLocation::worldLocMarker`. That makes quest marker coordinates line up with
-the location markers returned by `Map::Markers::Locations` / `Map::Markers::All`,
-instead of leaking local coordinates such as an NPC's position inside a house or
-within an exterior sub-location.
+the reader walks that location's parent hierarchy and first uses a usable
+`BGSLocation::worldLocMarker`; if that handle cannot be resolved or is not a
+map-facing exterior ref, it resolves the location's `specialRefs` and scans
+worldspace persistent cells for the same `ExtraMapMarker` refs returned by
+`Map::Markers::Locations` / `Map::Markers::All`. If no global/map-facing
+coordinate exists for an interior or child-worldspace target, the public spatial
+fields are `null` instead of leaking local coordinates such as an NPC's position
+inside a house or city worldspace.
 
 ### Entry shape
 
@@ -255,8 +259,8 @@ within an exterior sub-location.
 | `refId` | `string` | Hex form ID of the resolved reference (NPC, door, container, etc.). |
 | `isDeleted` | `bool` | `true` when the resolved reference has the form deleted flag set. Some vanilla quest targets still use such refs and are kept if Skyrim exposes them through `questTargets`. |
 | `name` | `string` | Display name of the reference. Empty if unnamed. |
-| `coordinateSource` | `string` | Source used for `x`/`y`/`z`: `BGSLocation::worldLocMarker` for direct location projection, `BGSLocation::parentLoc.worldLocMarker` when a parent location supplied the map marker, `targetRef:noLocationMarker` when a location was found but no marker could be found, or `targetRef` when no usable location was resolved. |
-| `coordinateRefId` | `string` | Hex form ID of the reference used for the spatial fields. Usually the same as `refId`; for interior targets this is usually the location's map marker reference. |
+| `coordinateSource` | `string` | Source used for `x`/`y`/`z`: `BGSLocation::worldLocMarker`, `BGSLocation::parentLoc.worldLocMarker`, `BGSLocation::specialRefs.mapMarker`, `BGSLocation::parentLoc.specialRefs.mapMarker`, `persistentCell.ExtraMapMarker.location`, `persistentCell.parentLoc.ExtraMapMarker.location`, `BGSLocation::specialRefs.globalRef`, `BGSLocation::parentLoc.specialRefs.globalRef`, `targetRef:global`, `targetRef:global:noLocationMarker`, or `unresolved:noGlobalLocationMarker`. |
+| `coordinateRefId` | `string \| null` | Hex form ID of the reference used for the spatial fields. For interior or child-worldspace targets this should be a map-facing location/entrance ref; `null` means no global coordinate could be resolved. |
 | `coordinateRefName` | `string` | Display name of `coordinateRefId`, when available. |
 | `locationFormId` | `string \| null` | Hex form ID of the `BGSLocation` considered for map-marker projection, or `null` when no location was resolved. |
 | `locationEditorId` | `string \| null` | Editor ID of that `BGSLocation`, or `null`. |
@@ -271,9 +275,9 @@ within an exterior sub-location.
 | `localCell` | `string \| null` | EditorID of the actual target reference's parent cell. |
 | `localCellFormId` | `string \| null` | Hex form ID of the actual target reference's parent cell. |
 | `localIsInterior` | `bool` | `true` if the actual target reference's parent cell is an interior. |
-| `x` | `float` | Map-facing X coordinate of the quest marker. When a location marker is available, this is the location/entrance marker coordinate. |
-| `y` | `float` | Map-facing Y coordinate of the quest marker. |
-| `z` | `float` | Map-facing Z coordinate of the quest marker. |
+| `x` | `float \| null` | Map-facing X coordinate of the quest marker. When a location marker is available, this is the location/entrance marker coordinate; `null` means no global coordinate was resolved. |
+| `y` | `float \| null` | Map-facing Y coordinate of the quest marker. |
+| `z` | `float \| null` | Map-facing Z coordinate of the quest marker. |
 | `worldspace` | `string \| null` | EditorID of the coordinate reference's worldspace. `null` only when no map-facing worldspace could be resolved. |
 | `worldspaceFormId` | `string \| null` | Hex form ID of the worldspace. |
 | `parentWorldspace` | `string \| null` | EditorID of the root worldspace (walks `parentWorld` to the top, e.g. `"Tamriel"` for city sub-worlds). |
@@ -283,11 +287,11 @@ within an exterior sub-location.
 | `isInterior` | `bool` | `true` if the coordinate reference's parent cell is an interior. |
 
 Use `parentWorldspace` to plot quest markers on a global Tamriel/Solstheim map.
-When `coordinateSource` is `BGSLocation::worldLocMarker` or
-`BGSLocation::parentLoc.worldLocMarker`, the coordinates already point at the
-location marker / entrance on the world map. `coordinateSource: "targetRef"`
-means no usable `BGSLocation` marker was found, so the target reference itself is
-used as a fallback.
+When `coordinateSource` names a `BGSLocation`, `specialRefs`, or
+`persistentCell.ExtraMapMarker` source, the coordinates already point at a
+location marker / entrance on the world map. `targetRef:global` means the target
+reference itself was already in a top-level exterior worldspace. `unresolved:*` means the
+reader refused to publish local interior coordinates as global coordinates.
 
 ### Example — query active quest markers
 

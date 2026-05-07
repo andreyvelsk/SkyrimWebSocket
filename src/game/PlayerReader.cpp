@@ -964,8 +964,157 @@ namespace PlayerReader
             RE::TESObjectREFR*              ref = nullptr;
             RE::BGSLocation*                location = nullptr;
             RE::NiPointer<RE::TESObjectREFR> locationMarkerRef;
-            const char*                     source = "targetRef";
+            const char*                     source = "unresolved:noGlobalCoordinates";
         };
+
+        bool IsMapMarkerRef(RE::TESObjectREFR* ref)
+        {
+            auto* extra = ref ? ref->extraList.GetByType<RE::ExtraMapMarker>() : nullptr;
+            return extra && extra->mapData;
+        }
+
+        bool HasGlobalMapCoordinates(RE::TESObjectREFR* ref)
+        {
+            if (!ref)
+                return false;
+
+            if (auto* cell = ref->GetParentCell(); cell && cell->IsInteriorCell())
+                return false;
+
+            auto* world = ref->GetWorldspace();
+            return world && !world->parentWorld;
+        }
+
+        bool IsMapFacingCoordinateRef(RE::TESObjectREFR* ref)
+        {
+            return HasGlobalMapCoordinates(ref);
+        }
+
+        template <class Callback>
+        void ForEachPersistentWorldspaceRef(Callback&& callback)
+        {
+            auto* handler = RE::TESDataHandler::GetSingleton();
+            if (!handler)
+                return;
+
+            const auto& worlds = handler->GetFormArray<RE::TESWorldSpace>();
+            bool stop = false;
+            for (auto* world : worlds) {
+                if (!world || !world->persistentCell)
+                    continue;
+
+                world->persistentCell->ForEachReference([&](RE::TESObjectREFR& ref) {
+                    if (callback(ref)) {
+                        stop = true;
+                        return RE::BSContainer::ForEachResult::kStop;
+                    }
+                    return RE::BSContainer::ForEachResult::kContinue;
+                });
+
+                if (stop)
+                    break;
+            }
+        }
+
+        template <class Callback>
+        void ForEachPersistentMapMarkerRef(Callback&& callback)
+        {
+            ForEachPersistentWorldspaceRef([&](RE::TESObjectREFR& ref) {
+                return IsMapMarkerRef(&ref) && HasGlobalMapCoordinates(&ref) && callback(ref);
+            });
+        }
+
+        RE::TESObjectREFR* FindPersistentReferenceByFormID(RE::FormID formId)
+        {
+            if (!formId)
+                return nullptr;
+
+            if (auto* form = RE::TESForm::LookupByID<RE::TESObjectREFR>(formId))
+                return form;
+
+            RE::TESObjectREFR* found = nullptr;
+            ForEachPersistentWorldspaceRef([&](RE::TESObjectREFR& ref) {
+                if (ref.GetFormID() != formId)
+                    return false;
+                found = &ref;
+                return true;
+            });
+            return found;
+        }
+
+        bool SameTextFolded(const char* lhs, const char* rhs)
+        {
+            if (!lhs || !rhs || !*lhs || !*rhs)
+                return false;
+
+            while (*lhs && *rhs) {
+                const auto left = static_cast<unsigned char>(*lhs++);
+                const auto right = static_cast<unsigned char>(*rhs++);
+                if (std::tolower(left) != std::tolower(right))
+                    return false;
+            }
+
+            return *lhs == '\0' && *rhs == '\0';
+        }
+
+        RE::TESObjectREFR* FindPersistentMapMarkerForLocation(RE::BGSLocation* location)
+        {
+            if (!location)
+                return nullptr;
+
+            RE::TESObjectREFR* found = nullptr;
+            ForEachPersistentMapMarkerRef([&](RE::TESObjectREFR& ref) {
+                auto* extraLocation = ref.extraList.GetByType<RE::ExtraLocation>();
+                if (!extraLocation || extraLocation->location != location)
+                    return false;
+                found = &ref;
+                return true;
+            });
+            if (found)
+                return found;
+
+            const char* locationName = location->GetFullName();
+            ForEachPersistentMapMarkerRef([&](RE::TESObjectREFR& ref) {
+                auto* extra = ref.extraList.GetByType<RE::ExtraMapMarker>();
+                const char* markerName = extra && extra->mapData
+                                             ? extra->mapData->locationName.GetFullName()
+                                             : nullptr;
+                if (!SameTextFolded(locationName, markerName))
+                    return false;
+                found = &ref;
+                return true;
+            });
+            return found;
+        }
+
+        RE::TESObjectREFR* FindLocationSpecialRefMarker(RE::BGSLocation* location,
+                                                        bool requireMapMarker)
+        {
+            if (!location)
+                return nullptr;
+
+            std::unordered_set<RE::FormID> seen;
+            for (const auto& specialRef : location->specialRefs) {
+                const auto refId = specialRef.refData.refID;
+                if (!refId || !seen.insert(refId).second)
+                    continue;
+
+                auto* ref = FindPersistentReferenceByFormID(refId);
+                if (!ref)
+                    continue;
+
+                if (requireMapMarker) {
+                    if (!IsMapMarkerRef(ref) || !HasGlobalMapCoordinates(ref))
+                        continue;
+                } else if (!IsMapFacingCoordinateRef(ref)) {
+                    continue;
+                }
+
+                return ref;
+            }
+
+            return nullptr;
+        }
 
         QuestMarkerCoordinates CoordinatesForLocationMarker(RE::BGSLocation* location,
                                                             RE::NiPointer<RE::TESObjectREFR> markerRef,
@@ -979,43 +1128,88 @@ namespace PlayerReader
             return out;
         }
 
+        QuestMarkerCoordinates CoordinatesForLocationMarkerRef(RE::BGSLocation* location,
+                                                               RE::TESObjectREFR* markerRef,
+                                                               const char* source)
+        {
+            QuestMarkerCoordinates out;
+            out.ref      = markerRef;
+            out.location = location;
+            out.source   = source;
+            return out;
+        }
+
         QuestMarkerCoordinates ResolveQuestMarkerCoordinates(RE::TESObjectREFR* targetRef)
         {
             QuestMarkerCoordinates out;
-            out.ref = targetRef;
 
             if (!targetRef)
                 return out;
 
+            if (HasGlobalMapCoordinates(targetRef)) {
+                out.ref = targetRef;
+                out.source = "targetRef:global";
+            }
+
             auto* cell = targetRef->GetParentCell();
-            RE::BGSLocation* locationCandidates[] = {
+            std::array<RE::BGSLocation*, 3> locationCandidates{
                 targetRef->GetCurrentLocation(),
                 targetRef->GetEditorLocation(),
                 cell ? cell->GetLocation() : nullptr
             };
 
+            std::unordered_set<RE::FormID> seenLocations;
+
             for (auto* location : locationCandidates) {
                 if (!location)
                     continue;
 
-                if (!out.location)
-                    out.location = location;
-
                 for (auto* candidate = location; candidate; candidate = candidate->parentLoc) {
-                    out.locationMarkerRef = candidate->worldLocMarker.get();
-                    if (out.locationMarkerRef) {
+                    if (!candidate || !seenLocations.insert(candidate->GetFormID()).second)
+                        continue;
+
+                    if (!out.location)
                         out.location = candidate;
-                        out.ref = out.locationMarkerRef.get();
-                        out.source = candidate == location
-                                         ? "BGSLocation::worldLocMarker"
-                                         : "BGSLocation::parentLoc.worldLocMarker";
-                        return out;
-                    }
+
+                    auto handleMarker = candidate->worldLocMarker.get();
+                    if (IsMapFacingCoordinateRef(handleMarker.get()))
+                        return CoordinatesForLocationMarker(
+                            candidate,
+                            handleMarker,
+                            candidate == location
+                                ? "BGSLocation::worldLocMarker"
+                                : "BGSLocation::parentLoc.worldLocMarker");
+
+                    if (auto* marker = FindLocationSpecialRefMarker(candidate, /*requireMapMarker=*/true))
+                        return CoordinatesForLocationMarkerRef(
+                            candidate,
+                            marker,
+                            candidate == location
+                                ? "BGSLocation::specialRefs.mapMarker"
+                                : "BGSLocation::parentLoc.specialRefs.mapMarker");
+
+                    if (auto* marker = FindPersistentMapMarkerForLocation(candidate))
+                        return CoordinatesForLocationMarkerRef(
+                            candidate,
+                            marker,
+                            candidate == location
+                                ? "persistentCell.ExtraMapMarker.location"
+                                : "persistentCell.parentLoc.ExtraMapMarker.location");
+
+                    if (auto* marker = FindLocationSpecialRefMarker(candidate, /*requireMapMarker=*/false))
+                        return CoordinatesForLocationMarkerRef(
+                            candidate,
+                            marker,
+                            candidate == location
+                                ? "BGSLocation::specialRefs.globalRef"
+                                : "BGSLocation::parentLoc.specialRefs.globalRef");
                 }
             }
 
-            if (out.location)
-                out.source = "targetRef:noLocationMarker";
+            if (out.location && out.ref)
+                out.source = "targetRef:global:noLocationMarker";
+            else if (out.location)
+                out.source = "unresolved:noGlobalLocationMarker";
             return out;
         }
 
@@ -1176,6 +1370,18 @@ namespace PlayerReader
                 CoordinatesForLocationMarker(location, location->worldLocMarker.get(), "BGSLocation::worldLocMarker"));
             out["horseLocMarker"]    = QuestMarkerCoordinatesJson(
                 CoordinatesForLocationMarker(location, location->horseLocMarker.get(), "BGSLocation::horseLocMarker"));
+            out["specialRefsMapMarker"] = QuestMarkerCoordinatesJson(
+                CoordinatesForLocationMarkerRef(location,
+                                                FindLocationSpecialRefMarker(location, /*requireMapMarker=*/true),
+                                                "BGSLocation::specialRefs.mapMarker"));
+            out["persistentMapMarker"] = QuestMarkerCoordinatesJson(
+                CoordinatesForLocationMarkerRef(location,
+                                                FindPersistentMapMarkerForLocation(location),
+                                                "persistentCell.ExtraMapMarker.location"));
+            out["specialRefsGlobalRef"] = QuestMarkerCoordinatesJson(
+                CoordinatesForLocationMarkerRef(location,
+                                                FindLocationSpecialRefMarker(location, /*requireMapMarker=*/false),
+                                                "BGSLocation::specialRefs.globalRef"));
             out["specialRefsCount"]  = location->specialRefs.size();
             out["specialRefsSample"] = nlohmann::json::array();
 
@@ -1196,6 +1402,18 @@ namespace PlayerReader
                 item["refId"]         = formIdStr(specialRef.refData.refID);
                 item["parentSpaceId"] = formIdStr(specialRef.refData.parentSpaceID);
                 item["cellKeyRaw"]    = specialRef.refData.cellKey.raw;
+                if (auto* ref = FindPersistentReferenceByFormID(specialRef.refData.refID)) {
+                    nlohmann::json resolved;
+                    resolved["ptr"] = PtrString(ref);
+                    resolved["refId"] = formIdStr(ref->GetFormID());
+                    resolved["name"] = RefDisplayName(ref);
+                    resolved["hasMapMarker"] = IsMapMarkerRef(ref);
+                    resolved["hasGlobalMapCoordinates"] = HasGlobalMapCoordinates(ref);
+                    WriteReferenceSpatialJson(resolved, ref);
+                    item["resolvedRef"] = std::move(resolved);
+                } else {
+                    item["resolvedRef"] = nullptr;
+                }
                 out["specialRefsSample"].push_back(std::move(item));
                 ++emitted;
             }
@@ -1717,7 +1935,7 @@ namespace PlayerReader
 
             const bool refIsDeleted = ref->IsDeleted();
             const auto coordinates = ResolveQuestMarkerCoordinates(ref);
-            auto* coordinateRef = coordinates.ref ? coordinates.ref : ref;
+            auto* coordinateRef = coordinates.ref;
 
             if (!seenDestinations.insert(makeDestinationKey(quest, objective, coordinateRef)).second)
                 return false;
@@ -1757,8 +1975,8 @@ namespace PlayerReader
             entry["name"] = refNameC ? std::string(refNameC) : std::string();
 
             entry["coordinateSource"] = coordinates.source;
-            entry["coordinateRefId"]  = formIdStr(coordinateRef->GetFormID());
-            entry["coordinateRefName"] = RefDisplayName(coordinateRef);
+            entry["coordinateRefId"]  = coordinateRef ? nlohmann::json(formIdStr(coordinateRef->GetFormID())) : nullptr;
+            entry["coordinateRefName"] = coordinateRef ? RefDisplayName(coordinateRef) : std::string();
             if (coordinates.location) {
                 const char* locationEditorId = coordinates.location->GetFormEditorID();
                 const char* locationName = coordinates.location->GetFullName();
@@ -1774,13 +1992,16 @@ namespace PlayerReader
             WriteReferenceLocalSpatialJson(entry, ref);
             WriteReferenceSpatialJson(entry, coordinateRef);
 
+            const std::string coordinateRefId = coordinateRef ? formIdStr(coordinateRef->GetFormID()) : "null";
+            const float mapX = coordinateRef ? coordinateRef->GetPositionX() : 0.0f;
+            const float mapY = coordinateRef ? coordinateRef->GetPositionY() : 0.0f;
+            const float mapZ = coordinateRef ? coordinateRef->GetPositionZ() : 0.0f;
             logger::debug("[Map::Markers::Quests] emit quest='{}' (type={}, formId={}) obj#{} alias={} ref={} '{}' local=({}, {}, {}) coordRef={} source={} map=({}, {}, {})",
                           questEditorId, std::string(QuestTypeName(quest->GetType())),
                           formIdStr(quest->GetFormID()), objective->index, aliasID,
                           formIdStr(ref->GetFormID()), entry["name"].get<std::string>(),
                           ref->GetPositionX(), ref->GetPositionY(), ref->GetPositionZ(),
-                          formIdStr(coordinateRef->GetFormID()), coordinates.source,
-                          coordinateRef->GetPositionX(), coordinateRef->GetPositionY(), coordinateRef->GetPositionZ());
+                          coordinateRefId, coordinates.source, mapX, mapY, mapZ);
 
             result.push_back(std::move(entry));
             return true;
@@ -1897,7 +2118,7 @@ namespace PlayerReader
             "runtimeObjectives shows displayed objectives but does not by itself mean the player tracks them.",
             "Miscellaneous markers require both the individual active quest flag and the journal's master Miscellaneous toggle.",
             "questTargets[].targets[].mapCoordinates shows the map-facing coordinate ref used by Map::Markers::Quests.",
-            "questTargets[].targets[].coordinateDiagnostics lists alternative coordinate candidates (target ref, editor location, location markers, linked doors) for mismatched map positions.",
+            "questTargets[].targets[].coordinateDiagnostics lists alternative coordinate candidates (target ref, editor location, location markers, specialRefs, persistent ExtraMapMarker refs, linked doors) for mismatched map positions.",
             "staticDisplayedObjectives is intentionally broad and is useful for finding which quest/objective is missing from questTargets."
         });
 
