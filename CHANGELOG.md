@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+### [1.12.1](https://github.com/andreyvelsk/SkyrimWebSocket/compare/v1.12.0...v1.12.1) (2026-05-08)
+
+
+### 🐛 Bug Fixes
+
+* **damage:** fix to calculate damage and armor rating ([95a29a9](https://github.com/andreyvelsk/SkyrimWebSocket/commits/95a29a9f9d64e0a94d88400342c4096a9f06d97f))
+
 ## [1.12.0](https://github.com/andreyvelsk/SkyrimWebSocket/compare/v1.11.1...v1.12.0) (2026-05-07)
 
 
