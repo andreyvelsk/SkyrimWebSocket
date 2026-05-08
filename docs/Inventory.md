@@ -115,7 +115,7 @@ Additional fields:
 - `equipSlots` (array of strings) — Valid equip targets: `["right", "left"]` for one-handed, `["right"]` for two-handed
 - `equippedHand` (string or null) — Current equip hand: `"right"`, `"left"`, `"both"` (same weapon dual-wielded), or `null` if not equipped
 - `baseDamage` (float) — Weapon base damage before perks
-- `damage` (float) — Effective damage = `baseDamage × kAttackDamageMult`
+- `damage` (float) — Effective damage from the same engine calculation path used by the in-game inventory UI (`PlayerCharacter::GetDamage`)
 - `enchantment` (object or null) — See [Enchantment Object](#enchantment-object)
 - `enchantmentCharge` (number or null) — Current enchantment charge if applicable
 
@@ -128,7 +128,7 @@ Additional fields:
 - `armorTypeId` (string) — Stable key: `"Heavy"`, `"Light"`, or `"Clothing"`
 - `armorType` (string) — Localized in-game display name via GMST
 - `baseArmorRating` (float) — Raw form value before perks
-- `armorRating` (float) — Effective value as shown in inventory = `baseArmorRating × (1 + kArmorPerks/100)`
+- `armorRating` (float) — Effective value from the same engine calculation path used by the in-game inventory UI (`PlayerCharacter::GetArmorValue`)
 - `bodySlots` (array of strings) — Body-slot identifiers. Possible values:
   `Head`, `Hair`, `Body`, `Hands`, `Forearms`, `Amulet`, `Ring`, `Feet`,
   `Calves`, `Shield`, `Tail`, `LongHair`, `Circlet`, `Ears`.
@@ -141,7 +141,7 @@ Additional fields:
 Additional fields:
 - `isEquipped` (bool) — Currently equipped on character
 - `baseDamage` (float) — Base damage before multipliers
-- `damage` (float) — Effective damage = `baseDamage × kAttackDamageMult`
+- `damage` (float) — Effective damage from the same engine calculation path used by the in-game inventory UI (`PlayerCharacter::GetDamage`)
 
 ### Potions
 

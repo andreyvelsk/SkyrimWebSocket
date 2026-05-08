@@ -422,12 +422,6 @@ namespace InventoryReader
             return obj.GetFormType() == RE::FormType::Weapon;
         });
 
-        // kAttackDamageMult starts at 1.0 and is raised by perks (Armsman, Barbarian…).
-        // Multiplying the weapon's base damage by this value gives the number shown
-        // in the inventory screen.
-        const float atkMult = player->AsActorValueOwner()
-                                  ->GetActorValue(RE::ActorValue::kAttackDamageMult);
-
         nlohmann::json result = nlohmann::json::array();
         for (auto& [item, data] : inv) {
             if (!item || data.first <= 0)
@@ -440,7 +434,7 @@ namespace InventoryReader
             const auto* weap = item->As<RE::TESObjectWEAP>();
             const float base = weap ? weap->GetAttackDamage() : 0.f;
             j["baseDamage"]  = base;
-            j["damage"]      = base * atkMult;
+            j["damage"]      = data.second ? player->GetDamage(data.second.get()) : base;
 
             // Weapon type and equip-slot metadata
             if (weap) {
@@ -530,15 +524,12 @@ namespace InventoryReader
                 j["armorType"]   = std::move(armorTypeName);
 
                 // baseArmorRating is the raw value from the form.
-                // armorRating is the effective value as shown in the inventory:
-                //   baseArmorRating × (1 + kArmorPerks / 100)
-                // where kArmorPerks is the bonus percentage from armor-skill perks
-                // (e.g. Juggernaut for Heavy Armor, Custom Fit for Light Armor).
+                // armorRating is obtained from the engine using the same path as
+                // the inventory UI, so perks/bonuses are applied consistently.
                 const float baseArmor = armor->GetArmorRating();
-                const float armorPerks = player->AsActorValueOwner()
-                                             ->GetActorValue(RE::ActorValue::kArmorPerks);
                 j["baseArmorRating"] = baseArmor;
-                j["armorRating"]     = baseArmor * (1.0f + armorPerks / 100.0f);
+                j["armorRating"]     = data.second ? player->GetArmorValue(data.second.get())
+                                                    : baseArmor;
 
                 j["bodySlots"]   = GetArmorBodySlots(armor);
             } else {
@@ -783,10 +774,6 @@ namespace InventoryReader
         if (!player)
             return nlohmann::json::array();
 
-        // Compute attack multiplier once (matches ReadWeapons behaviour).
-        const float atkMult = player->AsActorValueOwner()
-                                  ->GetActorValue(RE::ActorValue::kAttackDamageMult);
-
         auto inv = player->GetInventory([formType](RE::TESBoundObject& obj) {
             return obj.GetFormType() == formType;
         });
@@ -806,7 +793,7 @@ namespace InventoryReader
                 if (const auto* ammo = item->As<RE::TESAmmo>())
                     base = ammo->data.damage;
                 j["baseDamage"] = base;
-                j["damage"]     = base * atkMult;
+                j["damage"]     = data.second ? player->GetDamage(data.second.get()) : base;
             }
 
             result.push_back(std::move(j));
