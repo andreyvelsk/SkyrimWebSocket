@@ -332,12 +332,17 @@ namespace GameWriter
         if (invCnt <= 0)
             return {false, "Book not in inventory"};
 
-        // Spell tomes should go through the engine's native read path:
+        // Spell tomes should go through the engine's native activation path:
         // learn spell / already-known message / tome consumption.
-        if (book->TeachesSpell() || book->IsBookTome()) {
-            const bool ok = book->Read(player);
+        if (book->TeachesSpell()) {
+            const bool ok = book->Activate(
+                static_cast<RE::TESObjectREFR*>(player),
+                static_cast<RE::TESObjectREFR*>(player),
+                /*a_arg3=*/0,
+                static_cast<RE::TESBoundObject*>(book),
+                /*a_targetCount=*/1);
             if (!ok)
-                return {false, "Failed to read spell tome"};
+                return {false, "Failed to activate/read spell tome"};
 
             logger::debug("read_book(spell_tome) 0x{:08X} ('{}')", formId, book->GetName());
             PrintConsole("[WS] Read spell tome " + std::string(book->GetName()));
