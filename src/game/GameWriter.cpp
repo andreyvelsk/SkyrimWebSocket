@@ -343,13 +343,13 @@ namespace GameWriter
             return nullptr;
         }();
 
-        if (xList) {
-            RE::NiMatrix3 rot{};
-            rot.SetEulerAnglesXYZ(-0.05f, -0.05f, 1.50f);
-            RE::BookMenu::OpenMenuFromBaseForm(book, xList, RE::NiPoint3(), rot, 1.0f, true);
-        } else {
-            RE::BookMenu::OpenMenuFromBaseForm(book);
-        }
+        RE::BSString desc;
+        book->GetDescription(desc, nullptr);
+
+        RE::NiMatrix3 rot{};
+        rot.SetEulerAnglesXYZ(-0.05f, -0.05f, 1.50f);
+
+        RE::BookMenu::OpenBookMenu(desc, xList, nullptr, book, RE::NiPoint3(), rot, 1.0f, true);
 
         logger::debug("read_book 0x{:08X} ('{}')", formId, book->GetName());
         PrintConsole("[WS] Read book " + std::string(book->GetName()));
