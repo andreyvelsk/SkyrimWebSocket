@@ -72,8 +72,7 @@ namespace QuestReader
                 return 0;
 
             const std::uint16_t stage = item->owningStage ? item->owningStage->data.index : 0;
-            for (auto* node = quest->instanceData.front(); node; node = node->next) {
-                auto* data = node->item;
+            for (auto* data : quest->instanceData) {
                 if (!data)
                     continue;
                 if (data->journalStage == stage && data->journalStageItem == item->index)
@@ -105,11 +104,10 @@ namespace QuestReader
                 return result;
 
             const auto base = reinterpret_cast<std::uintptr_t>(player);
-            const auto& questLog =
-                *reinterpret_cast<const RE::BSSimpleList<RE::TESQuestStageItem*>*>(base + QuestLogOffset());
+            auto& questLog =
+                *reinterpret_cast<RE::BSSimpleList<RE::TESQuestStageItem*>*>(base + QuestLogOffset());
 
-            for (auto* node = questLog.front(); node; node = node->next) {
-                auto* item = node->item;
+            for (auto* item : questLog) {
                 if (!item || !item->owner)
                     continue;
 
@@ -152,8 +150,7 @@ namespace QuestReader
             std::string name = QuestText::ResolveQuestName(quest, quest->currentInstanceID);
 
             nlohmann::json steps = nlohmann::json::array();
-            for (auto* node = quest->objectives.front(); node; node = node->next) {
-                auto* objective = node->item;
+            for (auto* objective : quest->objectives) {
                 if (!objective)
                     continue;
 
