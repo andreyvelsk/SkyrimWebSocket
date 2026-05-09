@@ -126,6 +126,15 @@ namespace PlayerReader
     // Must be called on the game thread.
     nlohmann::json ReadQuestMarkersDebug();
 
+    // Returns and updates the cached master Miscellaneous quest-marker
+    // visibility used by Map::Markers::Quests. Updating this value changes
+    // the shared Misc map-marker filter only; it does not toggle individual
+    // quest active flags.
+    // Must be called on the game thread.
+    nlohmann::json ReadMiscQuestMarkerVisibility();
+    bool GetMiscQuestMarkerVisibility();
+    void SetMiscQuestMarkerVisibility(bool visible);
+
     // Returns a JSON object describing the player-placed custom map marker
     // (the marker the player can drop on the world map by clicking on it):
     // { "isSet", "x", "y", "z",

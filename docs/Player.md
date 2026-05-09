@@ -4,7 +4,7 @@ Player fields expose character-level stats that are not available through the
 `ActorValue` system: character level, experience points, inventory weight, and
 world position.
 
-All values are returned as `float`, `integer`, or `object` as noted.
+All values are returned as `float`, `integer`, `object`, or `array` as noted.
 
 ## Available Player Fields
 
@@ -19,6 +19,7 @@ All values are returned as `float`, `integer`, or `object` as noted.
 | `Player::Position` | `object` | Player position, heading, current worldspace and cell — see below |
 | `Player::ExteriorPosition` | `object` | Last known exterior position (for global-map rendering while in interiors / city sub-worlds) — see below |
 | `Player::Marker` | `object` | Player-placed custom map marker state (the marker dropped by clicking on the world map) — see below |
+| `Player::Quests` | `array` | Current player quest journal entries, including resolved radiant names/objectives, completion state, and Misc quest flags — see below |
 
 ---
 
@@ -217,6 +218,126 @@ if (pos.parentWorldspace === "Tamriel" && !pos.isInterior
   y = extPos.y;
 } else {
   // Solstheim or another top-level world — switch maps or hide marker.
+}
+```
+
+---
+
+## `Player::Quests`
+
+Returns the current player-available quest journal entries. The reader includes
+running, non-completed quests that have visible journal objectives, a quest log
+entry, or an active/tracked state with a usable display name, which filters out
+most hidden technical quests.
+
+Radiant quest placeholders such as `<Alias=Location>` are resolved with the
+same alias/instance-data path used by `Map::Markers::Quests`, so generated quest
+names and objective text use the current instance's NPC/place/item names when
+the engine exposes them.
+
+### Quest object shape
+
+| Field | Type | Description |
+|---|---|---|
+| `questFormId` | `string` | Hex form ID of the `TESQuest`. Use this as `formId` for `quest_set_active`. |
+| `questEditorId` | `string` | EditorID when available. |
+| `name` | `string` | Resolved display name. For Misc quests with no quest title, falls back to the first visible objective text. |
+| `nameRaw` | `string` | Raw quest full name before radiant alias replacement. |
+| `description` | `string` | Latest resolved quest journal log entry observed in the player's quest log. Empty when the engine has no readable log text for the quest. |
+| `descriptionRaw` | `string` | Raw log text before radiant alias replacement. |
+| `descriptionStage` | `integer` | Stage index that provided `description`, or `0` when no log entry was available. |
+| `type` / `questType` | `string` | Quest category, e.g. `MainQuest`, `SideQuest`, `Miscellaneous`. Both keys carry the same stable value. |
+| `isMisc` | `bool` | `true` for quests in the Miscellaneous journal section. |
+| `isActive` | `bool` | `true` when the quest is currently tracked/active (`QuestFlag::kActive`). |
+| `isRunning` | `bool` | `true` for running quests. Included for client diagnostics. |
+| `isCompleted` | `bool` | `true` for completed quests. The normal list excludes completed quests. |
+| `currentStage` | `integer` | Current quest stage ID. |
+| `currentInstanceId` | `integer` | Current radiant quest instance ID when present. |
+| `steps` | `array` | Ordered visible quest objectives — see below. |
+| `miscMarkersVisible` | `bool` | Misc quests only. Current shared Misc marker filter used by `Map::Markers::Quests`. |
+| `miscMarkersVisibilityKnown` | `bool` | Misc quests only. `true` after the plugin has observed or explicitly set the Misc master marker state. |
+| `miscMarkersVisibilitySource` | `string` | Misc quests only. Source of the shared Misc marker state. |
+
+### Step object shape
+
+| Field | Type | Description |
+|---|---|---|
+| `index` | `integer` | Quest objective index. Steps are sorted by this value. |
+| `text` | `string` | Resolved objective text. |
+| `textRaw` | `string` | Raw objective text before radiant alias replacement. |
+| `completed` | `bool` | `true` when the objective state is completed. |
+| `failed` | `bool` | `true` when the objective state is failed. |
+| `state` | `string` | Raw Skyrim objective state name, e.g. `Displayed`, `CompletedDisplayed`, `FailedDisplayed`. |
+| `stateRaw` | `integer` | Numeric objective state. |
+| `instanceId` | `integer` | Radiant instance ID used for alias text resolution, or `0` when unavailable. |
+
+### Example — query current quests
+
+```json
+{
+  "type": "query",
+  "id": "q-quests",
+  "fields": { "quests": "Player::Quests" }
+}
+```
+
+**Server reply:**
+```json
+{
+  "type": "data",
+  "id": "q-quests",
+  "ts": 1712462400123,
+  "fields": {
+    "quests": [
+      {
+        "questFormId": "0x00036192",
+        "questEditorId": "MQ102",
+        "name": "Before the Storm",
+        "description": "Gerdur told me to travel to Whiterun and speak to the Jarl.",
+        "questType": "MainQuest",
+        "isMisc": false,
+        "isActive": true,
+        "steps": [
+          {
+            "index": 30,
+            "text": "Talk to the Jarl of Whiterun",
+            "completed": false,
+            "failed": false,
+            "state": "Displayed"
+          }
+        ]
+      }
+    ]
+  }
+}
+```
+
+### Modifying quest tracking
+
+Use `quest_set_active` to set or clear the active/tracked marker on a single
+quest. The response `data` payload is the updated `Player::Quests` entry shape
+for that quest.
+
+```json
+{
+  "type": "command",
+  "id": "track-quest",
+  "command": "quest_set_active",
+  "formId": "0x00036192",
+  "active": true
+}
+```
+
+Use `quests_misc_markers_set` for the top-level Miscellaneous marker filter.
+This does not change `isActive` on individual Misc quests; it only controls
+whether active Misc objectives are emitted by `Map::Markers::Quests`.
+
+```json
+{
+  "type": "command",
+  "id": "hide-misc-markers",
+  "command": "quests_misc_markers_set",
+  "visible": false
 }
 ```
 

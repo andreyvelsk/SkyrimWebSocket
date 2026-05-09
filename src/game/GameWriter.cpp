@@ -1,9 +1,11 @@
 #include "GameWriter.h"
 #include "../Utils.h"
 #include "PlayerReader.h"
+#include "QuestReader.h"
 
 #include <algorithm>
 #include <format>
+#include <utility>
 
 namespace logger = SKSE::log;
 
@@ -157,6 +159,37 @@ namespace GameWriter
         const auto handle = policy->GetHandleForObject(
             static_cast<RE::VMTypeID>(player->GetFormType()), player);
 
+        auto* fnArgs = RE::MakeFunctionArguments(std::move(args)...);
+        RE::BSTSmartPointer<RE::BSScript::IStackCallbackFunctor> callback;
+        return vm->DispatchMethodCall(handle,
+                                      RE::BSFixedString(className),
+                                      RE::BSFixedString(methodName),
+                                      fnArgs,
+                                      callback);
+    }
+
+    template <typename FormT, typename... Args>
+    static bool DispatchFormMethod(FormT* form,
+                                   const char* className,
+                                   const char* methodName,
+                                   Args... args)
+    {
+        if (!form)
+            return false;
+
+        auto* vm = RE::BSScript::Internal::VirtualMachine::GetSingleton();
+        if (!vm) {
+            logger::error("Papyrus VM unavailable");
+            return false;
+        }
+        auto* policy = vm->GetObjectHandlePolicy();
+        if (!policy) {
+            logger::error("Papyrus VM handle policy unavailable");
+            return false;
+        }
+
+        const auto handle = policy->GetHandleForObject(
+            static_cast<RE::VMTypeID>(form->GetFormType()), form);
         auto* fnArgs = RE::MakeFunctionArguments(std::move(args)...);
         RE::BSTSmartPointer<RE::BSScript::IStackCallbackFunctor> callback;
         return vm->DispatchMethodCall(handle,
@@ -976,6 +1009,52 @@ namespace GameWriter
         PrintConsole(std::format("[WS] Hotkey {} triggered (handled={})",
                                  slot, handled ? "true" : "false"));
         return {true, ""};
+    }
+
+    // ─── Quests ──────────────────────────────────────────────────────────
+
+    CommandResult SetQuestActive(RE::FormID formId, bool active)
+    {
+        auto* quest = RE::TESForm::LookupByID<RE::TESQuest>(formId);
+        if (!quest)
+            return {false, std::format("Form 0x{:08X} is not a quest", formId)};
+
+        if (active && !quest->IsRunning())
+            return {false, std::format("Quest 0x{:08X} is not running", formId)};
+        if (active && quest->IsCompleted())
+            return {false, std::format("Quest 0x{:08X} is already completed", formId)};
+
+        const bool dispatched = DispatchFormMethod(quest, "Quest", "SetActive", active);
+        if (!dispatched)
+            return {false, "Failed to dispatch Quest.SetActive"};
+
+        if (active)
+            quest->data.flags.set(RE::QuestFlag::kActive);
+        else
+            quest->data.flags.reset(RE::QuestFlag::kActive);
+
+        CommandResult result;
+        result.success = true;
+        result.data = QuestReader::BuildQuestJson(quest);
+
+        const char* name = quest->GetFullName();
+        PrintConsole(std::format("[WS] Quest 0x{:08X} {} ({})",
+                                 formId,
+                                 active ? "tracked" : "untracked",
+                                 name && *name ? name : "unnamed"));
+        return result;
+    }
+
+    CommandResult SetMiscQuestMarkersVisible(bool visible)
+    {
+        PlayerReader::SetMiscQuestMarkerVisibility(visible);
+
+        CommandResult result;
+        result.success = true;
+        result.data = PlayerReader::ReadMiscQuestMarkerVisibility();
+
+        PrintConsole(std::format("[WS] Misc quest markers {}", visible ? "visible" : "hidden"));
+        return result;
     }
 
     // ─── Player-placed map marker ─────────────────────────────────────────

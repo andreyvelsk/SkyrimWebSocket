@@ -196,6 +196,9 @@ on the world map. The list mirrors what the player actually sees on the map:
   produce multiple entries when Skyrim exposes multiple distinct destinations,
   but alternative aliases that resolve to the same marker are collapsed.
 
+For the journal-style list of current quests, names, descriptions, and ordered
+objective steps, query `Player::Quests` instead.
+
 In CommonLibSSE-NG, `TESQuest::IsActive()` checks `QuestFlag::kActive`; runtime
 testing shows that this bit tracks normal quests marked active through the
 journal UI. `questTargets` by itself is broader and can contain displayed but
@@ -219,6 +222,11 @@ value after the menu closes. If that UI list is not available, it falls back to
 `Journal_QuestsTab::unk30`. Until that UI state has been observed in the current
 plugin session, the reader defaults to visible so it does not hide valid Misc
 targets unexpectedly.
+
+Clients can set the same shared Misc marker filter through the
+`quests_misc_markers_set` command. This affects whether active Misc objectives
+are emitted here; it does not change the active/tracked state of individual
+Misc quests.
 
 Targets that resolve to non-ref aliases (location aliases, data aliases) or
 to unfilled refs are skipped. References flagged as deleted are still returned

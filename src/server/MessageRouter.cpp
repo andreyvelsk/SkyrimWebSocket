@@ -194,6 +194,70 @@ namespace MessageRouter
             return;
         }
 
+        // Quest commands use boolean arguments, and the Misc master toggle
+        // does not target a single formId, so parse them before the generic
+        // formId-required item/spell/map-marker command path.
+        if (command == "quest_set_active" || command == "quests_misc_markers_set") {
+            if (command == "quest_set_active") {
+                if (!msg.contains("formId") || !msg["formId"].is_string()) {
+                    nlohmann::json err;
+                    err["type"]    = "commandResult";
+                    err["id"]      = cmdId;
+                    err["success"] = false;
+                    err["error"]   = "quest_set_active requires string 'formId'";
+                    session->send(err.dump());
+                    return;
+                }
+                if (!msg.contains("active") || !msg["active"].is_boolean()) {
+                    nlohmann::json err;
+                    err["type"]    = "commandResult";
+                    err["id"]      = cmdId;
+                    err["success"] = false;
+                    err["error"]   = "quest_set_active requires boolean 'active'";
+                    session->send(err.dump());
+                    return;
+                }
+
+                const std::string formIdStr = msg["formId"].get<std::string>();
+                const auto parsed = ParseFormId(formIdStr);
+                if (!parsed) {
+                    nlohmann::json err;
+                    err["type"]    = "commandResult";
+                    err["id"]      = cmdId;
+                    err["success"] = false;
+                    err["error"]   = "Invalid formId: '" + formIdStr + "'";
+                    session->send(err.dump());
+                    return;
+                }
+
+                const RE::FormID formId = *parsed;
+                const bool active = msg["active"].get<bool>();
+                SKSE::GetTaskInterface()->AddTask([session, cmdId, formId, active]() {
+                    auto result = GameWriter::SetQuestActive(formId, active);
+                    std::string json = BuildCommandResultJson(cmdId, result);
+                    asio::post(session->ioc(), [session, json] { session->send(json); });
+                });
+            } else {
+                if (!msg.contains("visible") || !msg["visible"].is_boolean()) {
+                    nlohmann::json err;
+                    err["type"]    = "commandResult";
+                    err["id"]      = cmdId;
+                    err["success"] = false;
+                    err["error"]   = "quests_misc_markers_set requires boolean 'visible'";
+                    session->send(err.dump());
+                    return;
+                }
+
+                const bool visible = msg["visible"].get<bool>();
+                SKSE::GetTaskInterface()->AddTask([session, cmdId, visible]() {
+                    auto result = GameWriter::SetMiscQuestMarkersVisible(visible);
+                    std::string json = BuildCommandResultJson(cmdId, result);
+                    asio::post(session->ioc(), [session, json] { session->send(json); });
+                });
+            }
+            return;
+        }
+
         if (!msg.contains("formId") || !msg["formId"].is_string()) {
             session->send(R"({"type":"error","message":"Missing 'formId' field"})");
             return;

@@ -141,6 +141,8 @@ below.
 | `hotkey_set` | Bind an item or spell to one of the 8 hotkey slots. | [↓](#hotkey_set) |
 | `hotkey_clear` | Clear a hotkey slot. | [↓](#hotkey_clear) |
 | `hotkey_trigger` | Fire the action bound to a hotkey slot. | [↓](#hotkey_trigger) |
+| `quest_set_active` | Set or clear a quest's active/tracked state. | [↓](#quest_set_active) |
+| `quests_misc_markers_set` | Show or hide Miscellaneous quest markers as a group. | [↓](#quests_misc_markers_set) |
 | `player_marker_set` | Place / move the player's custom map marker. | [↓](#player_marker_set) |
 | `player_marker_clear` | Hide the player's custom map marker. | [↓](#player_marker_clear) |
 | `fast_travel` | Teleport the player to a discovered map marker. | [↓](#fast_travel) |
@@ -417,6 +419,52 @@ empty slots are silently ignored, just like vanilla.
 
 ---
 
+#### `quest_set_active`
+
+Sets or clears the active/tracked state of a quest. This is the same state the
+journal uses to decide whether a quest contributes active quest-target markers.
+Returns the updated quest entry in `data` using the `Player::Quests` object
+shape.
+
+| Field | Required | Default | Description |
+|---|---|---|---|
+| `formId` | **yes** | — | Hex form ID of the quest. Use `questFormId` from `Player::Quests`. |
+| `active` | **yes** | — | `true` to track/activate the quest, `false` to clear the active marker. |
+
+```json
+{
+  "type": "command",
+  "id": "track-quest",
+  "command": "quest_set_active",
+  "formId": "0x00036192",
+  "active": true
+}
+```
+
+---
+
+#### `quests_misc_markers_set`
+
+Sets the shared Miscellaneous marker filter. This controls whether active Misc
+objectives are emitted by `Map::Markers::Quests`; it does not change the
+`isActive` state of any individual Misc quest. Returns the updated visibility
+state in `data`: `{ "visible", "known", "source" }`.
+
+| Field | Required | Default | Description |
+|---|---|---|---|
+| `visible` | **yes** | — | `true` to include active Misc quest markers, `false` to hide them as a group. |
+
+```json
+{
+  "type": "command",
+  "id": "misc-markers-off",
+  "command": "quests_misc_markers_set",
+  "visible": false
+}
+```
+
+---
+
 #### `player_marker_set`
 
 Places (or moves) the player's custom map marker and makes it visible /
@@ -566,7 +614,9 @@ Sent when a message cannot be processed. The current subscription (if any) is
 
 ## Available field keys
 
-Field values are `float` (all `ActorValue::*` keys), JSON `array` / `integer` (all `Inventory::*` and `Hotkey::*` keys), or `string` (all `Game::*` keys).
+Field values are `float` (all `ActorValue::*` keys), JSON `array` / `object` /
+`integer` (complex `Inventory::*`, `Hotkey::*`, `Player::*`, `Map::*`, and
+`Magic::*` keys), or `string` (string-valued `Game::*` keys).
 Fields of different types can be freely mixed in a single `subscribe` or `query` message.
 
 **For a complete list of available fields, see:**

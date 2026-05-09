@@ -1,10 +1,12 @@
 #include "PlayerReader.h"
+#include "QuestText.h"
 
 #include "../../logger.h"
 
 #include <array>
 #include <cctype>
 #include <optional>
+#include <string_view>
 #include <unordered_map>
 #include <unordered_set>
 
@@ -469,6 +471,7 @@ namespace PlayerReader
     {
         bool g_miscObjectivesVisibilityKnown = false;
         bool g_miscObjectivesVisible         = true;
+        const char* g_miscObjectivesVisibilitySource = "cached misc objectives visibility";
 
         // ---------------------------------------------------------------------------
         // Persistent-ref cache
@@ -744,10 +747,12 @@ namespace PlayerReader
             return std::nullopt;
         }
 
-        void StoreMiscObjectivesVisible(bool visible)
+        void StoreMiscObjectivesVisible(bool visible,
+                                        const char* source = "cached misc objectives visibility")
         {
             g_miscObjectivesVisibilityKnown = true;
             g_miscObjectivesVisible         = visible;
+            g_miscObjectivesVisibilitySource = source;
         }
 
         MiscObjectivesVisibility GetMiscObjectivesVisibility()
@@ -756,8 +761,16 @@ namespace PlayerReader
             state.cachedKnown   = g_miscObjectivesVisibilityKnown;
             state.cachedVisible = g_miscObjectivesVisible;
 
+            if (g_miscObjectivesVisibilityKnown &&
+                std::string_view(g_miscObjectivesVisibilitySource) == "command") {
+                state.visible = g_miscObjectivesVisible;
+                state.known   = true;
+                state.source  = g_miscObjectivesVisibilitySource;
+                return state;
+            }
+
             if (auto live = ReadJournalMiscObjectivesVisible()) {
-                StoreMiscObjectivesVisible(live->visible);
+                StoreMiscObjectivesVisible(live->visible, live->source);
                 state.visible          = live->visible;
                 state.known            = true;
                 state.source           = live->source;
@@ -775,7 +788,7 @@ namespace PlayerReader
             if (g_miscObjectivesVisibilityKnown) {
                 state.visible = g_miscObjectivesVisible;
                 state.known   = true;
-                state.source  = "cached misc objectives visibility";
+                state.source  = g_miscObjectivesVisibilitySource;
                 return state;
             }
 
@@ -1926,7 +1939,7 @@ namespace PlayerReader
     void CaptureQuestJournalState()
     {
         if (auto visible = ReadJournalMiscObjectivesVisible()) {
-            StoreMiscObjectivesVisible(visible->visible);
+            StoreMiscObjectivesVisible(visible->visible, visible->source);
             logger::trace("[Map::Markers::Quests] captured misc objectives visibility={} source={}",
                           visible->visible, visible->source);
         }
@@ -1936,6 +1949,7 @@ namespace PlayerReader
     {
         g_miscObjectivesVisibilityKnown = false;
         g_miscObjectivesVisible         = true;
+        g_miscObjectivesVisibilitySource = "cached misc objectives visibility";
         s_persistentCache.built = false;
         s_persistentCache.byFormId.clear();
         s_persistentCache.markerByLocationId.clear();
@@ -2021,7 +2035,7 @@ namespace PlayerReader
                                                   ? objective->displayText.c_str()
                                                   : "";
             const std::string objectiveTextResolved =
-                ResolveQuestObjectiveText(quest, objectiveText, instanceID);
+                QuestText::ResolveText(quest, objectiveText, instanceID);
 
             nlohmann::json entry;
             entry["questFormId"]    = formIdStr(quest->GetFormID());
@@ -2137,7 +2151,7 @@ namespace PlayerReader
                     if (!matchedObj)
                         continue;
 
-                    const auto instanceID = FindDisplayedObjectiveInstanceID(player, matchedObj);
+                    const auto instanceID = QuestText::FindObjectiveInstanceID(player, matchedObj);
                     if (emitTargetEntry(quest, matchedObj, target, instanceID))
                         ++fromQuestTargets;
                 }
@@ -2231,7 +2245,7 @@ namespace PlayerReader
                         auto* objective = FindObjectiveForTarget(quest, target);
                         if (objective)
                             questTargetObjectives.insert(objective);
-                        const auto instanceID = FindDisplayedObjectiveInstanceID(player, objective);
+                        const auto instanceID = QuestText::FindObjectiveInstanceID(player, objective);
                         group["targets"].push_back(QuestTargetDebugJson(quest, objective, target, instanceID, true));
                     }
                 }
@@ -2309,6 +2323,21 @@ namespace PlayerReader
             { "markers", out["markers"].size() }
         };
         return out;
+    }
+
+    nlohmann::json ReadMiscQuestMarkerVisibility()
+    {
+        return MiscObjectivesVisibilityJson(GetMiscObjectivesVisibility());
+    }
+
+    bool GetMiscQuestMarkerVisibility()
+    {
+        return GetMiscObjectivesVisibility().visible;
+    }
+
+    void SetMiscQuestMarkerVisibility(bool visible)
+    {
+        StoreMiscObjectivesVisible(visible, "command");
     }
 
     nlohmann::json ReadGameStatus()
