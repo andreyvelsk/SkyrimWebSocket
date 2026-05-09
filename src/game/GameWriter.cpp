@@ -332,17 +332,21 @@ namespace GameWriter
         if (invCnt <= 0)
             return {false, "Book not in inventory"};
 
-        // Spell tomes should go through the engine's native activation path:
-        // learn spell / already-known message / tome consumption.
+        // Spell tomes: use the native read path, then mirror vanilla
+        // consumption semantics by removing one tome only when the spell
+        // actually transitioned from unknown -> known.
         if (book->TeachesSpell()) {
-            const bool ok = book->Activate(
-                static_cast<RE::TESObjectREFR*>(player),
-                static_cast<RE::TESObjectREFR*>(player),
-                /*a_arg3=*/0,
-                static_cast<RE::TESBoundObject*>(book),
-                /*a_targetCount=*/1);
+            auto* spell = book->GetSpell();
+            const bool knownBefore = spell ? player->HasSpell(spell) : false;
+
+            const bool ok = book->Read(player);
             if (!ok)
-                return {false, "Failed to activate/read spell tome"};
+                return {false, "Failed to read spell tome"};
+
+            const bool knownAfter = spell ? player->HasSpell(spell) : knownBefore;
+            if (!knownBefore && knownAfter && GetInventoryCount(player, formId) > 0) {
+                player->RemoveItem(book, 1, RE::ITEM_REMOVE_REASON::kRemove, nullptr, nullptr);
+            }
 
             logger::debug("read_book(spell_tome) 0x{:08X} ('{}')", formId, book->GetName());
             PrintConsole("[WS] Read spell tome " + std::string(book->GetName()));
