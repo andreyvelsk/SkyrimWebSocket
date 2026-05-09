@@ -100,15 +100,12 @@ namespace QuestText
             if (!quest || !alias)
                 return {};
 
-            // Try to get ref from ref alias
-            if (alias->GetType() == RE::BGSBaseAlias::Type::kReference) {
-                auto* refAlias = static_cast<RE::BGSRefAlias*>(alias);
-                if (refAlias) {
-                    RE::TESObjectREFR* ref = nullptr;
-                    if (refAlias->GetReference(ref) && ref) {
-                        if (auto name = RefDisplayName(ref); !name.empty())
-                            return name;
-                    }
+            // Try to get ref from ref alias using dynamic_cast
+            if (auto* refAlias = dynamic_cast<RE::BGSRefAlias*>(alias)) {
+                auto* ref = refAlias->GetReference();
+                if (ref) {
+                    if (auto name = RefDisplayName(ref); !name.empty())
+                        return name;
                 }
             }
 
