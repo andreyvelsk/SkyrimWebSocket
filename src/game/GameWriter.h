@@ -29,6 +29,10 @@ namespace GameWriter
     // Must be called on the game thread.
     CommandResult UseItem(RE::FormID formId);
 
+    // Open and read a book from inventory.
+    // Must be called on the game thread.
+    CommandResult ReadBook(RE::FormID formId);
+
     // Drop item(s) from inventory.
     // Must be called on the game thread.
     CommandResult DropItem(RE::FormID formId, int count);

@@ -315,6 +315,68 @@ namespace GameWriter
         return {true, ""};
     }
 
+    CommandResult ReadBook(RE::FormID formId)
+    {
+        logger::trace("ReadBook enter: formId=0x{:08X}", formId);
+        auto* player = RE::PlayerCharacter::GetSingleton();
+        if (!player)
+            return {false, "Player not available"};
+
+        auto* book = RE::TESForm::LookupByID<RE::TESObjectBOOK>(formId);
+        if (!book)
+            return {false, "Form not found or is not a book"};
+
+        const int32_t invCnt = GetInventoryCount(player, formId);
+        logger::trace("ReadBook 0x{:08X} ('{}') invCount={}",
+                      formId, book->GetName(), invCnt);
+        if (invCnt <= 0)
+            return {false, "Book not in inventory"};
+
+        // Spell tomes: use the native read path, then mirror vanilla
+        // consumption semantics by removing one tome only when the spell
+        // actually transitioned from unknown -> known.
+        if (book->TeachesSpell()) {
+            auto* spell = book->GetSpell();
+            const bool knownBefore = spell ? player->HasSpell(spell) : false;
+
+            const bool ok = book->Read(player);
+            if (!ok)
+                return {false, "Failed to read spell tome"};
+
+            const bool knownAfter = spell ? player->HasSpell(spell) : knownBefore;
+            if (!knownBefore && knownAfter && GetInventoryCount(player, formId) > 0) {
+                player->RemoveItem(book, 1, RE::ITEM_REMOVE_REASON::kRemove, nullptr, nullptr);
+            }
+
+            logger::debug("read_book(spell_tome) 0x{:08X} ('{}')", formId, book->GetName());
+            PrintConsole("[WS] Read spell tome " + std::string(book->GetName()));
+            return {true, ""};
+        }
+
+        const auto* xList = [&]() -> const RE::ExtraDataList* {
+            auto* liveEntry = FindLiveEntry(player, formId);
+            if (!liveEntry || !liveEntry->extraLists)
+                return nullptr;
+            for (auto* xl : *liveEntry->extraLists) {
+                if (xl)
+                    return xl;
+            }
+            return nullptr;
+        }();
+
+        RE::BSString desc;
+        book->GetDescription(desc, nullptr);
+
+        RE::NiMatrix3 rot{};
+        rot.SetEulerAnglesXYZ(-0.05f, -0.05f, 1.50f);
+
+        RE::BookMenu::OpenBookMenu(desc, xList, nullptr, book, RE::NiPoint3(), rot, 1.0f, true);
+
+        logger::debug("read_book 0x{:08X} ('{}')", formId, book->GetName());
+        PrintConsole("[WS] Read book " + std::string(book->GetName()));
+        return {true, ""};
+    }
+
     CommandResult DropItem(RE::FormID formId, int count)
     {
         logger::trace("DropItem enter: formId=0x{:08X} count={}", formId, count);
