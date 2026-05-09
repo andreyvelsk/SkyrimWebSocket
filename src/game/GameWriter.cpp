@@ -332,9 +332,24 @@ namespace GameWriter
         if (invCnt <= 0)
             return {false, "Book not in inventory"};
 
-        const bool ok = book->Read(player);
-        if (!ok)
-            return {false, "Failed to open/read book"};
+        const auto* xList = [&]() -> const RE::ExtraDataList* {
+            auto* liveEntry = FindLiveEntry(player, formId);
+            if (!liveEntry || !liveEntry->extraLists)
+                return nullptr;
+            for (auto* xl : *liveEntry->extraLists) {
+                if (xl)
+                    return xl;
+            }
+            return nullptr;
+        }();
+
+        if (xList) {
+            RE::NiMatrix3 rot{};
+            rot.SetEulerAnglesXYZ(-0.05f, -0.05f, 1.50f);
+            RE::BookMenu::OpenMenuFromBaseForm(book, xList, RE::NiPoint3(), rot, 1.0f, true);
+        } else {
+            RE::BookMenu::OpenMenuFromBaseForm(book);
+        }
 
         logger::debug("read_book 0x{:08X} ('{}')", formId, book->GetName());
         PrintConsole("[WS] Read book " + std::string(book->GetName()));
