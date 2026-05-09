@@ -1,5 +1,7 @@
 # SkyrimWebSocket
 > 📜 based on template by https://github.com/SkyrimScripting/SKSE_Templates
+>
+> frontend part of project here - https://andreyvelsk.github.io/SkyrimWebMonitor/
 
 - [SkyrimWebSocket](#skyrimwebsocket)
   - [What does it do?](#what-does-it-do)
