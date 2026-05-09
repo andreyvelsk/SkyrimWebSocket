@@ -93,51 +93,6 @@ namespace QuestText
             return {};
         }
 
-        RE::BGSQuestInstanceText* FindQuestInstanceText(RE::TESQuest* quest, std::uint32_t instanceID)
-        {
-            if (!quest || instanceID == 0)
-                return nullptr;
-
-            for (auto* data : quest->instanceData) {
-                if (data && data->id == instanceID)
-                    return data;
-            }
-            return nullptr;
-        }
-
-        std::string ResolveAliasFromInstanceText(RE::TESQuest* quest,
-                                                 std::uint32_t aliasID,
-                                                 std::uint32_t instanceID)
-        {
-            if (!quest)
-                return {};
-
-            const auto resolveFrom = [&](RE::BGSQuestInstanceText* text) -> std::string {
-                if (!text)
-                    return {};
-                if (text->valueData.aliasID != aliasID)
-                    return {};
-                if (auto* form = RE::TESForm::LookupByID(text->valueData.fullNameFormID)) {
-                    if (auto name = FormDisplayName(form); !name.empty())
-                        return name;
-                }
-                return text->stringData.c_str() ? std::string(text->stringData.c_str()) : std::string();
-            };
-
-            if (auto name = resolveFrom(FindQuestInstanceText(quest, instanceID)); !name.empty())
-                return name;
-            if (instanceID != quest->currentInstanceID) {
-                if (auto name = resolveFrom(FindQuestInstanceText(quest, quest->currentInstanceID)); !name.empty())
-                    return name;
-            }
-
-            for (auto* data : quest->instanceData) {
-                if (auto name = resolveFrom(data); !name.empty())
-                    return name;
-            }
-            return {};
-        }
-
         std::string ResolveAliasDisplayName(RE::TESQuest* quest,
                                             RE::BGSBaseAlias* alias,
                                             std::uint32_t instanceID)
@@ -145,17 +100,19 @@ namespace QuestText
             if (!quest || !alias)
                 return {};
 
-            if (auto name = ResolveAliasFromInstanceText(quest, alias->aliasID, instanceID); !name.empty())
-                return name;
-
-            if (auto* refAlias = alias->As<RE::BGSRefAlias>()) {
-                RE::TESObjectREFRPtr ref;
-                if (refAlias->GetReference(ref) && ref) {
-                    if (auto name = RefDisplayName(ref.get()); !name.empty())
-                        return name;
+            // Try to get ref from ref alias
+            if (alias->GetType() == RE::BGSBaseAlias::Type::kReference) {
+                auto* refAlias = static_cast<RE::BGSRefAlias*>(alias);
+                if (refAlias) {
+                    RE::TESObjectREFR* ref = nullptr;
+                    if (refAlias->GetReference(ref) && ref) {
+                        if (auto name = RefDisplayName(ref); !name.empty())
+                            return name;
+                    }
                 }
             }
 
+            // Fallback to alias name
             const char* aliasName = alias->aliasName.c_str();
             return aliasName ? std::string(aliasName) : std::string();
         }
