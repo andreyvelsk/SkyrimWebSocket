@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+## [1.13.0](https://github.com/andreyvelsk/SkyrimWebSocket/compare/v1.12.1...v1.13.0) (2026-05-09)
+
+
+### ✨ Features
+
+* **book:** read book from inventory ([#41](https://github.com/andreyvelsk/SkyrimWebSocket/issues/41)) ([a1081eb](https://github.com/andreyvelsk/SkyrimWebSocket/commits/a1081ebec722934049a9b60ff4816416625a2345))
+
 ### [1.12.1](https://github.com/andreyvelsk/SkyrimWebSocket/compare/v1.12.0...v1.12.1) (2026-05-08)
 
 
