@@ -86,14 +86,7 @@ namespace QuestReader
             if (!item || !item->hasLogEntry || item->logEntry.id == 0)
                 return {};
 
-            RE::TESDescription description;
-            description.fileOffset = item->logEntry.id;
-            description.descriptionText = item->logEntry;
-
-            RE::BSString out;
-            description.GetDescription(out, item->owner, 'CNAM');
-            const char* text = out.c_str();
-            return text ? std::string(text) : std::string();
+            return {};
         }
 
         std::unordered_map<RE::TESQuest*, std::vector<QuestLogEntry>>

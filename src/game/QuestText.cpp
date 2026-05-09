@@ -94,8 +94,7 @@ namespace QuestText
         }
 
         std::string ResolveAliasDisplayName(RE::TESQuest* quest,
-                                            RE::BGSBaseAlias* alias,
-                                            std::uint32_t instanceID)
+                                            RE::BGSBaseAlias* alias)
         {
             if (!quest || !alias)
                 return {};
@@ -222,7 +221,7 @@ namespace QuestText
 
                 if (IsAliasTokenHead(head)) {
                     if (auto* alias = FindAliasByName(quest, name)) {
-                        std::string replacement = ResolveAliasDisplayName(quest, alias, instanceID);
+                        std::string replacement = ResolveAliasDisplayName(quest, alias);
                         if (!replacement.empty()) {
                             logger::debug("[QuestText] resolved token '<{}>' -> '{}' (quest=0x{:08X}, instance={})",
                                           std::string(token), replacement,
