@@ -227,6 +227,8 @@ namespace MessageRouter
                 result = GameWriter::UnequipItem(formId, hand);
             else if (command == "use")
                 result = GameWriter::UseItem(formId);
+            else if (command == "read_book")
+                result = GameWriter::ReadBook(formId);
             else if (command == "drop")
                 result = GameWriter::DropItem(formId, count);
             else if (command == "favorite")

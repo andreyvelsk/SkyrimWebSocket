@@ -132,6 +132,7 @@ below.
 | `equip` | Equip an inventory item (weapon / apparel / ammo). | [↓](#equip) |
 | `unequip` | Unequip an item. | [↓](#unequip) |
 | `use` | Consume a potion / food / ingredient / scroll. | [↓](#use) |
+| `read_book` | Open and read a book from inventory. | [↓](#read_book) |
 | `drop` | Drop one or more inventory items onto the ground. | [↓](#drop) |
 | `favorite` | Toggle the favorite flag on an inventory item. | [↓](#favorite) |
 | `equip_spell` | Equip a known spell to a hand. | [↓](#equip_spell) |
@@ -209,6 +210,27 @@ instead of being consumed immediately.
   "id": "use-potion",
   "command": "use",
   "formId": "0x00039BE5"
+}
+```
+
+---
+
+#### `read_book`
+
+Opens the book reading UI for a book currently in the player's inventory.
+
+| Field | Required | Default | Description |
+|---|---|---|---|
+| `formId` | **yes** | — | Hex form ID of the book to read. Must be present in inventory. |
+
+**Applies to:** Books.
+
+```json
+{
+  "type": "command",
+  "id": "read-book",
+  "command": "read_book",
+  "formId": "0x0001AFD3"
 }
 ```
 

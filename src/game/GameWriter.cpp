@@ -315,6 +315,32 @@ namespace GameWriter
         return {true, ""};
     }
 
+    CommandResult ReadBook(RE::FormID formId)
+    {
+        logger::trace("ReadBook enter: formId=0x{:08X}", formId);
+        auto* player = RE::PlayerCharacter::GetSingleton();
+        if (!player)
+            return {false, "Player not available"};
+
+        auto* book = RE::TESForm::LookupByID<RE::TESObjectBOOK>(formId);
+        if (!book)
+            return {false, "Form not found or is not a book"};
+
+        const int32_t invCnt = GetInventoryCount(player, formId);
+        logger::trace("ReadBook 0x{:08X} ('{}') invCount={}",
+                      formId, book->GetName(), invCnt);
+        if (invCnt <= 0)
+            return {false, "Book not in inventory"};
+
+        const bool ok = book->Read(player);
+        if (!ok)
+            return {false, "Failed to open/read book"};
+
+        logger::debug("read_book 0x{:08X} ('{}')", formId, book->GetName());
+        PrintConsole("[WS] Read book " + std::string(book->GetName()));
+        return {true, ""};
+    }
+
     CommandResult DropItem(RE::FormID formId, int count)
     {
         logger::trace("DropItem enter: formId=0x{:08X} count={}", formId, count);
