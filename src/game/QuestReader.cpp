@@ -9,6 +9,8 @@
 #include <utility>
 #include <vector>
 
+namespace logger = SKSE::log;
+
 namespace QuestReader
 {
     namespace
@@ -241,14 +243,24 @@ namespace QuestReader
 
         bool ShouldIncludeQuest(const nlohmann::json& questJson)
         {
-            if (!questJson.value("isRunning", false) || questJson.value("isCompleted", false))
+            if (!questJson.value("isRunning", false))
                 return false;
-            if (questJson.contains("steps") && questJson["steps"].is_array() && !questJson["steps"].empty())
+            
+            // Filter out quests without meaningful content
+            const bool hasSteps = questJson.contains("steps") && questJson["steps"].is_array() && !questJson["steps"].empty();
+            const bool hasDescription = !questJson.value("description", std::string()).empty();
+            const bool hasName = !questJson.value("name", std::string()).empty();
+            const bool isActive = questJson.value("isActive", false);
+            
+            // Include quest if:
+            // 1. It has steps OR
+            // 2. It has description AND is active OR
+            // 3. It is active and has a name
+            if (hasSteps)
                 return true;
-            if (!questJson.value("description", std::string()).empty())
+            if ((hasDescription || hasName) && isActive)
                 return true;
-            if (questJson.value("isActive", false) && !questJson.value("name", std::string()).empty())
-                return true;
+            
             return false;
         }
     }
@@ -274,7 +286,7 @@ namespace QuestReader
         auto questLog = BuildQuestLogMap(player);
 
         for (auto* quest : dataHandler->GetFormArray<RE::TESQuest>()) {
-            if (!quest || !quest->IsRunning() || quest->IsCompleted())
+            if (!quest || !quest->IsRunning())
                 continue;
 
             const auto logs = [&]() -> std::vector<QuestLogEntry> {
@@ -284,8 +296,20 @@ namespace QuestReader
             }();
 
             auto entry = BuildQuestJson(quest, runtimeInfo, logs);
-            if (ShouldIncludeQuest(entry))
+            if (ShouldIncludeQuest(entry)) {
                 out.push_back(std::move(entry));
+            } else {
+                // Debug: log why this quest was excluded
+                const auto questId = std::format("0x{:08X}", quest->GetFormID());
+                const auto questEditorId = quest->GetFormEditorID() ? quest->GetFormEditorID() : "<none>";
+                const bool hasSteps = entry.contains("steps") && entry["steps"].is_array() && !entry["steps"].empty();
+                const bool hasDescription = !entry.value("description", std::string()).empty();
+                const bool hasName = !entry.value("name", std::string()).empty();
+                const bool isActive = entry.value("isActive", false);
+                logger::debug("[Player::Quests] Excluded quest {} ({}) - isActive={}, hasSteps={}, hasDescription={}, hasName={}, isRunning={}, isCompleted={}",
+                             questId, questEditorId, isActive, hasSteps, hasDescription, hasName,
+                             quest->IsRunning(), quest->IsCompleted());
+            }
         }
 
         std::sort(out.begin(), out.end(), [](const nlohmann::json& lhs, const nlohmann::json& rhs) {

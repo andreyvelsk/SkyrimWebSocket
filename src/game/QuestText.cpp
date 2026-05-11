@@ -103,6 +103,21 @@ namespace QuestText
             if (auto* refAlias = dynamic_cast<RE::BGSRefAlias*>(alias)) {
                 auto* ref = refAlias->GetReference();
                 if (ref) {
+                    // First, try to get the location that this ref belongs to
+                    // This handles radiant quests where the target is a location marker
+                    if (auto* location = ref->GetCurrentLocation()) {
+                        if (auto* locName = location->GetFullName()) {
+                            if (*locName)
+                                return locName;
+                        }
+                    }
+                    if (auto* location = ref->GetEditorLocation()) {
+                        if (auto* locName = location->GetFullName()) {
+                            if (*locName)
+                                return locName;
+                        }
+                    }
+                    // Fallback to ref display name
                     if (auto name = RefDisplayName(ref); !name.empty())
                         return name;
                 }
