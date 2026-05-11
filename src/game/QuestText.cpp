@@ -93,39 +93,85 @@ namespace QuestText
             return {};
         }
 
+        RE::BGSQuestInstanceText* FindQuestInstanceText(RE::TESQuest* quest, std::uint32_t instanceID)
+        {
+            if (!quest)
+                return nullptr;
+
+            const auto findByID = [&](std::uint32_t id) -> RE::BGSQuestInstanceText* {
+                if (id == 0)
+                    return nullptr;
+                for (auto* data : quest->instanceData) {
+                    if (data && data->id == id)
+                        return data;
+                }
+                return nullptr;
+            };
+
+            if (auto* data = findByID(instanceID))
+                return data;
+            if (quest->currentInstanceID != instanceID)
+                return findByID(quest->currentInstanceID);
+            return nullptr;
+        }
+
+        std::string ResolveAliasFromInstanceText(RE::TESQuest* quest,
+                                                 std::uint32_t aliasID,
+                                                 std::uint32_t instanceID)
+        {
+            const auto resolveFrom = [&](RE::BGSQuestInstanceText* data) -> std::string {
+                if (!data)
+                    return {};
+                for (const auto& str : data->stringData) {
+                    if (str.aliasID != aliasID || str.fullNameFormID == 0)
+                        continue;
+                    auto* form = RE::TESForm::LookupByID(str.fullNameFormID);
+                    if (!form) {
+                        logger::debug("[QuestText] unresolved instance text formId=0x{:08X} alias={} quest={} instance={}",
+                                      str.fullNameFormID, aliasID,
+                                      quest && quest->GetFormEditorID() ? quest->GetFormEditorID() : "",
+                                      data->id);
+                        continue;
+                    }
+                    if (auto name = FormDisplayName(form); !name.empty())
+                        return name;
+                }
+                return {};
+            };
+
+            if (auto name = resolveFrom(FindQuestInstanceText(quest, instanceID)); !name.empty())
+                return name;
+
+            std::string onlyName;
+            std::size_t matches = 0;
+            if (quest) {
+                for (auto* data : quest->instanceData) {
+                    if (auto name = resolveFrom(data); !name.empty()) {
+                        onlyName = std::move(name);
+                        ++matches;
+                    }
+                }
+            }
+            return matches == 1 ? onlyName : std::string();
+        }
+
         std::string ResolveAliasDisplayName(RE::TESQuest* quest,
-                                            RE::BGSBaseAlias* alias)
+                                            RE::BGSBaseAlias* alias,
+                                            std::uint32_t instanceID)
         {
             if (!quest || !alias)
                 return {};
 
-            // Try to get ref from ref alias using dynamic_cast
-            if (auto* refAlias = dynamic_cast<RE::BGSRefAlias*>(alias)) {
-                auto* ref = refAlias->GetReference();
-                if (ref) {
-                    // First, try to get the location that this ref belongs to
-                    // This handles radiant quests where the target is a location marker
-                    if (auto* location = ref->GetCurrentLocation()) {
-                        if (auto* locName = location->GetFullName()) {
-                            if (*locName)
-                                return locName;
-                        }
-                    }
-                    if (auto* location = ref->GetEditorLocation()) {
-                        if (auto* locName = location->GetFullName()) {
-                            if (*locName)
-                                return locName;
-                        }
-                    }
-                    // Fallback to ref display name
-                    if (auto name = RefDisplayName(ref); !name.empty())
-                        return name;
-                }
+            if (auto name = ResolveAliasFromInstanceText(quest, alias->aliasID, instanceID); !name.empty())
+                return name;
+
+            if (alias->GetVMTypeID() == RE::BGSRefAlias::VMTYPEID) {
+                auto* refAlias = static_cast<RE::BGSRefAlias*>(alias);
+                if (auto name = RefDisplayName(refAlias->GetReference()); !name.empty())
+                    return name;
             }
 
-            // Fallback to alias name
-            const char* aliasName = alias->aliasName.c_str();
-            return aliasName ? std::string(aliasName) : std::string();
+            return {};
         }
     }
 
@@ -175,9 +221,7 @@ namespace QuestText
     bool IsObjectiveVisibleInJournal(RE::QUEST_OBJECTIVE_STATE state)
     {
         return state == RE::QUEST_OBJECTIVE_STATE::kDisplayed ||
-            state == RE::QUEST_OBJECTIVE_STATE::kCompleted ||
             state == RE::QUEST_OBJECTIVE_STATE::kCompletedDisplayed ||
-            state == RE::QUEST_OBJECTIVE_STATE::kFailed ||
             state == RE::QUEST_OBJECTIVE_STATE::kFailedDisplayed;
     }
 
@@ -236,7 +280,7 @@ namespace QuestText
 
                 if (IsAliasTokenHead(head)) {
                     if (auto* alias = FindAliasByName(quest, name)) {
-                        std::string replacement = ResolveAliasDisplayName(quest, alias);
+                        std::string replacement = ResolveAliasDisplayName(quest, alias, instanceID);
                         if (!replacement.empty()) {
                             logger::debug("[QuestText] resolved token '<{}>' -> '{}' (quest=0x{:08X}, instance={})",
                                           std::string(token), replacement,
