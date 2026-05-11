@@ -7,6 +7,7 @@
 #include "../Utils.h"
 
 #include <chrono>
+#include <cctype>
 #include <nlohmann/json.hpp>
 #include <optional>
 
@@ -54,6 +55,39 @@ namespace MessageRouter
         } catch (...) {
             return std::nullopt;
         }
+    }
+
+    // Parse a bool-like command field from JSON.
+    // Accepts bool, 0/1 numbers, and strings: true/false, on/off, 1/0.
+    static std::optional<bool> ParseBoolLike(const nlohmann::json& msg,
+                                             std::initializer_list<const char*> keys)
+    {
+        auto parseString = [](std::string value) -> std::optional<bool> {
+            for (auto& c : value)
+                c = static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
+
+            if (value == "true" || value == "1" || value == "on")
+                return true;
+            if (value == "false" || value == "0" || value == "off")
+                return false;
+            return std::nullopt;
+        };
+
+        for (const char* key : keys) {
+            if (!msg.contains(key))
+                continue;
+
+            const auto& value = msg[key];
+            if (value.is_boolean())
+                return value.get<bool>();
+            if (value.is_number_integer())
+                return value.get<int>() != 0;
+            if (value.is_string())
+                return parseString(value.get<std::string>());
+            return std::nullopt;
+        }
+
+        return std::nullopt;
     }
 
     // Build the JSON response for a command result.
@@ -238,17 +272,22 @@ namespace MessageRouter
                     asio::post(session->ioc(), [session, json] { session->send(json); });
                 });
             } else {
-                if (!msg.contains("visible") || !msg["visible"].is_boolean()) {
+                // Be tolerant to client payload shapes to avoid silent no-op:
+                // visible: bool (preferred), active/enabled/value as fallbacks.
+                const auto visibleParsed = ParseBoolLike(msg, {"visible", "active", "enabled", "value"});
+                if (!visibleParsed.has_value()) {
                     nlohmann::json err;
                     err["type"]    = "commandResult";
                     err["id"]      = cmdId;
                     err["success"] = false;
-                    err["error"]   = "quests_misc_markers_set requires boolean 'visible'";
+                    err["error"]   = "quests_misc_markers_set requires bool-like field: 'visible' (preferred), or 'active'/'enabled'/'value'";
                     session->send(err.dump());
                     return;
                 }
 
-                const bool visible = msg["visible"].get<bool>();
+                const bool visible = *visibleParsed;
+                logger::debug("command '{}' id='{}' visible={} payload={}",
+                              command, cmdId, visible, msg.dump());
                 SKSE::GetTaskInterface()->AddTask([session, cmdId, visible]() {
                     auto result = GameWriter::SetMiscQuestMarkersVisible(visible);
                     std::string json = BuildCommandResultJson(cmdId, result);

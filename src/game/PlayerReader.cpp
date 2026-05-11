@@ -750,9 +750,18 @@ namespace PlayerReader
         void StoreMiscObjectivesVisible(bool visible,
                                         const char* source = "cached misc objectives visibility")
         {
+            const bool        prevKnown   = g_miscObjectivesVisibilityKnown;
+            const bool        prevVisible = g_miscObjectivesVisible;
+            const char* const prevSource  = g_miscObjectivesVisibilitySource;
             g_miscObjectivesVisibilityKnown = true;
             g_miscObjectivesVisible         = visible;
             g_miscObjectivesVisibilitySource = source;
+
+            logger::trace("[MiscObjectivesVisibility] update known {}->{} visible {}->{} source '{}'->'{}'",
+                          prevKnown, g_miscObjectivesVisibilityKnown,
+                          prevVisible, g_miscObjectivesVisible,
+                          prevSource ? prevSource : "",
+                          g_miscObjectivesVisibilitySource ? g_miscObjectivesVisibilitySource : "");
         }
 
         MiscObjectivesVisibility GetMiscObjectivesVisibility()
