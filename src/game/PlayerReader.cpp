@@ -1948,6 +1948,13 @@ namespace PlayerReader
     void CaptureQuestJournalState()
     {
         if (auto visible = ReadJournalMiscObjectivesVisible()) {
+            if (g_miscObjectivesVisibilityKnown &&
+                std::string_view(g_miscObjectivesVisibilitySource) == "command") {
+                logger::trace("[Map::Markers::Quests] observed journal misc visibility={} source={} but keeping command override={}",
+                              visible->visible, visible->source, g_miscObjectivesVisible);
+                return;
+            }
+
             StoreMiscObjectivesVisible(visible->visible, visible->source);
             logger::trace("[Map::Markers::Quests] captured misc objectives visibility={} source={}",
                           visible->visible, visible->source);
