@@ -235,11 +235,9 @@ namespace MessageRouter
             return;
         }
 
-        // Quest commands use boolean arguments, and the Misc master toggle
-        // does not target a single formId, so parse them before the generic
-        // formId-required item/spell/map-marker command path.
-        if (command == "quest_set_active" || command == "quests_misc_markers_set") {
-            if (command == "quest_set_active") {
+        // Quest commands use boolean arguments,
+        // so parse them before the generic formId-required item/spell/map-marker command path.
+        if (command == "quest_set_active") {
                 if (!msg.contains("formId") || !msg["formId"].is_string()) {
                     nlohmann::json err;
                     err["type"]    = "commandResult";
@@ -275,28 +273,6 @@ namespace MessageRouter
                 const bool active = msg["active"].get<bool>();
                 SKSE::GetTaskInterface()->AddTask([session, cmdId, formId, active]() {
                     auto result = GameWriter::SetQuestActive(formId, active);
-                    std::string json = BuildCommandResultJson(cmdId, result);
-                    asio::post(session->ioc(), [session, json] { session->send(json); });
-                });
-            } else {
-                // Be tolerant to client payload shapes to avoid silent no-op:
-                // visible: bool (preferred), active/enabled/value as fallbacks.
-                const auto visibleParsed = ParseBoolLike(msg, {"visible", "active", "enabled", "value"});
-                if (!visibleParsed.has_value()) {
-                    nlohmann::json err;
-                    err["type"]    = "commandResult";
-                    err["id"]      = cmdId;
-                    err["success"] = false;
-                    err["error"]   = "quests_misc_markers_set requires bool-like field: 'visible' (preferred), or 'active'/'enabled'/'value'";
-                    session->send(err.dump());
-                    return;
-                }
-
-                const bool visible = *visibleParsed;
-                logger::debug("command '{}' id='{}' visible={} payload={}",
-                              command, cmdId, visible, msg.dump());
-                SKSE::GetTaskInterface()->AddTask([session, cmdId, visible]() {
-                    auto result = GameWriter::SetMiscQuestMarkersVisible(visible);
                     std::string json = BuildCommandResultJson(cmdId, result);
                     asio::post(session->ioc(), [session, json] { session->send(json); });
                 });

@@ -142,7 +142,6 @@ below.
 | `hotkey_clear` | Clear a hotkey slot. | [↓](#hotkey_clear) |
 | `hotkey_trigger` | Fire the action bound to a hotkey slot. | [↓](#hotkey_trigger) |
 | `quest_set_active` | Set or clear a quest's active/tracked state. | [↓](#quest_set_active) |
-| `quests_misc_markers_set` | Show or hide Miscellaneous quest markers as a group. | [↓](#quests_misc_markers_set) |
 | `player_marker_set` | Place / move the player's custom map marker. | [↓](#player_marker_set) |
 | `player_marker_clear` | Hide the player's custom map marker. | [↓](#player_marker_clear) |
 | `fast_travel` | Teleport the player to a discovered map marker. | [↓](#fast_travel) |
@@ -438,28 +437,6 @@ shape.
   "command": "quest_set_active",
   "formId": "0x00036192",
   "active": true
-}
-```
-
----
-
-#### `quests_misc_markers_set`
-
-Sets the shared Miscellaneous marker filter. This controls whether active Misc
-objectives are emitted by `Map::Markers::Quests`; it does not change the
-`isActive` state of any individual Misc quest. Returns the updated visibility
-state in `data`: `{ "visible", "known", "source" }`.
-
-| Field | Required | Default | Description |
-|---|---|---|---|
-| `visible` | **yes** | — | `true` to include active Misc quest markers, `false` to hide them as a group. |
-
-```json
-{
-  "type": "command",
-  "id": "misc-markers-off",
-  "command": "quests_misc_markers_set",
-  "visible": false
 }
 ```
 

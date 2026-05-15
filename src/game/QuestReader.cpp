@@ -231,13 +231,6 @@ namespace QuestReader
             out["currentInstanceId"] = quest->currentInstanceID;
             out["steps"] = std::move(steps);
 
-            if (isMisc) {
-                const auto miscVisibility = PlayerReader::ReadMiscQuestMarkerVisibility();
-                out["miscMarkersVisible"] = miscVisibility.value("visible", true);
-                out["miscMarkersVisibilityKnown"] = miscVisibility.value("known", false);
-                out["miscMarkersVisibilitySource"] = miscVisibility.value("source", "defaultVisible");
-            }
-
             return out;
         }
 

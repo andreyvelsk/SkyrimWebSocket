@@ -2341,21 +2341,6 @@ namespace PlayerReader
         return out;
     }
 
-    nlohmann::json ReadMiscQuestMarkerVisibility()
-    {
-        return MiscObjectivesVisibilityJson(GetMiscObjectivesVisibility());
-    }
-
-    bool GetMiscQuestMarkerVisibility()
-    {
-        return GetMiscObjectivesVisibility().visible;
-    }
-
-    void SetMiscQuestMarkerVisibility(bool visible)
-    {
-        StoreMiscObjectivesVisible(visible, "command");
-    }
-
     nlohmann::json ReadGameStatus()
     {
         nlohmann::json out = {

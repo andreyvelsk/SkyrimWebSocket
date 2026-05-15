@@ -223,11 +223,6 @@ value after the menu closes. If that UI list is not available, it falls back to
 plugin session, the reader defaults to visible so it does not hide valid Misc
 targets unexpectedly.
 
-Clients can set the same shared Misc marker filter through the
-`quests_misc_markers_set` command. This affects whether active Misc objectives
-are emitted here; it does not change the active/tracked state of individual
-Misc quests.
-
 Targets that resolve to non-ref aliases (location aliases, data aliases) or
 to unfilled refs are skipped. References flagged as deleted are still returned
 when Skyrim itself keeps them in `questTargets`, because the engine can use

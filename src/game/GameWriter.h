@@ -91,11 +91,6 @@ namespace GameWriter
     // Must be called on the game thread.
     CommandResult SetQuestActive(RE::FormID formId, bool active);
 
-    // Updates the shared Miscellaneous quest-marker visibility filter used by
-    // Map::Markers::Quests. Does not change individual quest active flags.
-    // Must be called on the game thread.
-    CommandResult SetMiscQuestMarkersVisible(bool visible);
-
     // ─── Player-placed map marker ─────────────────────────────────────────
     //
     // The "player marker" is the marker the player can drop on the world map

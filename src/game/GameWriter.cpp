@@ -1037,18 +1037,6 @@ namespace GameWriter
         return result;
     }
 
-    CommandResult SetMiscQuestMarkersVisible(bool visible)
-    {
-        PlayerReader::SetMiscQuestMarkerVisibility(visible);
-
-        CommandResult result;
-        result.success = true;
-        result.data = PlayerReader::ReadMiscQuestMarkerVisibility();
-
-        PrintConsole(std::format("[WS] Misc quest markers {}", visible ? "visible" : "hidden"));
-        return result;
-    }
-
     // ─── Player-placed map marker ─────────────────────────────────────────
 
     CommandResult SetPlayerMarker(float a_x, float a_y, float a_z)

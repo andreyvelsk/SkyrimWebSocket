@@ -328,19 +328,6 @@ for that quest.
 }
 ```
 
-Use `quests_misc_markers_set` for the top-level Miscellaneous marker filter.
-This does not change `isActive` on individual Misc quests; it only controls
-whether active Misc objectives are emitted by `Map::Markers::Quests`.
-
-```json
-{
-  "type": "command",
-  "id": "hide-misc-markers",
-  "command": "quests_misc_markers_set",
-  "visible": false
-}
-```
-
 ---
 
 ## `Player::Marker`
