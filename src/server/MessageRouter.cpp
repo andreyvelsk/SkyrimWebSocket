@@ -47,9 +47,16 @@ namespace MessageRouter
     static std::optional<RE::FormID> ParseFormId(const std::string& str)
     {
         try {
+            const auto start = str.find_first_not_of(" \t\n\r\f\v");
+            if (start == std::string::npos)
+                return std::nullopt;
+
+            const auto end = str.find_last_not_of(" \t\n\r\f\v");
+            const auto trimmed = str.substr(start, end - start + 1);
+
             std::size_t pos = 0;
-            auto        val = std::stoul(str, &pos, 16);
-            if (pos == 0)
+            auto        val = std::stoul(trimmed, &pos, 16);
+            if (pos == 0 || pos != trimmed.size())
                 return std::nullopt;
             return static_cast<RE::FormID>(val);
         } catch (...) {
@@ -298,7 +305,7 @@ namespace MessageRouter
         }
 
         if (!msg.contains("formId") || !msg["formId"].is_string()) {
-            session->send(R"({"type":"error","message":"Missing 'formId' field"})");
+            session->send(BuildCommandResultJson(cmdId, {false, "Missing 'formId' field"}));
             return;
         }
 

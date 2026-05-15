@@ -284,14 +284,8 @@ namespace QuestReader
         auto* player = RE::PlayerCharacter::GetSingleton();
         auto runtimeInfo = BuildRuntimeObjectiveMap(player);
         auto questLog = BuildQuestLogMap(player);
-        const bool miscMarkersVisible = PlayerReader::GetMiscQuestMarkerVisibility();
-
         for (auto* quest : dataHandler->GetFormArray<RE::TESQuest>()) {
             if (!quest || !quest->IsRunning())
-                continue;
-
-            const bool isMisc = quest->GetType() == RE::QUEST_DATA::Type::kMiscellaneous;
-            if (isMisc && !miscMarkersVisible)
                 continue;
 
             const auto logs = [&]() -> std::vector<QuestLogEntry> {
