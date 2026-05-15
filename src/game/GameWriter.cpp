@@ -747,14 +747,6 @@ namespace GameWriter
             favorites->hotkeys.push_back(nullptr);
     }
 
-    // Returns the magic favorite currently bound to a slot (0..7), or nullptr.
-    static RE::TESForm* GetMagicHotkey(RE::MagicFavorites* favorites, std::uint8_t slotIdx)
-    {
-        if (!favorites || slotIdx >= favorites->hotkeys.size())
-            return nullptr;
-        return favorites->hotkeys[slotIdx];
-    }
-
     // Result of scanning the inventory for a hotkey binding.
     struct ItemHotkeyRef
     {
