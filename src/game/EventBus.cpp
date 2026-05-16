@@ -31,10 +31,12 @@ namespace EventBus
         // do not need a mutex.
         struct CacheEntry
         {
-            // 0 means "never resolved".  Cache is considered valid only when
-            // version != 0 AND version == GetVersion(key).
+            // `version` may legitimately be 0 before the first event bump, so
+            // keep an explicit initialization bit instead of using 0 as a
+            // sentinel.
             std::uint64_t  version = 0;
             nlohmann::json value;
+            bool           initialized = false;
         };
         std::unordered_map<std::string, CacheEntry> g_cache;
 
@@ -258,9 +260,9 @@ namespace EventBus
         const auto current = GetVersion(registryKey);
         auto&      slot    = g_cache[registryKey];
 
-        // Hit: cached entry was produced at the current version (and is not
-        // the initial sentinel 0).  Reuse it without invoking `compute`.
-        if (slot.version == current && slot.version != 0) {
+        // Hit: cached entry was produced at the current version. Version 0 is
+        // valid before the first event bump.
+        if (slot.initialized && slot.version == current) {
             logger::trace("[EventBus] cache hit '{}' v={}", registryKey, current);
             return {slot.version, slot.value};
         }
@@ -269,6 +271,7 @@ namespace EventBus
                       registryKey, slot.version, current);
         slot.value   = compute();
         slot.version = current;
+        slot.initialized = true;
         return {slot.version, slot.value};
     }
 }

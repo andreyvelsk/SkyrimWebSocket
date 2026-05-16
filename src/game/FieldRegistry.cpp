@@ -3,6 +3,7 @@
 #include "InventoryReader.h"
 #include "MagicReader.h"
 #include "PlayerReader.h"
+#include "QuestReader.h"
 #include "../AppFeatures.h"
 
 #include <nlohmann/json.hpp>
@@ -309,6 +310,12 @@ namespace FieldRegistry
         { "Player::ExteriorPosition",
           { "Last known exterior position cached by the game: { x, y, z, worldspace, worldspaceFormId, parentWorldspace, parentWorldspaceFormId }. Updated whenever the player is in an exterior cell; remains valid while in interiors. Useful for showing the player on a global (parent) worldspace map.", "object",
             &PlayerReader::ReadExteriorPosition } },
+
+        // Player quest journal
+        { "Player::Quests",
+          { "Array of current player-available quests from the quest journal. Each entry includes resolved radiant text where possible: { questFormId, questEditorId, name, nameRaw, description, descriptionRaw, type, questType, isMisc, isActive, isRunning, isCompleted, currentStage, currentInstanceId, steps }. Steps are ordered quest objectives with { index, text, textRaw, completed, failed, state, stateRaw, instanceId }. Miscellaneous quests include miscMarkersVisible/miscMarkersVisibilityKnown/miscMarkersVisibilitySource for the shared Misc marker filter.",
+            "array",
+            &QuestReader::ReadQuests } },
 
         // Map markers
         { "Map::Markers::Locations",

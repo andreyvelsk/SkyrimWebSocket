@@ -82,6 +82,15 @@ namespace GameWriter
     // Must be called on the game thread.
     CommandResult TriggerHotkey(std::uint8_t slot);
 
+    // ─── Quests ──────────────────────────────────────────────────────────
+
+    // Sets or clears the active/tracked state of a running quest. Dispatches
+    // Papyrus Quest.SetActive(active) and updates the QuestFlag::kActive bit
+    // so Player::Quests and Map::Markers::Quests reflect the new state in
+    // the same command response.
+    // Must be called on the game thread.
+    CommandResult SetQuestActive(RE::FormID formId, bool active);
+
     // ─── Player-placed map marker ─────────────────────────────────────────
     //
     // The "player marker" is the marker the player can drop on the world map

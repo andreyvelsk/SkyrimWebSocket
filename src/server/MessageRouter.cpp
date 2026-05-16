@@ -7,6 +7,7 @@
 #include "../Utils.h"
 
 #include <chrono>
+#include <cctype>
 #include <nlohmann/json.hpp>
 #include <optional>
 
@@ -46,9 +47,16 @@ namespace MessageRouter
     static std::optional<RE::FormID> ParseFormId(const std::string& str)
     {
         try {
+            const auto start = str.find_first_not_of(" \t\n\r\f\v");
+            if (start == std::string::npos)
+                return std::nullopt;
+
+            const auto end = str.find_last_not_of(" \t\n\r\f\v");
+            const auto trimmed = str.substr(start, end - start + 1);
+
             std::size_t pos = 0;
-            auto        val = std::stoul(str, &pos, 16);
-            if (pos == 0)
+            auto        val = std::stoul(trimmed, &pos, 16);
+            if (pos == 0 || pos != trimmed.size())
                 return std::nullopt;
             return static_cast<RE::FormID>(val);
         } catch (...) {
@@ -194,8 +202,52 @@ namespace MessageRouter
             return;
         }
 
+        // Quest commands use boolean arguments,
+        // so parse them before the generic formId-required item/spell/map-marker command path.
+        if (command == "quest_set_active") {
+            if (!msg.contains("formId") || !msg["formId"].is_string()) {
+                nlohmann::json err;
+                err["type"]    = "commandResult";
+                err["id"]      = cmdId;
+                err["success"] = false;
+                err["error"]   = "quest_set_active requires string 'formId'";
+                session->send(err.dump());
+                return;
+            }
+            if (!msg.contains("active") || !msg["active"].is_boolean()) {
+                nlohmann::json err;
+                err["type"]    = "commandResult";
+                err["id"]      = cmdId;
+                err["success"] = false;
+                err["error"]   = "quest_set_active requires boolean 'active'";
+                session->send(err.dump());
+                return;
+            }
+
+            const std::string formIdStr = msg["formId"].get<std::string>();
+            const auto parsed = ParseFormId(formIdStr);
+            if (!parsed) {
+                nlohmann::json err;
+                err["type"]    = "commandResult";
+                err["id"]      = cmdId;
+                err["success"] = false;
+                err["error"]   = "Invalid formId: '" + formIdStr + "'";
+                session->send(err.dump());
+                return;
+            }
+
+            const RE::FormID formId = *parsed;
+            const bool active = msg["active"].get<bool>();
+            SKSE::GetTaskInterface()->AddTask([session, cmdId, formId, active]() {
+                auto result = GameWriter::SetQuestActive(formId, active);
+                std::string json = BuildCommandResultJson(cmdId, result);
+                asio::post(session->ioc(), [session, json] { session->send(json); });
+            });
+            return;
+        }
+
         if (!msg.contains("formId") || !msg["formId"].is_string()) {
-            session->send(R"({"type":"error","message":"Missing 'formId' field"})");
+            session->send(BuildCommandResultJson(cmdId, {false, "Missing 'formId' field"}));
             return;
         }
 

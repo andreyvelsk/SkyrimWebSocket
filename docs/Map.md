@@ -196,6 +196,9 @@ on the world map. The list mirrors what the player actually sees on the map:
   produce multiple entries when Skyrim exposes multiple distinct destinations,
   but alternative aliases that resolve to the same marker are collapsed.
 
+For the journal-style list of current quests, names, descriptions, and ordered
+objective steps, query `Player::Quests` instead.
+
 In CommonLibSSE-NG, `TESQuest::IsActive()` checks `QuestFlag::kActive`; runtime
 testing shows that this bit tracks normal quests marked active through the
 journal UI. `questTargets` by itself is broader and can contain displayed but
