@@ -91,6 +91,12 @@ namespace GameWriter
     // Must be called on the game thread.
     CommandResult SetQuestActive(RE::FormID formId, bool active);
 
+    // Sets the master Miscellaneous quest marker filter used by Skyrim's
+    // journal for the top-level Miscellaneous row. Returns the updated
+    // visibility state in `data`.
+    // Must be called on the game thread.
+    CommandResult SetMiscQuestMarkersVisible(bool visible);
+
     // ─── Player-placed map marker ─────────────────────────────────────────
     //
     // The "player marker" is the marker the player can drop on the world map

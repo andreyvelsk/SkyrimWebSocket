@@ -221,7 +221,10 @@ row with `formID == 0`) while the journal menu is open and caches the latest
 value after the menu closes. If that UI list is not available, it falls back to
 `Journal_QuestsTab::unk30`. Until that UI state has been observed in the current
 plugin session, the reader defaults to visible so it does not hide valid Misc
-targets unexpectedly.
+targets unexpectedly. Clients can also set the value explicitly with
+`quests_misc_markers_set`; when the journal menu is open the command mirrors the
+state into `Journal_QuestsTab::unk30` and the Scaleform Miscellaneous row, and
+when the menu is closed it stores a command-sourced override used by this reader.
 
 Targets that resolve to non-ref aliases (location aliases, data aliases) or
 to unfilled refs are skipped. References flagged as deleted are still returned

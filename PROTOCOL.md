@@ -142,6 +142,7 @@ below.
 | `hotkey_clear` | Clear a hotkey slot. | [↓](#hotkey_clear) |
 | `hotkey_trigger` | Fire the action bound to a hotkey slot. | [↓](#hotkey_trigger) |
 | `quest_set_active` | Set or clear a quest's active/tracked state. | [↓](#quest_set_active) |
+| `quests_misc_markers_set` | Set the master Miscellaneous quest-marker filter. | [↓](#quests_misc_markers_set) |
 | `player_marker_set` | Place / move the player's custom map marker. | [↓](#player_marker_set) |
 | `player_marker_clear` | Hide the player's custom map marker. | [↓](#player_marker_clear) |
 | `fast_travel` | Teleport the player to a discovered map marker. | [↓](#fast_travel) |
@@ -437,6 +438,49 @@ shape.
   "command": "quest_set_active",
   "formId": "0x00036192",
   "active": true
+}
+```
+
+---
+
+#### `quests_misc_markers_set`
+
+Sets the journal's master Miscellaneous quest-marker filter, matching the state
+the vanilla/SkyUI quest journal toggles through `ToggleShowMiscObjectives` for
+the top-level Miscellaneous row. `Map::Markers::Quests` uses this filter for
+Miscellaneous markers, and Miscellaneous entries in `Player::Quests` expose the
+same value as `miscMarkersVisible`.
+
+If the journal menu is open, the command also mirrors the value into the live
+`Journal_QuestsTab` state and the Scaleform Miscellaneous row. If the menu is
+closed, the command stores an explicit plugin-side override that remains active
+until a save is loaded or the plugin observes a newer journal state.
+
+Returns the updated visibility state in `data`.
+
+| Field | Required | Default | Description |
+|---|---|---|---|
+| `visible` | **yes** | — | `true` to allow Miscellaneous quest markers, `false` to suppress them. |
+
+```json
+{
+  "type": "command",
+  "id": "misc-markers-off",
+  "command": "quests_misc_markers_set",
+  "visible": false
+}
+```
+
+Example `data` payload:
+
+```json
+{
+  "visible": false,
+  "known": true,
+  "source": "command",
+  "journalOpen": false,
+  "nativeUpdated": false,
+  "scaleformUpdated": false
 }
 ```
 

@@ -7,6 +7,7 @@
 #include "../Utils.h"
 
 #include <chrono>
+#include <algorithm>
 #include <cctype>
 #include <nlohmann/json.hpp>
 #include <optional>
@@ -62,6 +63,32 @@ namespace MessageRouter
         } catch (...) {
             return std::nullopt;
         }
+    }
+
+    static std::optional<bool> ParseBoolLike(const nlohmann::json& value)
+    {
+        if (value.is_boolean())
+            return value.get<bool>();
+        if (value.is_number_integer())
+            return value.get<int>() != 0;
+        if (!value.is_string())
+            return std::nullopt;
+
+        auto text = value.get<std::string>();
+        auto begin = text.find_first_not_of(" \t\n\r\f\v");
+        if (begin == std::string::npos)
+            return std::nullopt;
+        auto end = text.find_last_not_of(" \t\n\r\f\v");
+        text = text.substr(begin, end - begin + 1);
+        std::transform(text.begin(), text.end(), text.begin(), [](unsigned char ch) {
+            return static_cast<char>(std::tolower(ch));
+        });
+
+        if (text == "true" || text == "1" || text == "yes" || text == "on")
+            return true;
+        if (text == "false" || text == "0" || text == "no" || text == "off")
+            return false;
+        return std::nullopt;
     }
 
     // Build the JSON response for a command result.
@@ -204,6 +231,34 @@ namespace MessageRouter
 
         // Quest commands use boolean arguments,
         // so parse them before the generic formId-required item/spell/map-marker command path.
+        if (command == "quests_misc_markers_set") {
+            const auto visibleIt = msg.find("visible");
+            const auto activeIt = msg.find("active");
+            const nlohmann::json* value = nullptr;
+            if (visibleIt != msg.end())
+                value = &*visibleIt;
+            else if (activeIt != msg.end())
+                value = &*activeIt;
+
+            const auto visible = value ? ParseBoolLike(*value) : std::nullopt;
+            if (!visible) {
+                nlohmann::json err;
+                err["type"]    = "commandResult";
+                err["id"]      = cmdId;
+                err["success"] = false;
+                err["error"]   = "quests_misc_markers_set requires boolean 'visible'";
+                session->send(err.dump());
+                return;
+            }
+
+            SKSE::GetTaskInterface()->AddTask([session, cmdId, visible = *visible]() {
+                auto result = GameWriter::SetMiscQuestMarkersVisible(visible);
+                std::string json = BuildCommandResultJson(cmdId, result);
+                asio::post(session->ioc(), [session, json] { session->send(json); });
+            });
+            return;
+        }
+
         if (command == "quest_set_active") {
             if (!msg.contains("formId") || !msg["formId"].is_string()) {
                 nlohmann::json err;

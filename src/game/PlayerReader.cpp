@@ -635,6 +635,163 @@ namespace PlayerReader
             return std::nullopt;
         }
 
+        bool SetMiscObjectivesVisibleOnEntry(RE::GFxValue& entry, bool visible)
+        {
+            if (!ReadMiscObjectivesVisibleFromEntry(entry))
+                return false;
+
+            RE::GFxValue activeValue(visible);
+            return entry.SetMember("active", activeValue);
+        }
+
+        bool SetScaleformMiscObjectivesVisibleInValue(RE::GFxValue& value,
+                                                      bool          visible,
+                                                      std::uint32_t depth = 0)
+        {
+            bool updated = false;
+
+            if (value.IsArray()) {
+                const auto size = value.GetArraySize();
+                for (std::uint32_t i = 0; i < size; ++i) {
+                    RE::GFxValue entry;
+                    if (!value.GetElement(i, &entry))
+                        continue;
+                    updated = SetMiscObjectivesVisibleOnEntry(entry, visible) || updated;
+                    updated = SetScaleformMiscObjectivesVisibleInValue(entry, visible, depth + 1) || updated;
+                }
+                return updated;
+            }
+
+            if (!value.IsObject())
+                return false;
+
+            updated = SetMiscObjectivesVisibleOnEntry(value, visible) || updated;
+
+            RE::GFxValue entries;
+            if (value.GetMember("entryList", &entries))
+                updated = SetScaleformMiscObjectivesVisibleInValue(entries, visible, depth + 1) || updated;
+
+            constexpr std::array kEntryMembers{
+                "selectedEntry",
+                "centeredEntry"
+            };
+            for (const char* member : kEntryMembers) {
+                RE::GFxValue entry;
+                if (!value.GetMember(member, &entry))
+                    continue;
+                updated = SetScaleformMiscObjectivesVisibleInValue(entry, visible, depth + 1) || updated;
+            }
+
+            if (depth >= 4)
+                return updated;
+
+            constexpr std::array kChildMembers{
+                "QuestJournalFader",
+                "QuestsFader",
+                "Page_mc",
+                "TitleList",
+                "TitleList_mc",
+                "List_mc"
+            };
+            for (const char* member : kChildMembers) {
+                RE::GFxValue child;
+                if (!value.GetMember(member, &child))
+                    continue;
+                updated = SetScaleformMiscObjectivesVisibleInValue(child, visible, depth + 1) || updated;
+            }
+
+            return updated;
+        }
+
+        bool RefreshScaleformQuestTitleList(RE::GFxMovieView* movie)
+        {
+            if (!movie)
+                return false;
+
+            bool invoked = false;
+            constexpr std::array kUpdateListPaths{
+                "QuestJournalFader.QuestsFader.Page_mc.TitleList.UpdateList",
+                "QuestJournalFader.QuestsFader.Page_mc.TitleList_mc.List_mc.UpdateList",
+                "QuestsFader.Page_mc.TitleList.UpdateList",
+                "QuestsFader.Page_mc.TitleList_mc.List_mc.UpdateList",
+                "_root.QuestJournalFader.QuestsFader.Page_mc.TitleList.UpdateList",
+                "_root.QuestJournalFader.QuestsFader.Page_mc.TitleList_mc.List_mc.UpdateList",
+                "_root.QuestsFader.Page_mc.TitleList.UpdateList",
+                "_root.QuestsFader.Page_mc.TitleList_mc.List_mc.UpdateList"
+            };
+
+            for (const char* path : kUpdateListPaths)
+                invoked = movie->Invoke(path, nullptr, nullptr, 0) || invoked;
+            return invoked;
+        }
+
+        bool SetScaleformMiscObjectivesVisible(RE::JournalMenu* journal, bool visible)
+        {
+            if (!journal)
+                return false;
+
+            bool updated = false;
+            auto& questsTab = journal->GetRuntimeData().questsTab;
+            updated = SetScaleformMiscObjectivesVisibleInValue(questsTab.unk18, visible) || updated;
+
+            auto movie = questsTab.view;
+            if (!movie) {
+                auto* ui = RE::UI::GetSingleton();
+                if (ui)
+                    movie = ui->GetMovieView(RE::JournalMenu::MENU_NAME);
+            }
+
+            if (!movie)
+                return updated;
+
+            constexpr std::array kEntryListPaths{
+                "QuestJournalFader.QuestsFader.Page_mc.TitleList.entryList",
+                "QuestJournalFader.QuestsFader.Page_mc.TitleList_mc.List_mc.entryList",
+                "QuestsFader.Page_mc.TitleList.entryList",
+                "QuestsFader.Page_mc.TitleList_mc.List_mc.entryList",
+                "_root.QuestJournalFader.QuestsFader.Page_mc.TitleList.entryList",
+                "_root.QuestJournalFader.QuestsFader.Page_mc.TitleList_mc.List_mc.entryList",
+                "_root.QuestsFader.Page_mc.TitleList.entryList",
+                "_root.QuestsFader.Page_mc.TitleList_mc.List_mc.entryList"
+            };
+
+            for (const char* path : kEntryListPaths) {
+                RE::GFxValue entries;
+                if (!movie->GetVariable(&entries, path))
+                    continue;
+                updated = SetScaleformMiscObjectivesVisibleInValue(entries, visible) || updated;
+            }
+
+            constexpr std::array kSelectedEntryPaths{
+                "QuestJournalFader.QuestsFader.Page_mc.TitleList.selectedEntry",
+                "QuestJournalFader.QuestsFader.Page_mc.TitleList.centeredEntry",
+                "QuestJournalFader.QuestsFader.Page_mc.TitleList_mc.List_mc.selectedEntry",
+                "QuestJournalFader.QuestsFader.Page_mc.TitleList_mc.List_mc.centeredEntry",
+                "QuestsFader.Page_mc.TitleList.selectedEntry",
+                "QuestsFader.Page_mc.TitleList.centeredEntry",
+                "QuestsFader.Page_mc.TitleList_mc.List_mc.selectedEntry",
+                "QuestsFader.Page_mc.TitleList_mc.List_mc.centeredEntry",
+                "_root.QuestJournalFader.QuestsFader.Page_mc.TitleList.selectedEntry",
+                "_root.QuestJournalFader.QuestsFader.Page_mc.TitleList.centeredEntry",
+                "_root.QuestJournalFader.QuestsFader.Page_mc.TitleList_mc.List_mc.selectedEntry",
+                "_root.QuestJournalFader.QuestsFader.Page_mc.TitleList_mc.List_mc.centeredEntry",
+                "_root.QuestsFader.Page_mc.TitleList.selectedEntry",
+                "_root.QuestsFader.Page_mc.TitleList.centeredEntry",
+                "_root.QuestsFader.Page_mc.TitleList_mc.List_mc.selectedEntry",
+                "_root.QuestsFader.Page_mc.TitleList_mc.List_mc.centeredEntry"
+            };
+
+            for (const char* path : kSelectedEntryPaths) {
+                RE::GFxValue entry;
+                if (!movie->GetVariable(&entry, path))
+                    continue;
+                updated = SetScaleformMiscObjectivesVisibleInValue(entry, visible) || updated;
+            }
+
+            RefreshScaleformQuestTitleList(movie.get());
+            return updated;
+        }
+
         std::optional<ScaleformMiscVisibilityRead> ReadScaleformMiscObjectivesVisible(RE::JournalMenu* journal)
         {
             if (!journal)
@@ -764,21 +921,62 @@ namespace PlayerReader
                           g_miscObjectivesVisibilitySource ? g_miscObjectivesVisibilitySource : "");
         }
 
+        bool HasCommandMiscObjectivesVisibility()
+        {
+            return g_miscObjectivesVisibilityKnown &&
+                   std::string_view(g_miscObjectivesVisibilitySource) == "command";
+        }
+
+        void ApplyCommandMiscObjectivesVisibilityToOpenJournal()
+        {
+            if (!HasCommandMiscObjectivesVisibility())
+                return;
+
+            auto* ui = RE::UI::GetSingleton();
+            if (!ui)
+                return;
+
+            auto journal = ui->GetMenu<RE::JournalMenu>();
+            if (!journal)
+                return;
+
+            auto& questsTab = journal->GetRuntimeData().questsTab;
+            questsTab.unk30 = g_miscObjectivesVisible;
+            const bool scaleformUpdated = SetScaleformMiscObjectivesVisible(journal.get(), g_miscObjectivesVisible);
+            logger::trace("[MiscObjectivesVisibility] applied command cache to open JournalMenu visible={} scaleformUpdated={}",
+                          g_miscObjectivesVisible, scaleformUpdated);
+        }
+
+        bool IsStaleScaleformReadAfterCommand(const MiscObjectivesVisibilityRead& live)
+        {
+            return HasCommandMiscObjectivesVisibility() &&
+                   live.visible != g_miscObjectivesVisible &&
+                   live.nativeKnown &&
+                   live.nativeVisible == g_miscObjectivesVisible;
+        }
+
         MiscObjectivesVisibility GetMiscObjectivesVisibility()
         {
             MiscObjectivesVisibility state;
             state.cachedKnown   = g_miscObjectivesVisibilityKnown;
             state.cachedVisible = g_miscObjectivesVisible;
 
-            if (g_miscObjectivesVisibilityKnown &&
-                std::string_view(g_miscObjectivesVisibilitySource) == "command") {
-                state.visible = g_miscObjectivesVisible;
-                state.known   = true;
-                state.source  = g_miscObjectivesVisibilitySource;
-                return state;
-            }
+            ApplyCommandMiscObjectivesVisibilityToOpenJournal();
 
             if (auto live = ReadJournalMiscObjectivesVisible()) {
+                if (IsStaleScaleformReadAfterCommand(*live)) {
+                    state.visible          = g_miscObjectivesVisible;
+                    state.known            = true;
+                    state.source           = g_miscObjectivesVisibilitySource;
+                    state.journalOpen      = true;
+                    state.scaleformKnown   = live->scaleformKnown;
+                    state.scaleformVisible = live->scaleformVisible;
+                    state.scaleformSource  = live->scaleformSource;
+                    state.nativeKnown      = live->nativeKnown;
+                    state.nativeVisible    = live->nativeVisible;
+                    return state;
+                }
+
                 StoreMiscObjectivesVisible(live->visible, live->source);
                 state.visible          = live->visible;
                 state.known            = true;
@@ -1948,9 +2146,8 @@ namespace PlayerReader
     void CaptureQuestJournalState()
     {
         if (auto visible = ReadJournalMiscObjectivesVisible()) {
-            if (g_miscObjectivesVisibilityKnown &&
-                std::string_view(g_miscObjectivesVisibilitySource) == "command") {
-                logger::trace("[Map::Markers::Quests] observed journal misc visibility={} source={} but keeping command override={}",
+            if (IsStaleScaleformReadAfterCommand(*visible)) {
+                logger::trace("[Map::Markers::Quests] observed stale Scaleform misc visibility={} source={} but native/command visibility is {}",
                               visible->visible, visible->source, g_miscObjectivesVisible);
                 return;
             }
@@ -1959,6 +2156,49 @@ namespace PlayerReader
             logger::trace("[Map::Markers::Quests] captured misc objectives visibility={} source={}",
                           visible->visible, visible->source);
         }
+    }
+
+    nlohmann::json ReadMiscQuestMarkerVisibility()
+    {
+        return MiscObjectivesVisibilityJson(GetMiscObjectivesVisibility());
+    }
+
+    nlohmann::json SetMiscQuestMarkerVisibility(bool visible)
+    {
+        bool journalOpen = false;
+        bool nativeUpdated = false;
+        bool nativePrevious = true;
+        bool scaleformUpdated = false;
+
+        if (auto* ui = RE::UI::GetSingleton()) {
+            auto journal = ui->GetMenu<RE::JournalMenu>();
+            if (journal) {
+                journalOpen = true;
+                auto& questsTab = journal->GetRuntimeData().questsTab;
+                nativePrevious = questsTab.unk30;
+                questsTab.unk30 = visible;
+                nativeUpdated = true;
+                scaleformUpdated = SetScaleformMiscObjectivesVisible(journal.get(), visible);
+            }
+        }
+
+        StoreMiscObjectivesVisible(visible, "command");
+
+        auto out = MiscObjectivesVisibilityJson(GetMiscObjectivesVisibility());
+        out["journalOpen"] = journalOpen;
+        out["nativeUpdated"] = nativeUpdated;
+        out["scaleformUpdated"] = scaleformUpdated;
+        if (nativeUpdated)
+            out["nativePrevious"] = nativePrevious;
+
+        logger::debug("[MiscObjectivesVisibility] command set visible={} journalOpen={} nativeUpdated={} scaleformUpdated={}",
+                      visible, journalOpen, nativeUpdated, scaleformUpdated);
+        return out;
+    }
+
+    void ApplyQuestJournalState()
+    {
+        ApplyCommandMiscObjectivesVisibilityToOpenJournal();
     }
 
     void ResetQuestJournalState()

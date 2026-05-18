@@ -328,6 +328,21 @@ for that quest.
 }
 ```
 
+Use `quests_misc_markers_set` to set the shared Miscellaneous master marker
+filter, equivalent to the state toggled by the journal's top-level
+Miscellaneous row. The value is reflected on Misc quest entries through
+`miscMarkersVisible`, `miscMarkersVisibilityKnown`, and
+`miscMarkersVisibilitySource`, and is also used by `Map::Markers::Quests`.
+
+```json
+{
+  "type": "command",
+  "id": "misc-markers-off",
+  "command": "quests_misc_markers_set",
+  "visible": false
+}
+```
+
 ---
 
 ## `Player::Marker`

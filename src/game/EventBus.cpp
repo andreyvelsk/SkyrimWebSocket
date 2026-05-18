@@ -111,7 +111,9 @@ namespace EventBus
                     return RE::BSEventNotifyControl::kContinue;
 
                 if (event->menuName == RE::JournalMenu::MENU_NAME) {
-                    if (!event->opening)
+                    if (event->opening)
+                        PlayerReader::ApplyQuestJournalState();
+                    else
                         PlayerReader::CaptureQuestJournalState();
                     logger::trace("[EventBus] observed JournalMenu {}", event->opening ? "open" : "close");
                     return RE::BSEventNotifyControl::kContinue;

@@ -299,7 +299,8 @@ namespace QuestReader
 
         nlohmann::json BuildQuestJson(RE::TESQuest* quest,
                                       const std::unordered_map<RE::BGSQuestObjective*, ObjectiveRuntimeInfo>& runtimeInfo,
-                                      const std::vector<QuestLogEntry>& logEntries)
+                                      const std::vector<QuestLogEntry>& logEntries,
+                                      const nlohmann::json& miscMarkerVisibility)
         {
             nlohmann::json out = nlohmann::json::object();
             if (!quest)
@@ -397,6 +398,12 @@ namespace QuestReader
             out["currentInstanceId"] = quest->currentInstanceID;
             out["steps"] = std::move(steps);
 
+            if (isMisc) {
+                out["miscMarkersVisible"] = miscMarkerVisibility.value("visible", true);
+                out["miscMarkersVisibilityKnown"] = miscMarkerVisibility.value("known", false);
+                out["miscMarkersVisibilitySource"] = miscMarkerVisibility.value("source", std::string("default-visible"));
+            }
+
             return out;
         }
 
@@ -429,7 +436,8 @@ namespace QuestReader
         auto* player = RE::PlayerCharacter::GetSingleton();
         return BuildQuestJson(quest,
                               BuildRuntimeObjectiveMap(player),
-                              GetQuestLogEntries(quest));
+                              GetQuestLogEntries(quest),
+                              PlayerReader::ReadMiscQuestMarkerVisibility());
     }
 
     nlohmann::json ReadQuests()
@@ -443,6 +451,7 @@ namespace QuestReader
         auto* player = RE::PlayerCharacter::GetSingleton();
         auto runtimeInfo = BuildRuntimeObjectiveMap(player);
         auto questLog = BuildQuestLogMap(player);
+        const auto miscMarkerVisibility = PlayerReader::ReadMiscQuestMarkerVisibility();
         for (auto* quest : dataHandler->GetFormArray<RE::TESQuest>()) {
             if (!quest || !quest->IsRunning())
                 continue;
@@ -453,7 +462,7 @@ namespace QuestReader
                 return {};
             }();
 
-            auto entry = BuildQuestJson(quest, runtimeInfo, logs);
+            auto entry = BuildQuestJson(quest, runtimeInfo, logs, miscMarkerVisibility);
             if (ShouldIncludeQuest(entry)) {
                 out.push_back(std::move(entry));
             } else {
