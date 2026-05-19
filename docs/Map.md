@@ -217,14 +217,13 @@ Misc objective can be active, and the top-level Miscellaneous row has its own
 master toggle controlled by the native `ToggleShowMiscObjectives` callback. The
 reader observes the top-level Miscellaneous row in the journal Scaleform list
 (`Journal_QuestsTab::unk18` first, then `TitleList.entryList` paths, using the
-row with `formID == 0`) while the journal menu is open and caches the latest
-value after the menu closes. If that UI list is not available, it falls back to
-`Journal_QuestsTab::unk30`. Until that UI state has been observed in the current
-plugin session, the reader defaults to visible so it does not hide valid Misc
-targets unexpectedly. Clients can also set the value explicitly with
-`quests_misc_markers_set`; when the journal menu is open the command mirrors the
-state into `Journal_QuestsTab::unk30` and the Scaleform Miscellaneous row, and
-when the menu is closed it stores a command-sourced override used by this reader.
+row with `formID == 0`) while the journal menu is open. If that UI list is not
+available, it falls back to `Journal_QuestsTab::unk30`. Until that state has
+been observed or explicitly set in the current plugin session, the reader
+defaults to visible so it does not hide valid Misc targets unexpectedly. Clients
+can set the value with `quests_misc_markers_set`; the command updates the
+player's runtime `questTargets`, requests a quest-target repath for the compass,
+and mirrors the state into the Journal UI if the menu is open.
 
 Targets that resolve to non-ref aliases (location aliases, data aliases) or
 to unfilled refs are skipped. References flagged as deleted are still returned
@@ -257,7 +256,7 @@ inside a house or city worldspace.
 | `isMiscellaneous` | `bool` | `true` for quests in the Miscellaneous journal section. |
 | `miscObjectivesVisible` | `bool` | Present on Miscellaneous entries. Latest observed state of the journal's master Miscellaneous toggle. |
 | `miscObjectivesVisibilityKnown` | `bool` | Present on Miscellaneous entries. `true` after the master Miscellaneous toggle has been observed from the journal UI in this plugin session. |
-| `miscObjectivesVisibilitySource` | `string` | Present on Miscellaneous entries. Source for the master toggle value (journal Scaleform list, native fallback, cached value, or default). |
+| `miscObjectivesVisibilitySource` | `string` | Present on Miscellaneous entries. Source for the master toggle value (journal Scaleform list, native fallback, command value, or default). |
 | `objectiveIndex` | `integer` | The objective's `QOBJ` index inside the quest. |
 | `objectiveText` | `string` | Localised objective description as stored on the quest — may contain unresolved placeholders for radiant/templated quests, e.g. `"<Alias=BanditCamp>: kill the leader"`. |
 | `objectiveTextResolved` | `string` | Same text with `<Alias=...>` / `<Alias.ShortName=...>` etc. tokens replaced through the current quest instance data (`aliasName -> aliasID -> fullNameFormID`) when available, e.g. the bandit camp's actual location name. Tokens we can't resolve (unknown aliases, `<Global=...>`, `<Spouse>`, ...) are left untouched. Identical to `objectiveText` when there are no placeholders. |

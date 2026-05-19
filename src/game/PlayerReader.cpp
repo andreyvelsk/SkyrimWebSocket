@@ -9,6 +9,7 @@
 #include <string_view>
 #include <unordered_map>
 #include <unordered_set>
+#include <vector>
 
 namespace PlayerReader
 {
@@ -472,6 +473,7 @@ namespace PlayerReader
         bool g_miscObjectivesVisibilityKnown = false;
         bool g_miscObjectivesVisible         = true;
         const char* g_miscObjectivesVisibilitySource = "cached misc objectives visibility";
+        std::unordered_map<RE::FormID, std::vector<RE::TESQuestTarget*>> g_hiddenMiscQuestTargets;
 
         // ---------------------------------------------------------------------------
         // Persistent-ref cache
@@ -522,6 +524,180 @@ namespace PlayerReader
             bool        nativeKnown = false;
             bool        nativeVisible = true;
         };
+
+        struct RuntimeMiscQuestTargetSync
+        {
+            bool        supported = false;
+            bool        visible = true;
+            std::size_t miscQuestEntries = 0;
+            std::size_t targetsBefore = 0;
+            std::size_t targetsAfter = 0;
+            std::size_t targetsRemoved = 0;
+            std::size_t targetsRestored = 0;
+            std::size_t targetsReconstructed = 0;
+            std::size_t questEntriesCleared = 0;
+            std::size_t hiddenQuestEntries = 0;
+            bool        repathRequested = false;
+        };
+
+        using QuestTargetMap = RE::BSTHashMap<RE::TESQuest*, RE::BSTArray<RE::TESQuestTarget*>*>;
+
+        QuestTargetMap* GetRuntimeQuestTargetMap(RE::PlayerCharacter* player)
+        {
+            if (!player || REL::Module::IsVR())
+                return nullptr;
+
+            const auto base = reinterpret_cast<std::uintptr_t>(player);
+            const std::size_t off = REL::Module::IsAE() ? 0x5A0 : 0x598;
+            return reinterpret_cast<QuestTargetMap*>(base + off);
+        }
+
+        bool RequestQuestTargetRepath(RE::PlayerCharacter* player)
+        {
+            if (!player || REL::Module::IsVR())
+                return false;
+
+            const auto base = reinterpret_cast<std::uintptr_t>(player);
+            const std::size_t flagsOff = REL::Module::IsAE() ? 0xBE0 : 0xBD8;
+            auto* playerFlags = reinterpret_cast<std::uint8_t*>(base + flagsOff);
+            *playerFlags |= 0x80;
+            return true;
+        }
+
+        bool IsActiveRuntimeMiscQuest(RE::TESQuest* quest)
+        {
+            return quest &&
+                   quest->GetType() == RE::QUEST_DATA::Type::kMiscellaneous &&
+                   quest->IsRunning() &&
+                   !quest->IsCompleted() &&
+                   quest->IsActive();
+        }
+
+        bool ContainsTarget(const RE::BSTArray<RE::TESQuestTarget*>* targetArray,
+                            RE::TESQuestTarget* target)
+        {
+            if (!targetArray || !target)
+                return false;
+
+            for (auto* existing : *targetArray) {
+                if (existing == target)
+                    return true;
+            }
+            return false;
+        }
+
+        bool PushUniqueTarget(RE::BSTArray<RE::TESQuestTarget*>* targetArray,
+                              RE::TESQuestTarget* target)
+        {
+            if (!targetArray || !target || ContainsTarget(targetArray, target))
+                return false;
+
+            targetArray->push_back(target);
+            return true;
+        }
+
+        std::size_t CountRuntimeMiscTargets(const QuestTargetMap& map)
+        {
+            std::size_t count = 0;
+            for (const auto& kv : map) {
+                auto* quest = kv.first;
+                if (!IsActiveRuntimeMiscQuest(quest))
+                    continue;
+                auto* targetArray = kv.second;
+                if (!targetArray)
+                    continue;
+                count += targetArray->size();
+            }
+            return count;
+        }
+
+        std::vector<RE::TESQuestTarget*> CollectDisplayedMiscQuestTargets(RE::TESQuest* quest)
+        {
+            std::vector<RE::TESQuestTarget*> targets;
+            if (!IsActiveRuntimeMiscQuest(quest))
+                return targets;
+
+            for (auto* objective : quest->objectives) {
+                if (!objective || objective->state != RE::QUEST_OBJECTIVE_STATE::kDisplayed)
+                    continue;
+                for (std::uint32_t i = 0; objective->targets && i < objective->numTargets; ++i) {
+                    if (auto* target = objective->targets[i])
+                        targets.push_back(target);
+                }
+            }
+            return targets;
+        }
+
+        RuntimeMiscQuestTargetSync SynchronizeRuntimeMiscQuestTargets(bool visible)
+        {
+            RuntimeMiscQuestTargetSync result;
+            result.visible = visible;
+
+            auto* player = RE::PlayerCharacter::GetSingleton();
+            auto* map = GetRuntimeQuestTargetMap(player);
+            if (!player || !map)
+                return result;
+
+            result.supported = true;
+            result.targetsBefore = CountRuntimeMiscTargets(*map);
+
+            for (auto& kv : *map) {
+                auto* quest = kv.first;
+                if (!IsActiveRuntimeMiscQuest(quest))
+                    continue;
+
+                auto* targetArray = kv.second;
+                if (!targetArray)
+                    continue;
+
+                ++result.miscQuestEntries;
+                const auto formID = quest->GetFormID();
+
+                if (!visible) {
+                    if (targetArray->empty())
+                        continue;
+
+                    auto& hidden = g_hiddenMiscQuestTargets[formID];
+                    hidden.clear();
+                    hidden.reserve(targetArray->size());
+                    for (auto* target : *targetArray) {
+                        if (target)
+                            hidden.push_back(target);
+                    }
+
+                    result.targetsRemoved += hidden.size();
+                    ++result.questEntriesCleared;
+                    targetArray->clear();
+                    continue;
+                }
+
+                if (auto hidden = g_hiddenMiscQuestTargets.find(formID);
+                    hidden != g_hiddenMiscQuestTargets.end()) {
+                    for (auto* target : hidden->second) {
+                        if (PushUniqueTarget(targetArray, target))
+                            ++result.targetsRestored;
+                    }
+                    g_hiddenMiscQuestTargets.erase(hidden);
+                }
+
+                for (auto* target : CollectDisplayedMiscQuestTargets(quest)) {
+                    if (PushUniqueTarget(targetArray, target))
+                        ++result.targetsReconstructed;
+                }
+            }
+
+            result.hiddenQuestEntries = g_hiddenMiscQuestTargets.size();
+            result.targetsAfter = CountRuntimeMiscTargets(*map);
+
+            if (result.targetsBefore != result.targetsAfter ||
+                result.targetsRemoved > 0 ||
+                result.targetsRestored > 0 ||
+                result.targetsReconstructed > 0) {
+                result.repathRequested = RequestQuestTargetRepath(player);
+            }
+
+            return result;
+        }
 
         std::string_view QuestTypeName(RE::QUEST_DATA::Type t)
         {
@@ -943,7 +1119,7 @@ namespace PlayerReader
             auto& questsTab = journal->GetRuntimeData().questsTab;
             questsTab.unk30 = g_miscObjectivesVisible;
             const bool scaleformUpdated = SetScaleformMiscObjectivesVisible(journal.get(), g_miscObjectivesVisible);
-            logger::trace("[MiscObjectivesVisibility] applied command cache to open JournalMenu visible={} scaleformUpdated={}",
+            logger::trace("[MiscObjectivesVisibility] applied command state to open JournalMenu visible={} scaleformUpdated={}",
                           g_miscObjectivesVisible, scaleformUpdated);
         }
 
@@ -1016,6 +1192,23 @@ namespace PlayerReader
                 { "scaleformSource", state.scaleformSource },
                 { "nativeKnown", state.nativeKnown },
                 { "nativeVisible", state.nativeVisible }
+            };
+        }
+
+        nlohmann::json RuntimeMiscQuestTargetSyncJson(const RuntimeMiscQuestTargetSync& state)
+        {
+            return {
+                { "supported", state.supported },
+                { "visible", state.visible },
+                { "miscQuestEntries", state.miscQuestEntries },
+                { "targetsBefore", state.targetsBefore },
+                { "targetsAfter", state.targetsAfter },
+                { "targetsRemoved", state.targetsRemoved },
+                { "targetsRestored", state.targetsRestored },
+                { "targetsReconstructed", state.targetsReconstructed },
+                { "questEntriesCleared", state.questEntriesCleared },
+                { "hiddenQuestEntries", state.hiddenQuestEntries },
+                { "repathRequested", state.repathRequested }
             };
         }
 
@@ -2183,22 +2376,29 @@ namespace PlayerReader
         }
 
         StoreMiscObjectivesVisible(visible, "command");
+        const auto runtimeSync = SynchronizeRuntimeMiscQuestTargets(visible);
 
         auto out = MiscObjectivesVisibilityJson(GetMiscObjectivesVisibility());
         out["journalOpen"] = journalOpen;
         out["nativeUpdated"] = nativeUpdated;
         out["scaleformUpdated"] = scaleformUpdated;
+        out["runtimeQuestTargets"] = RuntimeMiscQuestTargetSyncJson(runtimeSync);
         if (nativeUpdated)
             out["nativePrevious"] = nativePrevious;
 
-        logger::debug("[MiscObjectivesVisibility] command set visible={} journalOpen={} nativeUpdated={} scaleformUpdated={}",
-                      visible, journalOpen, nativeUpdated, scaleformUpdated);
+        logger::debug("[MiscObjectivesVisibility] command set visible={} journalOpen={} nativeUpdated={} scaleformUpdated={} runtimeSupported={} targetsBefore={} targetsAfter={} removed={} restored={} reconstructed={} repathRequested={}",
+                      visible, journalOpen, nativeUpdated, scaleformUpdated,
+                      runtimeSync.supported, runtimeSync.targetsBefore, runtimeSync.targetsAfter,
+                      runtimeSync.targetsRemoved, runtimeSync.targetsRestored,
+                      runtimeSync.targetsReconstructed, runtimeSync.repathRequested);
         return out;
     }
 
     void ApplyQuestJournalState()
     {
         ApplyCommandMiscObjectivesVisibilityToOpenJournal();
+        if (HasCommandMiscObjectivesVisibility())
+            (void)SynchronizeRuntimeMiscQuestTargets(g_miscObjectivesVisible);
     }
 
     void ResetQuestJournalState()
@@ -2206,11 +2406,12 @@ namespace PlayerReader
         g_miscObjectivesVisibilityKnown = false;
         g_miscObjectivesVisible         = true;
         g_miscObjectivesVisibilitySource = "cached misc objectives visibility";
+        g_hiddenMiscQuestTargets.clear();
         s_persistentCache.built = false;
         s_persistentCache.byFormId.clear();
         s_persistentCache.markerByLocationId.clear();
         s_persistentCache.markerByName.clear();
-        logger::trace("[Map::Markers::Quests] reset cached quest-journal state");
+        logger::trace("[Map::Markers::Quests] reset quest-journal marker state");
     }
 
     nlohmann::json ReadQuestMarkers()
@@ -2222,6 +2423,9 @@ namespace PlayerReader
             logger::warn("[Map::Markers::Quests] no PlayerCharacter");
             return result;
         }
+
+        if (HasCommandMiscObjectivesVisibility())
+            (void)SynchronizeRuntimeMiscQuestTargets(g_miscObjectivesVisible);
 
         const auto formIdStr = [](RE::FormID id) {
             return std::format("0x{:08X}", id);

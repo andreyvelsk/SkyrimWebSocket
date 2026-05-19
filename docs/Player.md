@@ -330,7 +330,9 @@ for that quest.
 
 Use `quests_misc_markers_set` to set the shared Miscellaneous master marker
 filter, equivalent to the state toggled by the journal's top-level
-Miscellaneous row. The value is reflected on Misc quest entries through
+Miscellaneous row. The command updates the player's runtime quest-target list
+and requests a quest-target repath, so it applies during gameplay even when the
+journal menu is closed. The value is reflected on Misc quest entries through
 `miscMarkersVisible`, `miscMarkersVisibilityKnown`, and
 `miscMarkersVisibilitySource`, and is also used by `Map::Markers::Quests`.
 

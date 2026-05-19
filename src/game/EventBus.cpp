@@ -88,6 +88,7 @@ namespace EventBus
                 const RE::TESCellFullyLoadedEvent*,
                 RE::BSTEventSource<RE::TESCellFullyLoadedEvent>*) override
             {
+                PlayerReader::ApplyQuestJournalState();
                 BumpKeys({"Map::Markers::Locations", "Map::Markers::All"},
                          "TESCellFullyLoaded");
                 return RE::BSEventNotifyControl::kContinue;
@@ -121,6 +122,9 @@ namespace EventBus
 
                 if (event->menuName != RE::MapMenu::MENU_NAME)
                     return RE::BSEventNotifyControl::kContinue;
+
+                if (event->opening)
+                    PlayerReader::ApplyQuestJournalState();
 
                 // Bump on both open and close so:
                 //  * opening the map pushes fresh data even if the player
@@ -175,6 +179,7 @@ namespace EventBus
                 const RE::TESQuestStageEvent*,
                 RE::BSTEventSource<RE::TESQuestStageEvent>*) override
             {
+                PlayerReader::ApplyQuestJournalState();
                 BumpKeys({"Map::Markers::Locations", "Map::Markers::All"},
                          "TESQuestStage");
                 return RE::BSEventNotifyControl::kContinue;

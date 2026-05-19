@@ -445,16 +445,16 @@ shape.
 
 #### `quests_misc_markers_set`
 
-Sets the journal's master Miscellaneous quest-marker filter, matching the state
-the vanilla/SkyUI quest journal toggles through `ToggleShowMiscObjectives` for
-the top-level Miscellaneous row. `Map::Markers::Quests` uses this filter for
-Miscellaneous markers, and Miscellaneous entries in `Player::Quests` expose the
-same value as `miscMarkersVisible`.
+Sets the master Miscellaneous quest-marker filter, matching the state the
+vanilla/SkyUI quest journal toggles through `ToggleShowMiscObjectives` for the
+top-level Miscellaneous row. The command updates the player's runtime
+`questTargets` and requests a quest-target repath, so it applies while the
+journal is closed during normal gameplay. If the journal menu is open, it also
+mirrors the value into `Journal_QuestsTab` and the Scaleform Miscellaneous row.
 
-If the journal menu is open, the command also mirrors the value into the live
-`Journal_QuestsTab` state and the Scaleform Miscellaneous row. If the menu is
-closed, the command stores an explicit plugin-side override that remains active
-until a save is loaded or the plugin observes a newer journal state.
+`Map::Markers::Quests` uses this filter for Miscellaneous markers, and
+Miscellaneous entries in `Player::Quests` expose the same value as
+`miscMarkersVisible`.
 
 Returns the updated visibility state in `data`.
 
@@ -480,7 +480,14 @@ Example `data` payload:
   "source": "command",
   "journalOpen": false,
   "nativeUpdated": false,
-  "scaleformUpdated": false
+  "scaleformUpdated": false,
+  "runtimeQuestTargets": {
+    "supported": true,
+    "targetsBefore": 2,
+    "targetsAfter": 0,
+    "targetsRemoved": 2,
+    "repathRequested": true
+  }
 }
 ```
 

@@ -116,20 +116,21 @@ namespace PlayerReader
     // Safe to call from menu/event callbacks on the game thread.
     void CaptureQuestJournalState();
 
-    // Returns the cached/live state of the journal's master Miscellaneous
-    // objective marker toggle. Must be called on the game thread.
+    // Returns the live or explicitly commanded state of the journal's master
+    // Miscellaneous objective marker toggle. Must be called on the game thread.
     nlohmann::json ReadMiscQuestMarkerVisibility();
 
-    // Sets the plugin's Miscellaneous objective marker filter and, when the
-    // journal menu is open, mirrors it into the native Journal_QuestsTab state
-    // plus the Scaleform Miscellaneous row. Must be called on the game thread.
+    // Sets the Miscellaneous objective marker filter by updating the player's
+    // runtime questTargets and requesting a quest-target repath. When the
+    // journal menu is open, also mirrors the value into the live Journal UI.
+    // Must be called on the game thread.
     nlohmann::json SetMiscQuestMarkerVisibility(bool visible);
 
-    // Applies any cached command-sourced quest-journal state to a newly opened
-    // journal menu. Safe to call from JournalMenu open events on the game thread.
+    // Reapplies any command-sourced Misc marker state to runtime questTargets
+    // and to a newly opened journal menu. Safe to call from game-thread events.
     void ApplyQuestJournalState();
 
-    // Clears cached quest-journal UI state after loading a different save.
+    // Clears quest-journal UI/runtime marker state after loading a different save.
     // Must be called on the game thread.
     void ResetQuestJournalState();
 
