@@ -790,6 +790,38 @@ namespace GameWriter
         return {true, ""};
     }
 
+    CommandResult FavoriteShout(RE::FormID formId)
+    {
+        logger::trace("FavoriteShout enter: formId=0x{:08X}", formId);
+        auto* player = RE::PlayerCharacter::GetSingleton();
+        if (!player)
+            return {false, "Player not available"};
+
+        auto* shout = RE::TESForm::LookupByID<RE::TESShout>(formId);
+        if (!shout)
+            return {false, "Shout not found"};
+
+        if (!player->HasShout(shout))
+            return {false, "Shout not known by player"};
+
+        auto* favorites = RE::MagicFavorites::GetSingleton();
+        if (!favorites)
+            return {false, "Magic favorites not available"};
+
+        auto it = std::find(favorites->spells.begin(), favorites->spells.end(),
+                            static_cast<RE::TESForm*>(shout));
+        if (it != favorites->spells.end()) {
+            favorites->spells.erase(it);
+            logger::debug("favorite_shout 0x{:08X}: removed from favorites", formId);
+            PrintConsole("[WS] Unfavorite shout " + std::string(shout->GetName()));
+        } else {
+            favorites->spells.push_back(static_cast<RE::TESForm*>(shout));
+            logger::debug("favorite_shout 0x{:08X}: added to favorites", formId);
+            PrintConsole("[WS] Favorite shout " + std::string(shout->GetName()));
+        }
+        return {true, ""};
+    }
+
     // ─── Hotkeys ──────────────────────────────────────────────────────────
 
     // Ensures MagicFavorites::hotkeys has exactly 8 slots.  The game usually
