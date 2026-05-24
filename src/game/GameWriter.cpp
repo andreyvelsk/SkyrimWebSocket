@@ -748,16 +748,35 @@ namespace GameWriter
         if (!player->HasShout(shout))
             return {false, "Shout not known by player"};
 
-        // Papyrus Actor.EquipShout properly updates the voice slot and triggers
-        // HUD/animation callbacks, matching vanilla favourites-menu behaviour.
-        const bool ok = DispatchPlayerMethod(
-            player, "Actor", "EquipShout",
-            static_cast<RE::TESForm*>(shout));
-        if (!ok)
-            return {false, "Papyrus dispatch failed"};
+        // Directly write the voice slot — same approach as EquipPower.
+        // The selectedPower field holds both TESShout* and SpellItem*;
+        // the HUD refreshes on the next game tick.
+        player->GetActorRuntimeData().selectedPower = shout;
 
         logger::debug("equip_shout 0x{:08X} ('{}')", formId, shout->GetName());
         PrintConsole("[WS] Equip shout " + std::string(shout->GetName()));
+        return {true, ""};
+    }
+
+    CommandResult UnequipShout(RE::FormID formId)
+    {
+        logger::trace("UnequipShout enter: formId=0x{:08X}", formId);
+        auto* player = RE::PlayerCharacter::GetSingleton();
+        if (!player)
+            return {false, "Player not available"};
+
+        auto* shout = RE::TESForm::LookupByID<RE::TESShout>(formId);
+        if (!shout)
+            return {false, "Shout not found"};
+
+        auto* current = player->GetActorRuntimeData().selectedPower;
+        if (!current || current != static_cast<RE::TESForm*>(shout))
+            return {false, "Shout is not currently equipped"};
+
+        player->GetActorRuntimeData().selectedPower = nullptr;
+
+        logger::debug("unequip_shout 0x{:08X} ('{}')", formId, shout->GetName());
+        PrintConsole("[WS] Unequip shout " + std::string(shout->GetName()));
         return {true, ""};
     }
 

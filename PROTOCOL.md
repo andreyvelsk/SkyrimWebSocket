@@ -139,6 +139,7 @@ below.
 | `unequip_spell` | Unequip a spell from a hand. | [↓](#unequip_spell) |
 | `favorite_spell` | Toggle the favorite flag on a known spell or power. | [↓](#favorite_spell) |
 | `equip_shout` | Equip a known dragon shout to the voice slot. | [↓](#equip_shout) |
+| `unequip_shout` | Remove a dragon shout from the voice slot. | [↓](#unequip_shout) |
 | `equip_power` | Equip a known power or lesser power to the voice slot. | [↓](#equip_power) |
 | `favorite_shout` | Toggle the favorite flag on a known dragon shout. | [↓](#favorite_shout) |
 | `hotkey_set` | Bind an item or spell to one of the 8 hotkey slots. | [↓](#hotkey_set) |
@@ -368,6 +369,28 @@ equipped shout).
   "type": "command",
   "id": "equip-shout",
   "command": "equip_shout",
+  "formId": "0x0002F7BB"
+}
+```
+
+---
+
+#### `unequip_shout`
+
+Removes a dragon shout from the player's voice slot. Fails if the specified
+shout is not currently equipped.
+
+| Field | Required | Default | Description |
+|---|---|---|---|
+| `formId` | **yes** | — | Hex form ID of the shout to unequip. Must be the shout currently in the voice slot. |
+
+**Applies to:** The dragon shout currently equipped in the voice slot.
+
+```json
+{
+  "type": "command",
+  "id": "unequip-shout",
+  "command": "unequip_shout",
   "formId": "0x0002F7BB"
 }
 ```

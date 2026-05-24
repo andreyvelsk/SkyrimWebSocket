@@ -59,6 +59,10 @@ namespace GameWriter
     // Must be called on the game thread.
     CommandResult EquipShout(RE::FormID formId);
 
+    // Remove a dragon shout from the voice slot.
+    // Must be called on the game thread.
+    CommandResult UnequipShout(RE::FormID formId);
+
     // Equip a known power or lesser power to the voice slot.
     // Must be called on the game thread.
     CommandResult EquipPower(RE::FormID formId);

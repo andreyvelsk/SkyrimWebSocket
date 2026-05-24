@@ -271,6 +271,7 @@ The following commands are available for spells (see [PROTOCOL.md](../PROTOCOL.m
 | `unequip_spell` | Unequips a spell from a hand slot |
 | `favorite_spell` | Toggles favorite status on a spell, power, or lesser power |
 | `equip_shout` | Equips a known dragon shout to the voice slot |
+| `unequip_shout` | Removes a dragon shout from the voice slot |
 | `equip_power` | Equips a known power or lesser power to the voice slot |
 | `favorite_shout` | Toggles favorite status on a known dragon shout |
 
