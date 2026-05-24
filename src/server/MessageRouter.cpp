@@ -291,6 +291,12 @@ namespace MessageRouter
                 result = GameWriter::UnequipSpell(formId, hand);
             else if (command == "favorite_spell")
                 result = GameWriter::FavoriteSpell(formId);
+            else if (command == "equip_shout")
+                result = GameWriter::EquipShout(formId);
+            else if (command == "equip_power")
+                result = GameWriter::EquipPower(formId);
+            else if (command == "favorite_shout")
+                result = GameWriter::FavoriteShout(formId);
             else if (command == "fast_travel")
                 result = GameWriter::FastTravelToMarker(formId);
             else

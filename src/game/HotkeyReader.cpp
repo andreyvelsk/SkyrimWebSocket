@@ -51,6 +51,7 @@ namespace HotkeyReader
     // Builds the JSON fields for a spell/shout/power slot entry.
     static nlohmann::json BuildSpellEntry(RE::SpellItem* spell, RE::PlayerCharacter* player)
     {
+
         nlohmann::json j;
         j["kind"]   = "spell";
         j["name"]   = spell->GetName();
@@ -81,6 +82,21 @@ namespace HotkeyReader
             level = eff->baseEffect->GetMinimumSkillLevel();
         j["level"]      = level;
         j["chargeTime"] = spell->data.chargeTime;
+        return j;
+    }
+
+    // Builds the JSON fields for a dragon shout hotkey slot.
+    static nlohmann::json BuildShoutEntry(RE::TESShout* shout)
+    {
+        nlohmann::json j;
+        j["kind"]       = "spell";
+        j["name"]       = shout->GetName();
+        j["formId"]     = std::format("0x{:08X}", shout->GetFormID());
+        j["spellType"]  = "Shout";
+        j["school"]     = "None";
+        j["cost"]       = 0;
+        j["level"]      = 0;
+        j["chargeTime"] = 0.0f;
         return j;
     }
 
@@ -164,6 +180,11 @@ namespace HotkeyReader
                 if (auto* spell = form->As<RE::SpellItem>()) {
                     slot["bound"] = true;
                     slot.update(BuildSpellEntry(spell, player));
+                    result.push_back(std::move(slot));
+                    continue;
+                } else if (auto* shout = form->As<RE::TESShout>()) {
+                    slot["bound"] = true;
+                    slot.update(BuildShoutEntry(shout));
                     result.push_back(std::move(slot));
                     continue;
                 }

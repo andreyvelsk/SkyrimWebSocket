@@ -693,6 +693,62 @@ namespace GameWriter
         return {true, ""};
     }
 
+    CommandResult EquipShout(RE::FormID formId)
+    {
+        logger::trace("EquipShout enter: formId=0x{:08X}", formId);
+        auto* player = RE::PlayerCharacter::GetSingleton();
+        if (!player)
+            return {false, "Player not available"};
+
+        auto* shout = RE::TESForm::LookupByID<RE::TESShout>(formId);
+        if (!shout)
+            return {false, "Shout not found"};
+
+        if (!player->HasShout(shout))
+            return {false, "Shout not known by player"};
+
+        // Papyrus Actor.EquipShout properly updates the voice slot and triggers
+        // HUD/animation callbacks, matching vanilla favourites-menu behaviour.
+        const bool ok = DispatchPlayerMethod(
+            player, "Actor", "EquipShout",
+            static_cast<RE::TESForm*>(shout));
+        if (!ok)
+            return {false, "Papyrus dispatch failed"};
+
+        logger::debug("equip_shout 0x{:08X} ('{}')", formId, shout->GetName());
+        PrintConsole("[WS] Equip shout " + std::string(shout->GetName()));
+        return {true, ""};
+    }
+
+    CommandResult EquipPower(RE::FormID formId)
+    {
+        logger::trace("EquipPower enter: formId=0x{:08X}", formId);
+        auto* player = RE::PlayerCharacter::GetSingleton();
+        if (!player)
+            return {false, "Player not available"};
+
+        auto* spell = RE::TESForm::LookupByID<RE::SpellItem>(formId);
+        if (!spell)
+            return {false, "Power not found"};
+
+        const auto type = spell->GetSpellType();
+        if (type != RE::MagicSystem::SpellType::kPower &&
+            type != RE::MagicSystem::SpellType::kLesserPower)
+            return {false, "Spell is not a power or lesser power"};
+
+        if (!PlayerKnowsSpell(player, spell))
+            return {false, "Power not known by player"};
+
+        // Powers/lesser powers share the voice slot with shouts.  There is no
+        // Papyrus EquipPower equivalent for SpellItem-based powers, so we set
+        // selectedPower directly — the HUD refreshes on the next game tick.
+        player->GetActorRuntimeData().selectedPower = spell;
+
+        logger::debug("equip_power 0x{:08X} ('{}')", formId, spell->GetName());
+        PrintConsole("[WS] Equip power " + std::string(spell->GetName()));
+        return {true, ""};
+    }
+
     // ─── Hotkeys ──────────────────────────────────────────────────────────
 
     // True when a spell form can be placed on a hotkey slot (same categories
@@ -844,6 +900,24 @@ namespace GameWriter
             favorites->hotkeys[slotIdx] = spell;
 
             PrintConsole(std::format("[WS] Hotkey {} <- spell {}", slot, spell->GetName()));
+            return {true, ""};
+        }
+
+        // Path A½: dragon shout hotkey.
+        if (auto* shout = form->As<RE::TESShout>()) {
+            if (!player->HasShout(shout))
+                return {false, "Shout not known by player"};
+
+            ClearSlotBinding(player, favorites, slotIdx);
+
+            // Ensure the shout is in the favorites list (hotkey overlay only shows favorites).
+            if (std::find(favorites->spells.begin(), favorites->spells.end(),
+                          static_cast<RE::TESForm*>(shout)) == favorites->spells.end()) {
+                favorites->spells.push_back(static_cast<RE::TESForm*>(shout));
+            }
+            favorites->hotkeys[slotIdx] = shout;
+
+            PrintConsole(std::format("[WS] Hotkey {} <- shout {}", slot, shout->GetName()));
             return {true, ""};
         }
 

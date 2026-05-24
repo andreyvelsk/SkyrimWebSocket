@@ -265,6 +265,16 @@ namespace FieldRegistry
           { "Enchanting spells known by player", "array",
             &MagicReader::ReadEnchanting } },
 
+        { "Magic::Items::Shouts",
+          { "Dragon shouts known by player", "array",
+            &MagicReader::ReadShouts } },
+        { "Magic::Items::Powers",
+          { "Greater powers known by player", "array",
+            &MagicReader::ReadPowers } },
+        { "Magic::Items::LesserPowers",
+          { "Lesser powers known by player", "array",
+            &MagicReader::ReadLesserPowers } },
+
         // Hotkeys
         { "Hotkey::Items",
           { "All 8 hotkey slots with their current bindings (spells, shouts, powers, or items)", "array",
