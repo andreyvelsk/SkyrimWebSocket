@@ -693,6 +693,47 @@ namespace GameWriter
         return {true, ""};
     }
 
+    // True when a spell form can be placed on a hotkey slot (same categories
+    // that the vanilla magic favorites menu accepts: spells, powers, lesser
+    // powers, shouts).  Diseases, abilities, scrolls etc. are not eligible.
+    static bool IsHotkeyableSpell(RE::SpellItem* spell)
+    {
+        if (!spell)
+            return false;
+        switch (spell->GetSpellType()) {
+            case RE::MagicSystem::SpellType::kSpell:
+            case RE::MagicSystem::SpellType::kPower:
+            case RE::MagicSystem::SpellType::kLesserPower:
+            case RE::MagicSystem::SpellType::kVoicePower:
+                return true;
+            default:
+                return false;
+        }
+    }
+
+    // Returns true if the player currently knows the given spell/shout/power.
+    static bool PlayerKnowsSpell(RE::PlayerCharacter* player, RE::SpellItem* spell)
+    {
+        if (!player || !spell)
+            return false;
+
+        // Base NPC spell list (racial abilities etc.)
+        if (auto* npc = player->GetActorBase()) {
+            if (auto* spellData = npc->GetSpellList()) {
+                for (std::uint32_t i = 0; i < spellData->numSpells; ++i) {
+                    if (spellData->spells[i] == spell)
+                        return true;
+                }
+            }
+        }
+        // Spells added at runtime (tomes, AddSpell, powers).
+        for (auto* s : player->GetActorRuntimeData().addedSpells) {
+            if (s == spell)
+                return true;
+        }
+        return false;
+    }
+
     CommandResult EquipShout(RE::FormID formId)
     {
         logger::trace("EquipShout enter: formId=0x{:08X}", formId);
@@ -750,47 +791,6 @@ namespace GameWriter
     }
 
     // ─── Hotkeys ──────────────────────────────────────────────────────────
-
-    // True when a spell form can be placed on a hotkey slot (same categories
-    // that the vanilla magic favorites menu accepts: spells, powers, lesser
-    // powers, shouts).  Diseases, abilities, scrolls etc. are not eligible.
-    static bool IsHotkeyableSpell(RE::SpellItem* spell)
-    {
-        if (!spell)
-            return false;
-        switch (spell->GetSpellType()) {
-            case RE::MagicSystem::SpellType::kSpell:
-            case RE::MagicSystem::SpellType::kPower:
-            case RE::MagicSystem::SpellType::kLesserPower:
-            case RE::MagicSystem::SpellType::kVoicePower:
-                return true;
-            default:
-                return false;
-        }
-    }
-
-    // Returns true if the player currently knows the given spell/shout/power.
-    static bool PlayerKnowsSpell(RE::PlayerCharacter* player, RE::SpellItem* spell)
-    {
-        if (!player || !spell)
-            return false;
-
-        // Base NPC spell list (racial abilities etc.)
-        if (auto* npc = player->GetActorBase()) {
-            if (auto* spellData = npc->GetSpellList()) {
-                for (std::uint32_t i = 0; i < spellData->numSpells; ++i) {
-                    if (spellData->spells[i] == spell)
-                        return true;
-                }
-            }
-        }
-        // Spells added at runtime (tomes, AddSpell, powers).
-        for (auto* s : player->GetActorRuntimeData().addedSpells) {
-            if (s == spell)
-                return true;
-        }
-        return false;
-    }
 
     // Ensures MagicFavorites::hotkeys has exactly 8 slots.  The game usually
     // keeps this array sized at 8, but saves from other mods may leave it
