@@ -41,6 +41,63 @@ namespace MagicReader
         return (name && *name != '\0') ? name : fallback;
     }
 
+    // ─── Interface-string helpers ─────────────────────────────────────────
+
+    // Convert a wide (UTF-16) string to UTF-8.
+    // Handles the full Basic Multilingual Plane (U+0000..U+FFFF), which covers
+    // all practical UI scripts: Latin, Cyrillic, CJK, etc.
+    static std::string WcsToUtf8(const wchar_t* ws)
+    {
+        if (!ws) return {};
+        std::string out;
+        for (; *ws; ++ws) {
+            const auto c = static_cast<unsigned>(*ws);
+            if (c < 0x80u) {
+                out += static_cast<char>(c);
+            } else if (c < 0x800u) {
+                out += static_cast<char>(0xC0u | (c >> 6u));
+                out += static_cast<char>(0x80u | (c & 0x3Fu));
+            } else {
+                out += static_cast<char>(0xE0u | (c >> 12u));
+                out += static_cast<char>(0x80u | ((c >> 6u) & 0x3Fu));
+                out += static_cast<char>(0x80u | (c & 0x3Fu));
+            }
+        }
+        return out;
+    }
+
+    // Look up a single key in the Scaleform GFx translation table.
+    // Translation tables are populated from all loaded Interface/Translations/*.txt
+    // files (vanilla Skyrim, SkyUI, and any other mod that ships a translation file).
+    // Keys conventionally start with '$'.
+    static std::string LookupInterfaceString(const RE::BSFixedStringW& key)
+    {
+        const auto* mgr = RE::BSScaleformManager::GetSingleton();
+        if (!mgr || !mgr->loader)
+            return {};
+        const auto translator =
+            mgr->loader->GetState<RE::BSScaleformTranslator>(RE::GFxState::StateType::kTranslator);
+        if (!translator)
+            return {};
+        const auto it = translator->translator.translationMap.find(key);
+        if (it == translator->translator.translationMap.end())
+            return {};
+        const wchar_t* val = it->second.c_str();
+        return (val && *val != L'\0') ? WcsToUtf8(val) : std::string{};
+    }
+
+    // Try each candidate key in order; return the first non-empty hit, or fallback.
+    static std::string GetInterfaceName(
+        std::initializer_list<const wchar_t*> keys, const char* fallback)
+    {
+        for (const wchar_t* k : keys) {
+            std::string s = LookupInterfaceString(RE::BSFixedStringW(k));
+            if (!s.empty())
+                return s;
+        }
+        return fallback;
+    }
+
     static void ReplaceAll(std::string& str, const std::string_view from, const std::string& to)
     {
         for (std::size_t pos = 0; (pos = str.find(from, pos)) != std::string::npos; pos += to.size())
@@ -291,10 +348,16 @@ namespace MagicReader
         }
 
         // Shouts (TESShout, separate from the SpellItem lists).
+        // The name is resolved from the Scaleform translation table so mods can
+        // provide localized strings via Interface/Translations/*.txt files.
+        // Keys tried in order; first match wins.  Falls back to English.
         if (spellData && spellData->numShouts > 0)
             result.push_back({
                 { "categoryId", "Shouts" },
-                { "name",       "Shouts" },
+                { "name",       GetInterfaceName(
+                                    { L"$Shouts", L"$ShoutGroup", L"$ShoutTab",
+                                      L"$SHOUTS", L"$MagicShout" },
+                                    "Shouts") },
                 { "count",      static_cast<int32_t>(spellData->numShouts) },
             });
 
@@ -317,14 +380,21 @@ namespace MagicReader
 
         if (powerCount > 0)
             result.push_back({
-                { "categoryId", "Powers"  },
-                { "name",       "Powers"  },
+                { "categoryId", "Powers" },
+                { "name",       GetInterfaceName(
+                                    { L"$Powers", L"$PowerGroup", L"$PowerTab",
+                                      L"$POWERS", L"$MagicPower" },
+                                    "Powers") },
                 { "count",      powerCount },
             });
         if (lesserPowerCount > 0)
             result.push_back({
-                { "categoryId", "LesserPowers"  },
-                { "name",       "Lesser Powers" },
+                { "categoryId", "LesserPowers" },
+                { "name",       GetInterfaceName(
+                                    { L"$LesserPowers", L"$LesserPowerGroup",
+                                      L"$LesserPowerTab", L"$LESSER_POWERS",
+                                      L"$MagicLesserPower" },
+                                    "Lesser Powers") },
                 { "count",      lesserPowerCount },
             });
 
