@@ -10,34 +10,35 @@ namespace MagicReader
     struct SchoolInfo
     {
         std::string categoryId;
-        const char* gmstKey;
     };
 
     // clang-format off
     static const std::unordered_map<RE::ActorValue, SchoolInfo> s_schools = {
-        { RE::ActorValue::kDestruction, { "Destruction", "sSkillDestruction" } },
-        { RE::ActorValue::kAlteration,  { "Alteration",  "sSkillAlteration"  } },
-        { RE::ActorValue::kConjuration, { "Conjuration", "sSkillConjuration" } },
-        { RE::ActorValue::kIllusion,    { "Illusion",    "sSkillIllusion"    } },
-        { RE::ActorValue::kRestoration, { "Restoration", "sSkillRestoration" } },
-        { RE::ActorValue::kEnchanting,  { "Enchanting",  "sSkillEnchanting"  } },
+        { RE::ActorValue::kDestruction, { "Destruction" } },
+        { RE::ActorValue::kAlteration,  { "Alteration"  } },
+        { RE::ActorValue::kConjuration, { "Conjuration" } },
+        { RE::ActorValue::kIllusion,    { "Illusion"    } },
+        { RE::ActorValue::kRestoration, { "Restoration" } },
+        { RE::ActorValue::kEnchanting,  { "Enchanting"  } },
     };
     // clang-format on
 
     // ─── Private helpers ──────────────────────────────────────────────────
 
-    // Looks up a GMST string by key.
-    // Returns an empty string when the key does not exist or is not a string setting.
-    static std::string GetGMSTString(const char* key)
+    // Returns the localized display name for a magic school ActorValue.
+    // Uses ActorValueList → TESActorValueInfo → TESFullName, which goes through
+    // Skyrim SE's BSStringPool / string-file system and returns the correct
+    // translated name regardless of the current game language.
+    static std::string GetSchoolLocalName(RE::ActorValue school, const std::string& fallback)
     {
-        auto* gmst = RE::GameSettingCollection::GetSingleton();
-        if (!gmst)
-            return "";
-        auto* setting = gmst->GetSetting(key);
-        if (!setting)
-            return "";
-        const char* str = setting->GetString();
-        return str ? str : "";
+        auto* avList = RE::ActorValueList::GetSingleton();
+        if (!avList)
+            return fallback;
+        auto* avInfo = avList->GetActorValue(school);
+        if (!avInfo)
+            return fallback;
+        const char* name = avInfo->GetFullName();
+        return (name && *name != '\0') ? name : fallback;
     }
 
     static void ReplaceAll(std::string& str, const std::string_view from, const std::string& to)
@@ -281,14 +282,11 @@ namespace MagicReader
 
         nlohmann::json result = nlohmann::json::array();
         for (auto& [school, count] : counts) {
-            const auto& info        = s_schools.at(school);
-            std::string displayName = GetGMSTString(info.gmstKey);
-            if (displayName.empty())
-                displayName = info.categoryId;
+            const auto& info = s_schools.at(school);
             result.push_back({
-                { "categoryId", info.categoryId },
-                { "name",       displayName     },
-                { "count",      count           },
+                { "categoryId", info.categoryId                              },
+                { "name",       GetSchoolLocalName(school, info.categoryId)  },
+                { "count",      count                                        },
             });
         }
 
