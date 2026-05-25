@@ -352,6 +352,15 @@ namespace MagicReader
         j["name"]   = shout->GetName();
         j["formId"] = std::format("0x{:08X}", shout->GetFormID());
 
+        // Shout description from TESDescription (DNAM field).
+        if (auto* desc = shout->As<RE::TESDescription>()) {
+            RE::BSString buf;
+            desc->GetDescription(buf, shout);
+            j["description"] = buf.empty() ? "" : std::string(buf);
+        } else {
+            j["description"] = "";
+        }
+
         // Words of power (up to 3 variations; word may be null for unused slots).
         nlohmann::json words = nlohmann::json::array();
         for (std::uint32_t i = 0; i < 3; ++i) {
@@ -371,11 +380,6 @@ namespace MagicReader
         const auto& rt      = player->GetActorRuntimeData();
         const bool  equip   = (rt.selectedPower == static_cast<RE::TESForm*>(shout));
         j["isEquipped"]     = equip;
-
-        // cooldownRemaining: remaining voice cooldown in seconds.
-        // The cooldown timer is global (not per-shout), so it only carries meaning
-        // for the currently equipped shout.
-        j["cooldownRemaining"] = equip ? player->GetVoiceRecoveryTime() : 0.f;
 
         // Hotkeys: indices (0-7) of hotkey slots assigned to this shout.
         nlohmann::json hotkeys = nlohmann::json::array();

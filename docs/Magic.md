@@ -180,6 +180,7 @@ Note: The list does **not** include powers, abilities, diseases, or other non-ca
 {
   "name": "Unrelenting Force",
   "formId": "0x00013E08",
+  "description": "Your thu'um unbalances the very force of gravity, sending your hapless target flying.",
   "words": [
     {
       "name": "FUS",
@@ -201,7 +202,6 @@ Note: The list does **not** include powers, abilities, diseases, or other non-ca
     }
   ],
   "isEquipped": true,
-  "cooldownRemaining": 3.5,
   "isFavorite": true,
   "hotkeys": [0]
 }
@@ -211,13 +211,13 @@ Note: The list does **not** include powers, abilities, diseases, or other non-ca
 
 - `name` — Shout display name (e.g. `"Unrelenting Force"`)
 - `formId` — Unique shout identifier (hex string format: `"0xHHHHHHHH"`)
+- `description` — Localized in-game description of the shout (empty string if none)
 - `words` — Array of word-of-power entries (up to 3; only includes words with valid data):
   - `name` — Word display name (e.g. `"FUS"`)
   - `formId` — Word form identifier
   - `recoveryTime` — Voice cooldown in seconds when this many words are used
   - `isKnown` — `true` if the player has unlocked this word of power
 - `isEquipped` — `true` if this shout is the currently active voice power
-- `cooldownRemaining` — Remaining voice cooldown in seconds (only non-zero for the currently equipped shout; `0.0` otherwise)
 - `isFavorite` — `true` if this shout is in the magic favorites list
 - `hotkeys` — Array of hotkey slot numbers (0-7) where this shout is assigned (empty if not hotkeyed)
 
