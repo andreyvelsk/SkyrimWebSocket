@@ -14,8 +14,6 @@ Magic fields return information about spells known and equipped by the player. A
 | `Magic::Items::Restoration` | `array` | Restoration spells known by player |
 | `Magic::Items::Enchanting` | `array` | Enchanting spells known by player |
 | `Magic::Items::Shouts` | `array` | Dragon shouts known by player |
-| `Magic::Items::Powers` | `array` | Greater powers known by player |
-| `Magic::Items::LesserPowers` | `array` | Lesser powers known by player |
 
 ---
 
@@ -223,44 +221,6 @@ Note: The list does **not** include powers, abilities, diseases, or other non-ca
 
 ---
 
-## Power Entry Shape
-
-`Magic::Items::Powers` and `Magic::Items::LesserPowers` return arrays of power entries:
-
-```jsonc
-{
-  "name": "Breton Heritage",
-  "formId": "0x00017102",
-  "spellType": "Power",
-  "cost": 0,
-  "effects": [
-    {
-      "name": "Dragonskin",
-      "magnitude": 50.0,
-      "duration": 60,
-      "descriptionTemplate": "Absorb <mag>% of spell damage for <dur> seconds.",
-      "description": "Absorb 50% of spell damage for 60 seconds."
-    }
-  ],
-  "isEquipped": false,
-  "isFavorite": false,
-  "hotkeys": []
-}
-```
-
-### Power Field Descriptions
-
-- `name` — Power display name
-- `formId` — Unique power identifier (hex string format: `"0xHHHHHHHH"`)
-- `spellType` — `"Power"` (greater power, once-per-day) or `"LesserPower"` (unlimited use)
-- `cost` — Magicka cost (typically `0` for powers)
-- `effects` — Array of effect objects (same shape as [Effect Object](#effect-object))
-- `isEquipped` — `true` if this power is the currently active voice power
-- `isFavorite` — `true` if this power is in the magic favorites list
-- `hotkeys` — Array of hotkey slot numbers (0-7) where this power is assigned (empty if not hotkeyed)
-
----
-
 ## Game Commands for Spells
 
 The following commands are available for spells (see [PROTOCOL.md](../PROTOCOL.md) for full command documentation):
@@ -269,10 +229,9 @@ The following commands are available for spells (see [PROTOCOL.md](../PROTOCOL.m
 |---|---|
 | `equip_spell` | Equips a known spell to a hand slot for casting |
 | `unequip_spell` | Unequips a spell from a hand slot |
-| `favorite_spell` | Toggles favorite status on a spell, power, or lesser power |
+| `favorite_spell` | Toggles favorite status on a spell |
 | `equip_shout` | Equips a known dragon shout to the voice slot |
 | `unequip_shout` | Removes a dragon shout from the voice slot |
-| `equip_power` | Equips a known power or lesser power to the voice slot |
 | `favorite_shout` | Toggles favorite status on a known dragon shout |
 
 ---
