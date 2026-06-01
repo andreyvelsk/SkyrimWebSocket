@@ -55,6 +55,22 @@ namespace GameWriter
     // Must be called on the game thread.
     CommandResult FavoriteSpell(RE::FormID formId);
 
+    // Equip a known dragon shout to the voice slot.
+    // Must be called on the game thread.
+    CommandResult EquipShout(RE::FormID formId);
+
+    // Remove a dragon shout from the voice slot.
+    // Must be called on the game thread.
+    CommandResult UnequipShout(RE::FormID formId);
+
+    // Equip a known power or lesser power to the voice slot.
+    // Must be called on the game thread.
+    CommandResult EquipPower(RE::FormID formId);
+
+    // Toggle favorite status on a known dragon shout.
+    // Must be called on the game thread.
+    CommandResult FavoriteShout(RE::FormID formId);
+
     // ─── Hotkeys (Skyrim PC "1..8" quick-equip slots) ─────────────────────
     //
     // Skyrim supports 8 hotkey slots (numbered 1..8 on the PC keyboard).

@@ -10,34 +10,92 @@ namespace MagicReader
     struct SchoolInfo
     {
         std::string categoryId;
-        const char* gmstKey;
     };
 
     // clang-format off
     static const std::unordered_map<RE::ActorValue, SchoolInfo> s_schools = {
-        { RE::ActorValue::kDestruction, { "Destruction", "sSkillDestruction" } },
-        { RE::ActorValue::kAlteration,  { "Alteration",  "sSkillAlteration"  } },
-        { RE::ActorValue::kConjuration, { "Conjuration", "sSkillConjuration" } },
-        { RE::ActorValue::kIllusion,    { "Illusion",    "sSkillIllusion"    } },
-        { RE::ActorValue::kRestoration, { "Restoration", "sSkillRestoration" } },
-        { RE::ActorValue::kEnchanting,  { "Enchanting",  "sSkillEnchanting"  } },
+        { RE::ActorValue::kDestruction, { "Destruction" } },
+        { RE::ActorValue::kAlteration,  { "Alteration"  } },
+        { RE::ActorValue::kConjuration, { "Conjuration" } },
+        { RE::ActorValue::kIllusion,    { "Illusion"    } },
+        { RE::ActorValue::kRestoration, { "Restoration" } },
+        { RE::ActorValue::kEnchanting,  { "Enchanting"  } },
     };
     // clang-format on
 
     // ─── Private helpers ──────────────────────────────────────────────────
 
-    // Looks up a GMST string by key.
-    // Returns an empty string when the key does not exist or is not a string setting.
-    static std::string GetGMSTString(const char* key)
+    // Returns the localized display name for a magic school ActorValue.
+    // Uses ActorValueList → TESActorValueInfo → TESFullName, which goes through
+    // Skyrim SE's BSStringPool / string-file system and returns the correct
+    // translated name regardless of the current game language.
+    static std::string GetSchoolLocalName(RE::ActorValue school, const std::string& fallback)
     {
-        auto* gmst = RE::GameSettingCollection::GetSingleton();
-        if (!gmst)
-            return "";
-        auto* setting = gmst->GetSetting(key);
-        if (!setting)
-            return "";
-        const char* str = setting->GetString();
-        return str ? str : "";
+        auto* avList = RE::ActorValueList::GetSingleton();
+        if (!avList)
+            return fallback;
+        auto* avInfo = avList->GetActorValue(school);
+        if (!avInfo)
+            return fallback;
+        const char* name = avInfo->GetFullName();
+        return (name && *name != '\0') ? name : fallback;
+    }
+
+    // ─── Interface-string helpers ─────────────────────────────────────────
+
+    // Convert a wide (UTF-16) string to UTF-8.
+    // Handles the full Basic Multilingual Plane (U+0000..U+FFFF), which covers
+    // all practical UI scripts: Latin, Cyrillic, CJK, etc.
+    static std::string WcsToUtf8(const wchar_t* ws)
+    {
+        if (!ws) return {};
+        std::string out;
+        for (; *ws; ++ws) {
+            const auto c = static_cast<unsigned>(*ws);
+            if (c < 0x80u) {
+                out += static_cast<char>(c);
+            } else if (c < 0x800u) {
+                out += static_cast<char>(0xC0u | (c >> 6u));
+                out += static_cast<char>(0x80u | (c & 0x3Fu));
+            } else {
+                out += static_cast<char>(0xE0u | (c >> 12u));
+                out += static_cast<char>(0x80u | ((c >> 6u) & 0x3Fu));
+                out += static_cast<char>(0x80u | (c & 0x3Fu));
+            }
+        }
+        return out;
+    }
+
+    // Look up a single key in the Scaleform GFx translation table.
+    // Translation tables are populated from all loaded Interface/Translations/*.txt
+    // files (vanilla Skyrim, SkyUI, and any other mod that ships a translation file).
+    // Keys conventionally start with '$'.
+    static std::string LookupInterfaceString(const RE::BSFixedStringW& key)
+    {
+        const auto* mgr = RE::BSScaleformManager::GetSingleton();
+        if (!mgr || !mgr->loader)
+            return {};
+        const auto translator =
+            mgr->loader->GetState<RE::BSScaleformTranslator>(RE::GFxState::StateType::kTranslator);
+        if (!translator)
+            return {};
+        const auto it = translator->translator.translationMap.find(key);
+        if (it == translator->translator.translationMap.end())
+            return {};
+        const wchar_t* val = it->second.c_str();
+        return (val && *val != L'\0') ? WcsToUtf8(val) : std::string{};
+    }
+
+    // Try each candidate key in order; return the first non-empty hit, or fallback.
+    static std::string GetInterfaceName(
+        std::initializer_list<const wchar_t*> keys, const char* fallback)
+    {
+        for (const wchar_t* k : keys) {
+            std::string s = LookupInterfaceString(RE::BSFixedStringW(k));
+            if (!s.empty())
+                return s;
+        }
+        return fallback;
     }
 
     static void ReplaceAll(std::string& str, const std::string_view from, const std::string& to)
@@ -281,16 +339,65 @@ namespace MagicReader
 
         nlohmann::json result = nlohmann::json::array();
         for (auto& [school, count] : counts) {
-            const auto& info        = s_schools.at(school);
-            std::string displayName = GetGMSTString(info.gmstKey);
-            if (displayName.empty())
-                displayName = info.categoryId;
+            const auto& info = s_schools.at(school);
             result.push_back({
-                { "categoryId", info.categoryId },
-                { "name",       displayName     },
-                { "count",      count           },
+                { "categoryId", info.categoryId                              },
+                { "name",       GetSchoolLocalName(school, info.categoryId)  },
+                { "count",      count                                        },
             });
         }
+
+        // Shouts (TESShout, separate from the SpellItem lists).
+        // The name is resolved from the Scaleform translation table so mods can
+        // provide localized strings via Interface/Translations/*.txt files.
+        // Keys tried in order; first match wins.  Falls back to English.
+        if (spellData && spellData->numShouts > 0)
+            result.push_back({
+                { "categoryId", "Shouts" },
+                { "name",       GetInterfaceName(
+                                    { L"$Shouts", L"$ShoutGroup", L"$ShoutTab",
+                                      L"$SHOUTS", L"$MagicShout" },
+                                    "Shouts") },
+                { "count",      static_cast<int32_t>(spellData->numShouts) },
+            });
+
+        // Powers (greater) and lesser powers — SpellItem with matching type.
+        int32_t powerCount = 0, lesserPowerCount = 0;
+        auto countPower = [&](RE::SpellItem* spell) {
+            if (!spell) return;
+            switch (spell->GetSpellType()) {
+                case RE::MagicSystem::SpellType::kPower:       ++powerCount;       break;
+                case RE::MagicSystem::SpellType::kLesserPower: ++lesserPowerCount; break;
+                default: break;
+            }
+        };
+        if (spellData) {
+            for (std::uint32_t i = 0; i < spellData->numSpells; ++i)
+                countPower(spellData->spells[i]);
+        }
+        for (auto* spell : player->GetActorRuntimeData().addedSpells)
+            countPower(spell);
+
+        if (powerCount > 0)
+            result.push_back({
+                { "categoryId", "Powers" },
+                { "name",       GetInterfaceName(
+                                    { L"$Powers", L"$PowerGroup", L"$PowerTab",
+                                      L"$POWERS", L"$MagicPower" },
+                                    "Powers") },
+                { "count",      powerCount },
+            });
+        if (lesserPowerCount > 0)
+            result.push_back({
+                { "categoryId", "LesserPowers" },
+                { "name",       GetInterfaceName(
+                                    { L"$LesserPowers", L"$LesserPowerGroup",
+                                      L"$LesserPowerTab", L"$LESSER_POWERS",
+                                      L"$MagicLesserPower" },
+                                    "Lesser Powers") },
+                { "count",      lesserPowerCount },
+            });
+
         return result;
     }
 
@@ -300,4 +407,181 @@ namespace MagicReader
     nlohmann::json ReadIllusion()    { return ReadSchool(RE::ActorValue::kIllusion);    }
     nlohmann::json ReadRestoration() { return ReadSchool(RE::ActorValue::kRestoration); }
     nlohmann::json ReadEnchanting()  { return ReadSchool(RE::ActorValue::kEnchanting);  }
+
+    // ─── Shouts ───────────────────────────────────────────────────────────
+
+    // Builds the JSON object for a single known dragon shout.
+    static nlohmann::json BuildShoutEntry(
+        RE::TESShout*        shout,
+        RE::MagicFavorites*  favorites,
+        RE::PlayerCharacter* player)
+    {
+        nlohmann::json j;
+        j["name"]   = shout->GetName();
+        j["formId"] = std::format("0x{:08X}", shout->GetFormID());
+
+        // Shout description from TESDescription (DNAM field).
+        if (auto* desc = shout->As<RE::TESDescription>()) {
+            RE::BSString buf;
+            desc->GetDescription(buf, shout);
+            j["description"] = buf.empty() ? "" : std::string(buf);
+        } else {
+            j["description"] = "";
+        }
+
+        // Words of power (up to 3 variations; word may be null for unused slots).
+        nlohmann::json words = nlohmann::json::array();
+        for (std::uint32_t i = 0; i < 3; ++i) {
+            const auto& var = shout->variations[i];
+            if (!var.word)
+                continue;
+            nlohmann::json w;
+            w["name"]         = var.word->GetName();
+            w["formId"]       = std::format("0x{:08X}", var.word->GetFormID());
+            w["recoveryTime"] = var.recoveryTime;
+            w["isKnown"]      = var.word->GetKnown();
+            words.push_back(std::move(w));
+        }
+        j["words"] = std::move(words);
+
+        // isEquipped: this shout is the currently selected voice power.
+        const auto& rt      = player->GetActorRuntimeData();
+        const bool  equip   = (rt.selectedPower == static_cast<RE::TESForm*>(shout));
+        j["isEquipped"]     = equip;
+
+        // Hotkeys: indices (0-7) of hotkey slots assigned to this shout.
+        nlohmann::json hotkeys = nlohmann::json::array();
+        if (favorites) {
+            for (int i = 0; i < 8; ++i) {
+                if (i < static_cast<int>(favorites->hotkeys.size()) &&
+                    favorites->hotkeys[i] == static_cast<RE::TESForm*>(shout))
+                    hotkeys.push_back(i);
+            }
+        }
+        j["hotkeys"] = std::move(hotkeys);
+
+        // isFavorite: is this shout in the magic favorites list.
+        bool isFavorite = false;
+        if (favorites) {
+            for (const auto* fav : favorites->spells) {
+                if (fav == static_cast<RE::TESForm*>(shout)) {
+                    isFavorite = true;
+                    break;
+                }
+            }
+        }
+        j["isFavorite"] = isFavorite;
+
+        return j;
+    }
+
+    nlohmann::json ReadShouts()
+    {
+        auto* player = RE::PlayerCharacter::GetSingleton();
+        if (!player)
+            return nlohmann::json::array();
+
+        auto* favorites = RE::MagicFavorites::GetSingleton();
+        nlohmann::json result = nlohmann::json::array();
+
+        auto* npc       = player->GetActorBase();
+        auto* spellData = npc ? npc->GetSpellList() : nullptr;
+        if (!spellData)
+            return result;
+
+        for (std::uint32_t i = 0; i < spellData->numShouts; ++i) {
+            auto* shout = spellData->shouts[i];
+            if (!shout)
+                continue;
+            result.push_back(BuildShoutEntry(shout, favorites, player));
+        }
+        return result;
+    }
+
+    // ─── Powers & Lesser Powers ───────────────────────────────────────────
+
+    // Builds the JSON object for a single known power (greater or lesser).
+    static nlohmann::json BuildPowerEntry(
+        RE::SpellItem*       spell,
+        RE::MagicFavorites*  favorites,
+        RE::PlayerCharacter* player)
+    {
+        nlohmann::json j;
+        j["name"]   = spell->GetName();
+        j["formId"] = std::format("0x{:08X}", spell->GetFormID());
+
+        j["spellType"] = (spell->GetSpellType() == RE::MagicSystem::SpellType::kLesserPower)
+                             ? "LesserPower"
+                             : "Power";
+
+        // Powers always cost 0 magicka (they may have a cost of 0 in the data, but
+        // CalculateMagickaCost will reflect that).
+        j["cost"]    = static_cast<int32_t>(spell->CalculateMagickaCost(player));
+        j["effects"] = BuildEffectsArray(spell);
+
+        // isEquipped: this power is the currently selected voice power.
+        const auto& rt  = player->GetActorRuntimeData();
+        j["isEquipped"] = (rt.selectedPower == static_cast<RE::TESForm*>(spell));
+
+        // Hotkeys: indices (0-7) of hotkey slots assigned to this power.
+        nlohmann::json hotkeys = nlohmann::json::array();
+        if (favorites) {
+            for (int i = 0; i < 8; ++i) {
+                if (i < static_cast<int>(favorites->hotkeys.size()) &&
+                    favorites->hotkeys[i] == static_cast<RE::TESForm*>(spell))
+                    hotkeys.push_back(i);
+            }
+        }
+        j["hotkeys"] = std::move(hotkeys);
+
+        // isFavorite: is this power in the magic favorites list.
+        bool isFavorite = false;
+        if (favorites) {
+            for (const auto* fav : favorites->spells) {
+                if (fav == static_cast<RE::TESForm*>(spell)) {
+                    isFavorite = true;
+                    break;
+                }
+            }
+        }
+        j["isFavorite"] = isFavorite;
+
+        return j;
+    }
+
+    // Generic power reader filtered by spell type.
+    static nlohmann::json ReadPowersByType(RE::MagicSystem::SpellType type)
+    {
+        auto* player = RE::PlayerCharacter::GetSingleton();
+        if (!player)
+            return nlohmann::json::array();
+
+        auto* favorites = RE::MagicFavorites::GetSingleton();
+        nlohmann::json result = nlohmann::json::array();
+
+        auto tryAdd = [&](RE::SpellItem* spell) {
+            if (!spell)
+                return;
+            if (spell->GetSpellType() != type)
+                return;
+            result.push_back(BuildPowerEntry(spell, favorites, player));
+        };
+
+        // 1) Powers baked into the player's base NPC form.
+        auto* npc       = player->GetActorBase();
+        auto* spellData = npc ? npc->GetSpellList() : nullptr;
+        if (spellData) {
+            for (std::uint32_t i = 0; i < spellData->numSpells; ++i)
+                tryAdd(spellData->spells[i]);
+        }
+
+        // 2) Powers added at runtime (AddSpell(), mods, console, etc.).
+        for (auto* spell : player->GetActorRuntimeData().addedSpells)
+            tryAdd(spell);
+
+        return result;
+    }
+
+    nlohmann::json ReadPowers()       { return ReadPowersByType(RE::MagicSystem::SpellType::kPower);       }
+    nlohmann::json ReadLesserPowers() { return ReadPowersByType(RE::MagicSystem::SpellType::kLesserPower); }
 }

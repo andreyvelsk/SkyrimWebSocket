@@ -13,6 +13,7 @@ Magic fields return information about spells known and equipped by the player. A
 | `Magic::Items::Illusion` | `array` | Illusion spells known by player |
 | `Magic::Items::Restoration` | `array` | Restoration spells known by player |
 | `Magic::Items::Enchanting` | `array` | Enchanting spells known by player |
+| `Magic::Items::Shouts` | `array` | Dragon shouts known by player |
 
 ---
 
@@ -169,6 +170,57 @@ Note: The list does **not** include powers, abilities, diseases, or other non-ca
 
 ---
 
+## Shout Entry Shape
+
+`Magic::Items::Shouts` returns an array of shout entries:
+
+```jsonc
+{
+  "name": "Unrelenting Force",
+  "formId": "0x00013E08",
+  "description": "Your thu'um unbalances the very force of gravity, sending your hapless target flying.",
+  "words": [
+    {
+      "name": "FUS",
+      "formId": "0x0001362A",
+      "recoveryTime": 15.0,
+      "isKnown": true
+    },
+    {
+      "name": "RO",
+      "formId": "0x00017E22",
+      "recoveryTime": 20.0,
+      "isKnown": true
+    },
+    {
+      "name": "DAH",
+      "formId": "0x00017E23",
+      "recoveryTime": 45.0,
+      "isKnown": false
+    }
+  ],
+  "isEquipped": true,
+  "isFavorite": true,
+  "hotkeys": [0]
+}
+```
+
+### Shout Field Descriptions
+
+- `name` — Shout display name (e.g. `"Unrelenting Force"`)
+- `formId` — Unique shout identifier (hex string format: `"0xHHHHHHHH"`)
+- `description` — Localized in-game description of the shout (empty string if none)
+- `words` — Array of word-of-power entries (up to 3; only includes words with valid data):
+  - `name` — Word display name (e.g. `"FUS"`)
+  - `formId` — Word form identifier
+  - `recoveryTime` — Voice cooldown in seconds when this many words are used
+  - `isKnown` — `true` if the player has unlocked this word of power
+- `isEquipped` — `true` if this shout is the currently active voice power
+- `isFavorite` — `true` if this shout is in the magic favorites list
+- `hotkeys` — Array of hotkey slot numbers (0-7) where this shout is assigned (empty if not hotkeyed)
+
+---
+
 ## Game Commands for Spells
 
 The following commands are available for spells (see [PROTOCOL.md](../PROTOCOL.md) for full command documentation):
@@ -177,7 +229,10 @@ The following commands are available for spells (see [PROTOCOL.md](../PROTOCOL.m
 |---|---|
 | `equip_spell` | Equips a known spell to a hand slot for casting |
 | `unequip_spell` | Unequips a spell from a hand slot |
-| `favorite_spell` | Toggles spell's favorite status (toggles between favorited and unfavorited) |
+| `favorite_spell` | Toggles favorite status on a spell |
+| `equip_shout` | Equips a known dragon shout to the voice slot |
+| `unequip_shout` | Removes a dragon shout from the voice slot |
+| `favorite_shout` | Toggles favorite status on a known dragon shout |
 
 ---
 

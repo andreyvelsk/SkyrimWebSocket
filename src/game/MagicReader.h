@@ -16,4 +16,11 @@ namespace MagicReader
     nlohmann::json ReadIllusion();
     nlohmann::json ReadRestoration();
     nlohmann::json ReadEnchanting();
+
+    // Dragon shout reader — must be called on the game thread.
+    nlohmann::json ReadShouts();
+
+    // Power readers (greater and lesser) — each must be called on the game thread.
+    nlohmann::json ReadPowers();
+    nlohmann::json ReadLesserPowers();
 }

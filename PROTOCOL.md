@@ -137,7 +137,11 @@ below.
 | `favorite` | Toggle the favorite flag on an inventory item. | [↓](#favorite) |
 | `equip_spell` | Equip a known spell to a hand. | [↓](#equip_spell) |
 | `unequip_spell` | Unequip a spell from a hand. | [↓](#unequip_spell) |
-| `favorite_spell` | Toggle the favorite flag on a known spell. | [↓](#favorite_spell) |
+| `favorite_spell` | Toggle the favorite flag on a known spell or power. | [↓](#favorite_spell) |
+| `equip_shout` | Equip a known dragon shout to the voice slot. | [↓](#equip_shout) |
+| `unequip_shout` | Remove a dragon shout from the voice slot. | [↓](#unequip_shout) |
+| `equip_power` | Equip a known power or lesser power to the voice slot. | [↓](#equip_power) |
+| `favorite_shout` | Toggle the favorite flag on a known dragon shout. | [↓](#favorite_shout) |
 | `hotkey_set` | Bind an item or spell to one of the 8 hotkey slots. | [↓](#hotkey_set) |
 | `hotkey_clear` | Clear a hotkey slot. | [↓](#hotkey_clear) |
 | `hotkey_trigger` | Fire the action bound to a hotkey slot. | [↓](#hotkey_trigger) |
@@ -329,14 +333,14 @@ Unequips a spell from a hand.
 
 #### `favorite_spell`
 
-Toggles the favorite flag on a known spell. Favorited spells appear in the
+Toggles the favorite flag on a known spell or power. Favorited forms appear in the
 magic favorites list of the spell menu.
 
 | Field | Required | Default | Description |
 |---|---|---|---|
-| `formId` | **yes** | — | Hex form ID of the spell. Must be known by the player. |
+| `formId` | **yes** | — | Hex form ID of the spell or power. Must be known by the player. |
 
-**Applies to:** Spells known by the player.
+**Applies to:** Spells, powers, and lesser powers known by the player.
 
 ```json
 {
@@ -344,6 +348,94 @@ magic favorites list of the spell menu.
   "id": "fav-spell",
   "command": "favorite_spell",
   "formId": "0x0000A23E"
+}
+```
+
+---
+
+#### `equip_shout`
+
+Equips a known dragon shout to the player's voice slot (replaces the currently
+equipped shout).
+
+| Field | Required | Default | Description |
+|---|---|---|---|
+| `formId` | **yes** | — | Hex form ID of the shout. Must be known by the player. |
+
+**Applies to:** Dragon shouts known by the player.
+
+```json
+{
+  "type": "command",
+  "id": "equip-shout",
+  "command": "equip_shout",
+  "formId": "0x0002F7BB"
+}
+```
+
+---
+
+#### `unequip_shout`
+
+Removes a dragon shout from the player's voice slot. Fails if the specified
+shout is not currently equipped.
+
+| Field | Required | Default | Description |
+|---|---|---|---|
+| `formId` | **yes** | — | Hex form ID of the shout to unequip. Must be the shout currently in the voice slot. |
+
+**Applies to:** The dragon shout currently equipped in the voice slot.
+
+```json
+{
+  "type": "command",
+  "id": "unequip-shout",
+  "command": "unequip_shout",
+  "formId": "0x0002F7BB"
+}
+```
+
+---
+
+#### `equip_power`
+
+Equips a known power or lesser power to the player's voice slot (replaces
+the currently equipped power/shout).
+
+| Field | Required | Default | Description |
+|---|---|---|---|
+| `formId` | **yes** | — | Hex form ID of the power. Must be known by the player. |
+
+**Applies to:** Powers and lesser powers known by the player.
+
+```json
+{
+  "type": "command",
+  "id": "equip-power",
+  "command": "equip_power",
+  "formId": "0x000581F4"
+}
+```
+
+---
+
+#### `favorite_shout`
+
+Toggles the favorite flag on a known dragon shout. Favorited shouts appear in
+the favorites list accessible via the magic menu and can be bound to hotkeys.
+
+| Field | Required | Default | Description |
+|---|---|---|---|
+| `formId` | **yes** | — | Hex form ID of the shout. Must be known by the player. |
+
+**Applies to:** Dragon shouts known by the player.
+
+```json
+{
+  "type": "command",
+  "id": "fav-shout",
+  "command": "favorite_shout",
+  "formId": "0x0002F7BB"
 }
 ```
 
