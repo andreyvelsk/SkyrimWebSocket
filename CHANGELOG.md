@@ -2,6 +2,23 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+## [1.15.0](https://github.com/andreyvelsk/SkyrimWebSocket/compare/v1.14.1...v1.15.0) (2026-06-01)
+
+
+### ✨ Features
+
+* **shout:** add shout description ([a91cc44](https://github.com/andreyvelsk/SkyrimWebSocket/commits/a91cc44f047beba9afc98426b0f25daab3f0949c))
+* **shouts:** add FavoriteShout command to manage shout favorites ([fda0914](https://github.com/andreyvelsk/SkyrimWebSocket/commits/fda09149007e31830f312a73b968d37de8d7b277))
+* **shouts:** add support for dragon shouts and powers ([4a3c1ea](https://github.com/andreyvelsk/SkyrimWebSocket/commits/4a3c1ea9fbae82b25bde940674e2dfd6548d5ea1))
+
+
+### 🐛 Bug Fixes
+
+* **build:** build error ([cf9711c](https://github.com/andreyvelsk/SkyrimWebSocket/commits/cf9711c8d1d8a33639a16a9ddfb15647eb114f42))
+* **maigc:** categories local ([4cd257a](https://github.com/andreyvelsk/SkyrimWebSocket/commits/4cd257ab1ccb4b44e9e2693d9f54f5285fe472f9))
+* **shout:** equip shout ([9a83d31](https://github.com/andreyvelsk/SkyrimWebSocket/commits/9a83d318d205da937d78ca3c01fbf130d8b0359c))
+* **shouts:** translation ([8a754d8](https://github.com/andreyvelsk/SkyrimWebSocket/commits/8a754d826baa711d37a063017d558395e3709e35))
+
 ### [1.14.1](https://github.com/andreyvelsk/SkyrimWebSocket/compare/v1.14.0...v1.14.1) (2026-05-16)
 
 ## [1.14.0](https://github.com/andreyvelsk/SkyrimWebSocket/compare/v1.13.0...v1.14.0) (2026-05-16)
