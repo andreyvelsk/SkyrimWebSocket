@@ -3,9 +3,11 @@
     "name": "skyrim-websocket",
     "version-string": "1.15.0",
     "dependencies": [
-        "commonlibsse-ng",
         "boost-beast",
         "boost-asio",
-        "nlohmann-json"
+        "nlohmann-json",
+        "spdlog",
+        "directxtk",
+        "rapidcsv"
     ]
 }

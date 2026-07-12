@@ -19,10 +19,10 @@ An SKSE plugin for Skyrim that provides a WebSocket server interface for remote 
 
 - C++
 - CMake
-- [CommonLibSSE NG](https://github.com/CharmedBaryon/CommonLibSSE-NG)
-  - _automatically downloaded using vcpkg integration of CMake_
+- [CommonLibSSE NG](https://github.com/alandtse/CommonLibVR) (ng branch)
+  - _included as a git submodule in `lib/commonlibsse-ng`_
 
-> This plugin supports Skyrim SSE, AE, GOG, and VR through CommonLibSSE NG.
+> This plugin supports Skyrim SSE, AE, and VR through CommonLibSSE NG.
 
 ## What does it do?
 
@@ -53,15 +53,20 @@ Optionally, place `SkyrimWebSocket.ini` next to the DLL to customize the server 
 ## Build requirements
 
 - [Visual Studio 2022](https://visualstudio.microsoft.com/) (Community edition is fine)
-- [CMake](https://cmake.org/download/) 3.25.1+
+- [CMake](https://cmake.org/download/) 3.21+
 - [`vcpkg`](https://github.com/microsoft/vcpkg):
   1. Clone or download vcpkg repository
   2. Run `bootstrap-vcpkg.bat`
   3. Set environment variable `VCPKG_ROOT` to the vcpkg folder path
+- Git (for submodules)
 
 You can open this project in VS Code, CLion, or Visual Studio. For VS Code, ensure you have the [C++](https://marketplace.visualstudio.com/items?itemName=ms-vscode.cpptools) and [CMake Tools](https://marketplace.visualstudio.com/items?itemName=ms-vscode.cmake-tools) extensions installed.
 
-The project will automatically download CommonLibSSE NG and all dependencies via CMake and vcpkg.
+After cloning, initialize the git submodule:
+```bash
+git submodule update --init --recursive
+```
+CommonLibSSE NG is included as a git submodule in `lib/commonlibsse-ng/`. All other dependencies are downloaded automatically via vcpkg.
 
 ## Project setup
 
