@@ -7,6 +7,10 @@
 #include <format>
 #include <utility>
 
+// Windows wingdi.h defines GetObject as GetObjectW/GetObjectA;
+// conflict with RE::BGSDefaultObjectManager::GetObject.
+#undef GetObject
+
 namespace logger = SKSE::log;
 
 namespace GameWriter
@@ -1117,7 +1121,7 @@ namespace GameWriter
         if (!event)
             return {false, "Failed to allocate ButtonEvent"};
 
-        auto* handler = mc->favoritesHandler.get();
+        auto* handler = mc->favoritesHandler;
         const bool handled = handler->ProcessButton(event);
 
         // ButtonEvent::Create allocates via the game's heap; release it.
