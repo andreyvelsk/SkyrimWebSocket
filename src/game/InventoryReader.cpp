@@ -208,7 +208,7 @@ namespace InventoryReader
         if (!armor)
             return slots;
 
-        const auto slotMask = static_cast<std::uint32_t>(armor->GetSlotMask());
+        const auto slotMask = armor->GetSlotMask().underlying();
         for (const auto& [bit, name] : kBipedSlotNames) {
             if (slotMask & bit)
                 slots.push_back(name);
@@ -791,7 +791,7 @@ namespace InventoryReader
             if (formType == RE::FormType::Ammo) {
                 float base = 0.0f;
                 if (const auto* ammo = item->As<RE::TESAmmo>())
-                    base = ammo->data.damage;
+                    base = ammo->GetRuntimeData().data.damage;
                 j["baseDamage"] = base;
                 j["damage"]     = data.second ? player->GetDamage(data.second.get()) : base;
             }

@@ -36,7 +36,7 @@ namespace MagicReader
         auto* avList = RE::ActorValueList::GetSingleton();
         if (!avList)
             return fallback;
-        auto* avInfo = avList->GetActorValue(school);
+        auto* avInfo = RE::ActorValueList::GetActorValueInfo(school);
         if (!avInfo)
             return fallback;
         const char* name = avInfo->GetFullName();
