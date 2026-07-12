@@ -2,8 +2,8 @@ name: Release
 
 on:
   push:
-    branches: ["main"]
-  workflow_dispatch:
+    tags:
+      - "v*"
 
 env:
   VCPKG_COMMIT: "77df67cfff9c12ccfdb52284e07c87c75092f723"
@@ -12,43 +12,17 @@ env:
   VCPKG_FEATURE_FLAGS: "manifests,binarycaching"
 
 permissions:
-  contents: write
+  contents: read
 
 jobs:
-  check:
-    runs-on: ubuntu-latest
-    outputs:
-      tag: ${{ steps.version.outputs.tag }}
-      tag_exists: ${{ steps.check_tag.outputs.exists }}
-
-    steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
-
-      - name: Extract version from CMakeLists.txt
-        id: version
-        run: |
-          VERSION=$(grep -oP 'project\([^)]+VERSION\s+\K[0-9]+\.[0-9]+\.[0-9]+' CMakeLists.txt)
-          echo "version=${VERSION}" >> "$GITHUB_OUTPUT"
-          echo "tag=v${VERSION}" >> "$GITHUB_OUTPUT"
-
-      - name: Check if release tag already exists
-        id: check_tag
-        run: |
-          if git ls-remote --exit-code --tags origin "refs/tags/${{ steps.version.outputs.tag }}" > /dev/null 2>&1; then
-            echo "exists=true" >> "$GITHUB_OUTPUT"
-          else
-            echo "exists=false" >> "$GITHUB_OUTPUT"
-          fi
-
-  release:
-    needs: check
-    if: needs.check.outputs.tag_exists == 'false'
+  build:
     runs-on: windows-latest
 
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
+        with:
+          submodules: 'recursive'
 
       - name: Setup MSVC Developer Command Prompt
         uses: ilammy/msvc-dev-cmd@v1
@@ -77,12 +51,20 @@ jobs:
         uses: actions/cache@v4
         with:
           path: ${{ env.VCPKG_BINARY_CACHE }}
-          key: vcpkg-${{ runner.os }}-x64-windows-static-md-${{ env.VCPKG_COMMIT }}-${{ steps.vcpkg-cache.outputs.toolchain }}-${{ hashFiles('vcpkg.json', 'vcpkg-configuration.json', 'CMakePresets.json', 'cmake/**') }}
+          key: vcpkg-${{ runner.os }}-x64-windows-static-${{ env.VCPKG_COMMIT }}-${{ steps.vcpkg-cache.outputs.toolchain }}-${{ hashFiles('vcpkg.json', 'vcpkg-configuration.json', 'CMakePresets.json', 'cmake/**') }}
           restore-keys: |
-            vcpkg-${{ runner.os }}-x64-windows-static-md-${{ env.VCPKG_COMMIT }}-${{ steps.vcpkg-cache.outputs.toolchain }}-
+            vcpkg-${{ runner.os }}-x64-windows-static-${{ env.VCPKG_COMMIT }}-${{ steps.vcpkg-cache.outputs.toolchain }}-
 
       - name: Prepare vcpkg binary cache
         run: cmake -E make_directory "${{ env.VCPKG_BINARY_CACHE }}"
+
+      - name: Cache CommonLibSSE build artifacts
+        uses: actions/cache@v4
+        with:
+          path: build/release/lib/commonlibsse-ng
+          key: commonlib-v4.36.5-${{ runner.os }}-${{ steps.vcpkg-cache.outputs.toolchain }}
+          restore-keys: |
+            commonlib-v4.36.5-${{ runner.os }}-
 
       - name: Configure CMake (Release)
         run: cmake --preset release
@@ -90,11 +72,9 @@ jobs:
       - name: Build (Release)
         run: cmake --build build/release --config Release
 
-      - name: Create GitHub Release
-        uses: softprops/action-gh-release@v2
+      - name: Upload compiled DLL
+        uses: actions/upload-artifact@v4
         with:
-          tag_name: ${{ needs.check.outputs.tag }}
-          name: Release ${{ needs.check.outputs.tag }}
-          generate_release_notes: true
-          fail_on_unmatched_files: true
-          files: build/release/**/*.dll
+          name: SkyrimWebSocket-${{ github.sha }}
+          path: build/release/SkyrimWebSocket.dll
+          if-no-files-found: error
