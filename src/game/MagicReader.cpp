@@ -75,17 +75,49 @@ namespace MagicReader
     static std::string LookupInterfaceString(const RE::BSFixedStringW& key)
     {
         const auto* mgr = RE::BSScaleformManager::GetSingleton();
-        if (!mgr || !mgr->loader)
+        if (!mgr)
             return {};
-        const auto translator =
-            mgr->loader->GetState<RE::BSScaleformTranslator>(RE::GFxState::StateType::kTranslator);
+
+        // Try to obtain the translator from two possible sources:
+        // 1. The GFxLoader state (legacy path)
+        // 2. The direct BSScaleformManager::translator member (more reliable)
+        const RE::BSScaleformTranslator* translator = nullptr;
+        if (mgr->loader) {
+            translator =
+                mgr->loader->GetState<RE::BSScaleformTranslator>(RE::GFxState::StateType::kTranslator);
+        }
+        if (!translator) {
+            translator = mgr->translator;
+        }
         if (!translator)
             return {};
-        const auto it = translator->translator.translationMap.find(key);
-        if (it == translator->translator.translationMap.end())
-            return {};
-        const wchar_t* val = it->second.c_str();
-        return (val && *val != L'\0') ? WcsToUtf8(val) : std::string{};
+
+        // Try exact key first (e.g. L"$Shouts")
+        {
+            const auto it = translator->translator.translationMap.find(key);
+            if (it != translator->translator.translationMap.end()) {
+                const wchar_t* val = it->second.c_str();
+                if (val && *val != L'\0')
+                    return WcsToUtf8(val);
+            }
+        }
+
+        // If key starts with '$', also try without the prefix — some translation
+        // file parsers store keys both with and without the sigil.
+        {
+            const wchar_t* k = key.c_str();
+            if (k && k[0] == L'$' && k[1] != L'\0') {
+                RE::BSFixedStringW stripped(k + 1);
+                const auto it = translator->translator.translationMap.find(stripped);
+                if (it != translator->translator.translationMap.end()) {
+                    const wchar_t* val = it->second.c_str();
+                    if (val && *val != L'\0')
+                        return WcsToUtf8(val);
+                }
+            }
+        }
+
+        return {};
     }
 
     // Try each candidate key in order; return the first non-empty hit, or fallback.
