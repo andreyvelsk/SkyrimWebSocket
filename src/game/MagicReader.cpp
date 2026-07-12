@@ -81,10 +81,14 @@ namespace MagicReader
         // Try to obtain the translator from two possible sources:
         // 1. The GFxLoader state (legacy path)
         // 2. The direct BSScaleformManager::translator member (more reliable)
+        // GetState returns GPtr<BSScaleformTranslator>, mgr->translator is raw pointer
         const RE::BSScaleformTranslator* translator = nullptr;
         if (mgr->loader) {
-            translator =
+            auto state =
                 mgr->loader->GetState<RE::BSScaleformTranslator>(RE::GFxState::StateType::kTranslator);
+            if (state) {
+                translator = state.get();
+            }
         }
         if (!translator) {
             translator = mgr->translator;
