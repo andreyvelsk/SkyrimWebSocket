@@ -10,6 +10,8 @@ env:
   VCPKG_BINARY_CACHE: ${{ github.workspace }}/.vcpkg-binary-cache
   VCPKG_BINARY_SOURCES: "clear;files,${{ github.workspace }}/.vcpkg-binary-cache,readwrite"
   VCPKG_FEATURE_FLAGS: "manifests,binarycaching"
+  CCACHE_DIR: ${{ github.workspace }}/.ccache
+  CCACHE_MAXSIZE: 500M
 
 permissions:
   contents: read
@@ -58,16 +60,25 @@ jobs:
       - name: Prepare vcpkg binary cache
         run: cmake -E make_directory "${{ env.VCPKG_BINARY_CACHE }}"
 
-      - name: Cache CommonLibSSE build artifacts
+      - name: Install ccache
+        shell: pwsh
+        run: |
+          $url = "https://github.com/ccache/ccache/releases/download/v4.10.2/ccache-4.10.2-windows-x86_64.zip"
+          $zip = "${{ runner.temp }}\ccache.zip"
+          curl -L -o $zip $url
+          7z x $zip -o"${{ runner.temp }}\ccache" -y
+          echo "${{ runner.temp }}\ccache" | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
+
+      - name: Cache ccache artifacts
         uses: actions/cache@v4
         with:
-          path: build/release/lib/commonlibsse-ng
-          key: commonlib-v4.36.5-${{ runner.os }}-${{ steps.vcpkg-cache.outputs.toolchain }}
+          path: ${{ env.CCACHE_DIR }}
+          key: ccache-${{ runner.os }}-${{ steps.vcpkg-cache.outputs.toolchain }}-${{ hashFiles('lib/commonlibsse-ng/src/**/*.cpp', 'lib/commonlibsse-ng/src/**/*.h', 'lib/commonlibsse-ng/CMakeLists.txt', 'CMakeLists.txt', 'CMakePresets.json') }}
           restore-keys: |
-            commonlib-v4.36.5-${{ runner.os }}-
+            ccache-${{ runner.os }}-${{ steps.vcpkg-cache.outputs.toolchain }}-
 
       - name: Configure CMake (Release)
-        run: cmake --preset release
+        run: cmake --preset release -DCMAKE_CXX_COMPILER_LAUNCHER=ccache
 
       - name: Build (Release)
         run: cmake --build build/release --config Release
