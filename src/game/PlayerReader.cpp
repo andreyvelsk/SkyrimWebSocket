@@ -356,45 +356,61 @@ namespace PlayerReader
 
         nlohmann::json result = nlohmann::json::array();
 
-        // Map markers are persistent refs attached to each worldspace, stored
-        // in the worldspace's persistentCell via ExtraMapMarker.  We only
-        // return markers that belong to the player's current worldspace so
-        // that e.g. Solstheim markers are not mixed into a Tamriel request.
+        // Global map markers (cities, towns, dungeons, etc.) live in the
+        // persistent cell of the top-level (root) worldspace — Tamriel,
+        // DLC2SolstheimWorld, etc.  Child worldspaces like WindhelmWorld
+        // only contain local markers.
         //
-        // NOTE: this walks thousands of refs across all worldspaces.  Keep
-        // this hot path silent (no per-ref logging); the per-flush-on-trace
-        // fsync inside spdlog turns each log line into a multi-millisecond
-        // disk write that visibly freezes the renderer.
+        // We resolve the player's root parentWorldspace and return only
+        // markers from that top-level worldspace's persistent cell.
+        //
+        // NOTE: this walks thousands of refs.  Keep this hot path silent
+        // (no per-ref logging); the per-flush-on-trace fsync inside spdlog
+        // turns each log line into a multi-millisecond disk write that
+        // visibly freezes the renderer.
 
-        // Determine the player's current worldspace.  When the player is in an
-        // exterior cell, GetWorldspace() returns the worldspace directly.  In
-        // interior cells (caves, houses, dungeons) it returns null, so we
-        // resolve the worldspace from the cell's location hierarchy — the same
-        // pattern used by ReadExteriorPosition.
+        // Step 1 — determine the player's current worldspace.
         auto* playerWorld = player->GetWorldspace();
+
+        // In interior cells (caves, houses, dungeons) GetWorldspace() returns
+        // null.  Resolve the worldspace from the cell's location hierarchy via
+        // worldLocMarker (same pattern as ReadExteriorPosition).
         if (!playerWorld) {
             auto* cell = player->GetParentCell();
             if (cell) {
-                RE::BGSLocation* loc = cell->GetLocation();
-                while (loc && !playerWorld) {
-                    auto* markerRef = loc->worldLocMarker.get().get();
-                    if (markerRef) {
-                        playerWorld = markerRef->GetWorldspace();
+                // Fallback A: cell->worldSpace (may be set for some interiors).
+                playerWorld = cell->GetRuntimeData().worldSpace;
+
+                // Fallback B: walk the location hierarchy looking for a marker.
+                if (!playerWorld) {
+                    RE::BGSLocation* loc = cell->GetLocation();
+                    while (loc && !playerWorld) {
+                        auto* markerRef = loc->worldLocMarker.get().get();
+                        if (markerRef) {
+                            playerWorld = markerRef->GetWorldspace();
+                        }
+                        if (!playerWorld)
+                            loc = loc->parentLoc;
                     }
-                    if (!playerWorld)
-                        loc = loc->parentLoc;
                 }
             }
         }
+
         if (!playerWorld) {
             logger::debug("[Map::Markers::Locations] cannot determine player's worldspace, returning empty");
             return result;
         }
 
-        auto* persist = playerWorld->persistentCell;
+        // Step 2 — walk up to the root (top-level) parentWorldspace.
+        auto* rootWorld = playerWorld;
+        while (rootWorld->parentWorld)
+            rootWorld = rootWorld->parentWorld;
+
+        // Step 3 — iterate the root worldspace's persistent cell.
+        auto* persist = rootWorld->persistentCell;
         if (!persist) {
-            logger::debug("[Map::Markers::Locations] worldspace '{}' has no persistent cell, returning empty",
-                          playerWorld->GetFormEditorID() ? playerWorld->GetFormEditorID() : "?");
+            logger::debug("[Map::Markers::Locations] root worldspace '{}' has no persistent cell, returning empty",
+                          rootWorld->GetFormEditorID() ? rootWorld->GetFormEditorID() : "?");
             return result;
         }
 
@@ -454,11 +470,11 @@ namespace PlayerReader
             result.push_back(std::move(entry));
         };
 
-        // Walk only the player's current worldspace's persistent cell using
-        // the public, safe API TESObjectCELL::ForEachReference.  We avoid
-        // touching world->fixedPersistentRefMap / mobilePersistentRefs
-        // directly: in multi-targeting builds the BSTHashMap layout mismatches
-        // the header, which produces garbage iterators and crashes.
+        // Walk the root worldspace's persistent cell using the public, safe
+        // API TESObjectCELL::ForEachReference.  We avoid touching
+        // world->fixedPersistentRefMap / mobilePersistentRefs directly: in
+        // multi-targeting builds the BSTHashMap layout mismatches the header,
+        // which produces garbage iterators and crashes.
         std::size_t totalRefs = 0;
         persist->ForEachReference([&](RE::TESObjectREFR* ref) {
             ++totalRefs;
@@ -466,9 +482,9 @@ namespace PlayerReader
             return RE::BSContainer::ForEachResult::kContinue;
         });
 
-        logger::debug("[Map::Markers::Locations] visibleOnly={} worldspace='{}' refs_visited={} markers={}",
+        logger::debug("[Map::Markers::Locations] visibleOnly={} rootWorld='{}' refs_visited={} markers={}",
                       visibleOnly,
-                      playerWorld->GetFormEditorID() ? playerWorld->GetFormEditorID() : "?",
+                      rootWorld->GetFormEditorID() ? rootWorld->GetFormEditorID() : "?",
                       totalRefs, result.size());
         return result;
     }
