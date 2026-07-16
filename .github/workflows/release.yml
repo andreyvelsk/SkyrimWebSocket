@@ -2,53 +2,33 @@ name: Release
 
 on:
   push:
-    branches: ["main"]
-  workflow_dispatch:
+    tags:
+      - "v*"
 
 env:
   VCPKG_COMMIT: "77df67cfff9c12ccfdb52284e07c87c75092f723"
   VCPKG_BINARY_CACHE: ${{ github.workspace }}/.vcpkg-binary-cache
   VCPKG_BINARY_SOURCES: "clear;files,${{ github.workspace }}/.vcpkg-binary-cache,readwrite"
   VCPKG_FEATURE_FLAGS: "manifests,binarycaching"
+  CCACHE_DIR: ${{ github.workspace }}/.ccache
+  CCACHE_MAXSIZE: 500M
+  CCACHE_MSVC: 1
+  CCACHE_SLOPPINESS: pch_defines,time_macros
+  CCACHE_BASEDIR: ${{ github.workspace }}
+  CCACHE_NOHASHDIR: true
 
 permissions:
-  contents: write
+  contents: read
 
 jobs:
-  check:
-    runs-on: ubuntu-latest
-    outputs:
-      tag: ${{ steps.version.outputs.tag }}
-      tag_exists: ${{ steps.check_tag.outputs.exists }}
-
-    steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
-
-      - name: Extract version from CMakeLists.txt
-        id: version
-        run: |
-          VERSION=$(grep -oP 'project\([^)]+VERSION\s+\K[0-9]+\.[0-9]+\.[0-9]+' CMakeLists.txt)
-          echo "version=${VERSION}" >> "$GITHUB_OUTPUT"
-          echo "tag=v${VERSION}" >> "$GITHUB_OUTPUT"
-
-      - name: Check if release tag already exists
-        id: check_tag
-        run: |
-          if git ls-remote --exit-code --tags origin "refs/tags/${{ steps.version.outputs.tag }}" > /dev/null 2>&1; then
-            echo "exists=true" >> "$GITHUB_OUTPUT"
-          else
-            echo "exists=false" >> "$GITHUB_OUTPUT"
-          fi
-
-  release:
-    needs: check
-    if: needs.check.outputs.tag_exists == 'false'
+  build:
     runs-on: windows-latest
 
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
+        with:
+          submodules: 'recursive'
 
       - name: Setup MSVC Developer Command Prompt
         uses: ilammy/msvc-dev-cmd@v1
@@ -84,17 +64,44 @@ jobs:
       - name: Prepare vcpkg binary cache
         run: cmake -E make_directory "${{ env.VCPKG_BINARY_CACHE }}"
 
+      - name: Install ccache
+        shell: pwsh
+        run: |
+          $url = "https://github.com/ccache/ccache/releases/download/v4.10.2/ccache-4.10.2-windows-x86_64.zip"
+          $zip = "${{ runner.temp }}\ccache.zip"
+          curl -L -o $zip $url
+          $tmpDir = "${{ runner.temp }}\ccache-install"
+          mkdir -Force $tmpDir
+          7z x $zip -o"$tmpDir" -y
+          $subdir = Get-ChildItem "$tmpDir" -Directory | Select-Object -First 1
+          Move-Item "$($subdir.FullName)\*" "$tmpDir" -Force
+          Remove-Item "$($subdir.FullName)" -Recurse -Force
+          echo "$tmpDir" | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
+
+      - name: Cache ccache artifacts
+        id: ccache-cache
+        uses: actions/cache@v4
+        with:
+          path: ${{ env.CCACHE_DIR }}
+          key: ccache-v4.10.2-${{ runner.os }}-${{ steps.vcpkg-cache.outputs.toolchain }}-${{ hashFiles('lib/commonlibsse-ng/CMakeLists.txt', 'CMakePresets.json') }}
+          restore-keys: |
+            ccache-v4.10.2-${{ runner.os }}-${{ steps.vcpkg-cache.outputs.toolchain }}-
+
+      - name: Show ccache stats (before build)
+        run: ccache -s
+
       - name: Configure CMake (Release)
-        run: cmake --preset release
+        run: cmake --preset release -DCMAKE_CXX_COMPILER_LAUNCHER=ccache
 
       - name: Build (Release)
         run: cmake --build build/release --config Release
 
-      - name: Create GitHub Release
-        uses: softprops/action-gh-release@v2
+      - name: Show ccache stats (after build)
+        run: ccache -s
+
+      - name: Upload compiled DLL
+        uses: actions/upload-artifact@v4
         with:
-          tag_name: ${{ needs.check.outputs.tag }}
-          name: Release ${{ needs.check.outputs.tag }}
-          generate_release_notes: true
-          fail_on_unmatched_files: true
-          files: build/release/**/*.dll
+          name: SkyrimWebSocket-${{ github.sha }}
+          path: build/release/SkyrimWebSocket.dll
+          if-no-files-found: error

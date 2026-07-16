@@ -3,6 +3,8 @@
 #include <format>
 #include <unordered_map>
 
+namespace logger = SKSE::log;
+
 namespace MagicReader
 {
     // ─── School metadata ──────────────────────────────────────────────────
@@ -34,7 +36,7 @@ namespace MagicReader
         auto* avList = RE::ActorValueList::GetSingleton();
         if (!avList)
             return fallback;
-        auto* avInfo = avList->GetActorValue(school);
+        auto* avInfo = RE::ActorValueList::GetActorValueInfo(school);
         if (!avInfo)
             return fallback;
         const char* name = avInfo->GetFullName();
@@ -73,17 +75,53 @@ namespace MagicReader
     static std::string LookupInterfaceString(const RE::BSFixedStringW& key)
     {
         const auto* mgr = RE::BSScaleformManager::GetSingleton();
-        if (!mgr || !mgr->loader)
+        if (!mgr)
             return {};
-        const auto translator =
-            mgr->loader->GetState<RE::BSScaleformTranslator>(RE::GFxState::StateType::kTranslator);
+
+        // Try to obtain the translator from two possible sources:
+        // 1. The GFxLoader state (legacy path)
+        // 2. The direct BSScaleformManager::translator member (more reliable)
+        // GetState returns GPtr<BSScaleformTranslator>, mgr->translator is raw pointer
+        const RE::BSScaleformTranslator* translator = nullptr;
+        if (mgr->loader) {
+            auto state =
+                mgr->loader->GetState<RE::BSScaleformTranslator>(RE::GFxState::StateType::kTranslator);
+            if (state) {
+                translator = state.get();
+            }
+        }
+        if (!translator) {
+            translator = mgr->translator;
+        }
         if (!translator)
             return {};
-        const auto it = translator->translator.translationMap.find(key);
-        if (it == translator->translator.translationMap.end())
-            return {};
-        const wchar_t* val = it->second.c_str();
-        return (val && *val != L'\0') ? WcsToUtf8(val) : std::string{};
+
+        // Try exact key first (e.g. L"$Shouts")
+        {
+            const auto it = translator->translator.translationMap.find(key);
+            if (it != translator->translator.translationMap.end()) {
+                const wchar_t* val = it->second.c_str();
+                if (val && *val != L'\0')
+                    return WcsToUtf8(val);
+            }
+        }
+
+        // If key starts with '$', also try without the prefix — some translation
+        // file parsers store keys both with and without the sigil.
+        {
+            const wchar_t* k = key.c_str();
+            if (k && k[0] == L'$' && k[1] != L'\0') {
+                RE::BSFixedStringW stripped(k + 1);
+                const auto it = translator->translator.translationMap.find(stripped);
+                if (it != translator->translator.translationMap.end()) {
+                    const wchar_t* val = it->second.c_str();
+                    if (val && *val != L'\0')
+                        return WcsToUtf8(val);
+                }
+            }
+        }
+
+        return {};
     }
 
     // Try each candidate key in order; return the first non-empty hit, or fallback.
@@ -147,7 +185,14 @@ namespace MagicReader
     {
         nlohmann::json effects = nlohmann::json::array();
         if (magic) {
-            for (const auto* eff : magic->effects) {
+            logger::trace("[BuildEffectsArray] magic=0x{:016X} effects.size()={}",
+                reinterpret_cast<std::uintptr_t>(magic), magic->effects.size());
+            for (std::uint32_t i = 0; i < magic->effects.size(); ++i) {
+                const auto* eff = magic->effects[i];
+                logger::trace("[BuildEffectsArray] effect[{}] eff=0x{:016X} baseEffect=0x{:016X}",
+                    i,
+                    reinterpret_cast<std::uintptr_t>(eff),
+                    eff ? reinterpret_cast<std::uintptr_t>(eff->baseEffect) : 0uLL);
                 if (!eff || !eff->baseEffect)
                     continue;
                 effects.push_back(BuildEffectJson(eff));
@@ -204,43 +249,71 @@ namespace MagicReader
         RE::PlayerCharacter* player)
     {
         nlohmann::json j;
+
+        logger::trace("[BuildSpellEntry] enter spell=0x{:016X} formId=0x{:08X} category={}",
+            reinterpret_cast<std::uintptr_t>(spell), spell->GetFormID(), categoryType);
+
         j["name"]         = spell->GetName();
         j["formId"]       = std::format("0x{:08X}", spell->GetFormID());
         j["categoryType"] = categoryType;
 
-        // cost: real in-game magicka cost with player skill/perk modifiers applied.
-        j["cost"] = static_cast<int32_t>(spell->CalculateMagickaCost(player));
+        logger::trace("[BuildSpellEntry] 0x{:08X} name='{}'",
+            spell->GetFormID(), static_cast<std::string>(j["name"]));
 
-        // costValue: raw base cost — costOverride when explicitly set, otherwise
-        // unmodified (no-actor) calculation.
+        // cost: real in-game magicka cost with player skill/perk modifiers applied.
+        logger::trace("[BuildSpellEntry] 0x{:08X} calling CalculateMagickaCost(player)", spell->GetFormID());
+        j["cost"] = static_cast<int32_t>(spell->CalculateMagickaCost(player));
+        logger::trace("[BuildSpellEntry] 0x{:08X} cost={}", spell->GetFormID(), j["cost"].get<int32_t>());
+
+        // costValue: raw base cost — costOverride when explicitly set, otherwise the
+        // with-player calculation (calling CalculateMagickaCost(nullptr) is unsafe on
+        // some platforms/versions and has been replaced with the player-based call).
+        logger::trace("[BuildSpellEntry] 0x{:08X} costOverride={}", spell->GetFormID(), spell->data.costOverride);
         const int32_t costBase = (spell->data.costOverride >= 0)
                                      ? spell->data.costOverride
-                                     : static_cast<int32_t>(spell->CalculateMagickaCost(nullptr));
+                                     : static_cast<int32_t>(spell->CalculateMagickaCost(player));
         j["costValue"] = costBase;
+        logger::trace("[BuildSpellEntry] 0x{:08X} costValue={}", spell->GetFormID(), costBase);
 
         // level: minimum school skill required (0=Novice, 25=Apprentice, 50=Adept,
         // 75=Expert, 100=Master).  Taken from the costliest effect's base setting.
+        logger::trace("[BuildSpellEntry] 0x{:08X} calling GetCostliestEffectItem", spell->GetFormID());
         int32_t level = 0;
         const auto* costliestEff = spell->GetCostliestEffectItem();
+        logger::trace("[BuildSpellEntry] 0x{:08X} costliestEff=0x{:016X}",
+            spell->GetFormID(), reinterpret_cast<std::uintptr_t>(costliestEff));
         if (costliestEff && costliestEff->baseEffect)
             level = costliestEff->baseEffect->GetMinimumSkillLevel();
         j["level"] = level;
+        logger::trace("[BuildSpellEntry] 0x{:08X} level={}", spell->GetFormID(), level);
 
         j["castingType"] = CastingTypeToString(spell->data.castingType);
         j["delivery"]    = DeliveryToString(spell->data.delivery);
         j["range"]       = spell->data.range;
         j["chargeTime"]  = spell->data.chargeTime;
+
+        logger::trace("[BuildSpellEntry] 0x{:08X} calling BuildEffectsArray", spell->GetFormID());
         j["effects"]     = BuildEffectsArray(spell);
+        logger::trace("[BuildSpellEntry] 0x{:08X} effects done count={}",
+            spell->GetFormID(), j["effects"].size());
 
         // Equipped hand: which casting slot (if any) has this spell ready.
+        logger::trace("[BuildSpellEntry] 0x{:08X} calling GetEquippedHand", spell->GetFormID());
         auto hand       = GetEquippedHand(spell, player);
         j["isEquipped"] = !hand.is_null();
         j["equippedHand"] = std::move(hand);
+        logger::trace("[BuildSpellEntry] 0x{:08X} isEquipped={}",
+            spell->GetFormID(), j["isEquipped"].get<bool>());
 
         // isActive: currently being cast by the player.
+        logger::trace("[BuildSpellEntry] 0x{:08X} calling IsCasting", spell->GetFormID());
         j["isActive"] = player->IsCasting(spell);
+        logger::trace("[BuildSpellEntry] 0x{:08X} isActive={}",
+            spell->GetFormID(), j["isActive"].get<bool>());
 
         // Hotkeys: collect all number-key slot indices (0-7) for this spell.
+        logger::trace("[BuildSpellEntry] 0x{:08X} building hotkeys favorites=0x{:016X}",
+            spell->GetFormID(), reinterpret_cast<std::uintptr_t>(favorites));
         nlohmann::json hotkeys = nlohmann::json::array();
         if (favorites) {
             for (int i = 0; i < 8; ++i) {
@@ -251,6 +324,7 @@ namespace MagicReader
         j["hotkeys"] = std::move(hotkeys);
 
         // isFavorite: is this spell marked as a favorite.
+        logger::trace("[BuildSpellEntry] 0x{:08X} checking isFavorite", spell->GetFormID());
         bool isFavorite = false;
         if (favorites) {
             for (const auto* fav : favorites->spells) {
@@ -262,6 +336,7 @@ namespace MagicReader
         }
         j["isFavorite"] = isFavorite;
 
+        logger::trace("[BuildSpellEntry] 0x{:08X} done", spell->GetFormID());
         return j;
     }
 
@@ -276,31 +351,58 @@ namespace MagicReader
         const std::string& categoryType = s_schools.at(school).categoryId;
         auto*              favorites    = RE::MagicFavorites::GetSingleton();
 
+        logger::trace("[ReadSchool] school={} player=0x{:016X} favorites=0x{:016X}",
+            categoryType,
+            reinterpret_cast<std::uintptr_t>(player),
+            reinterpret_cast<std::uintptr_t>(favorites));
+
         nlohmann::json result = nlohmann::json::array();
 
         auto tryAdd = [&](RE::SpellItem* spell) {
             if (!spell)
                 return;
+            logger::trace("[ReadSchool::{}] candidate spell=0x{:016X} formId=0x{:08X}",
+                categoryType,
+                reinterpret_cast<std::uintptr_t>(spell),
+                spell->GetFormID());
             // Only regular castable spells — skip powers, diseases, abilities, etc.
-            if (spell->GetSpellType() != RE::MagicSystem::SpellType::kSpell)
+            const auto spellType = spell->GetSpellType();
+            logger::trace("[ReadSchool::{}] 0x{:08X} spellType={}",
+                categoryType, spell->GetFormID(), static_cast<int>(spellType));
+            if (spellType != RE::MagicSystem::SpellType::kSpell)
                 return;
-            if (spell->GetAssociatedSkill() != school)
+            const auto assocSkill = spell->GetAssociatedSkill();
+            logger::trace("[ReadSchool::{}] 0x{:08X} associatedSkill={}",
+                categoryType, spell->GetFormID(), static_cast<int>(assocSkill));
+            if (assocSkill != school)
                 return;
+            logger::trace("[ReadSchool::{}] 0x{:08X} passes filter, building entry",
+                categoryType, spell->GetFormID());
             result.push_back(BuildSpellEntry(spell, categoryType, favorites, player));
+            logger::trace("[ReadSchool::{}] 0x{:08X} entry added OK",
+                categoryType, spell->GetFormID());
         };
 
         // 1) Spells baked into the player's base NPC form.
         auto* npc       = player->GetActorBase();
         auto* spellData = npc ? npc->GetSpellList() : nullptr;
+        logger::trace("[ReadSchool::{}] npc=0x{:016X} spellData=0x{:016X}",
+            categoryType,
+            reinterpret_cast<std::uintptr_t>(npc),
+            reinterpret_cast<std::uintptr_t>(spellData));
         if (spellData) {
+            logger::trace("[ReadSchool::{}] base numSpells={}", categoryType, spellData->numSpells);
             for (std::uint32_t i = 0; i < spellData->numSpells; ++i)
                 tryAdd(spellData->spells[i]);
         }
 
         // 2) Spells learned at runtime (spell tomes, AddSpell(), console, etc.).
-        for (auto* spell : player->GetActorRuntimeData().addedSpells)
+        const auto& addedSpells = player->GetActorRuntimeData().addedSpells;
+        logger::trace("[ReadSchool::{}] addedSpells.size()={}", categoryType, addedSpells.size());
+        for (auto* spell : addedSpells)
             tryAdd(spell);
 
+        logger::trace("[ReadSchool::{}] returning {} entries", categoryType, result.size());
         return result;
     }
 

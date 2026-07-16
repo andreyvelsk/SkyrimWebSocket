@@ -445,9 +445,9 @@ namespace PlayerReader
             if (!persist)
                 continue;
 
-            persist->ForEachReference([&](RE::TESObjectREFR& ref) {
+            persist->ForEachReference([&](RE::TESObjectREFR* ref) {
                 ++totalRefs;
-                emit(&ref);
+                emit(ref);
                 return RE::BSContainer::ForEachResult::kContinue;
             });
         }
@@ -642,8 +642,8 @@ namespace PlayerReader
 
             auto& questsTab = journal->GetRuntimeData().questsTab;
             if (auto visible = ReadScaleformMiscObjectivesVisibleFromValue(
-                    questsTab.unk18,
-                    "Journal_QuestsTab::unk18")) {
+                    questsTab.titleList,
+                    "Journal_QuestsTab::titleList")) {
                 return visible;
             }
 
@@ -1047,21 +1047,21 @@ namespace PlayerReader
                 if (!world || !world->persistentCell)
                     continue;
 
-                world->persistentCell->ForEachReference([&](RE::TESObjectREFR& ref) {
-                    const RE::FormID fid = ref.GetFormID();
+                world->persistentCell->ForEachReference([&](RE::TESObjectREFR* ref) {
+                    const RE::FormID fid = ref->GetFormID();
                     if (fid)
-                        s_persistentCache.byFormId.emplace(fid, &ref);
+                        s_persistentCache.byFormId.emplace(fid, ref);
 
                     // Only include map-markers in exterior top-level worldspaces
                     // in the location-keyed maps (same filter as ReadMapMarkersImpl).
-                    if (IsMapMarkerRef(&ref) && HasGlobalMapCoordinates(&ref)) {
-                        if (auto* xl = ref.extraList.GetByType<RE::ExtraLocation>()) {
+                    if (IsMapMarkerRef(ref) && HasGlobalMapCoordinates(ref)) {
+                        if (auto* xl = ref->extraList.GetByType<RE::ExtraLocation>()) {
                             if (xl->location) {
                                 s_persistentCache.markerByLocationId.emplace(
-                                    xl->location->GetFormID(), &ref);
+                                    xl->location->GetFormID(), ref);
                             }
                         }
-                        auto* extra = ref.extraList.GetByType<RE::ExtraMapMarker>();
+                        auto* extra = ref->extraList.GetByType<RE::ExtraMapMarker>();
                         const char* raw = extra && extra->mapData
                                               ? extra->mapData->locationName.GetFullName()
                                               : nullptr;
@@ -1070,7 +1070,7 @@ namespace PlayerReader
                             for (auto& c : key)
                                 c = static_cast<char>(
                                     std::tolower(static_cast<unsigned char>(c)));
-                            s_persistentCache.markerByName.emplace(std::move(key), &ref);
+                            s_persistentCache.markerByName.emplace(std::move(key), ref);
                         }
                     }
 
@@ -1664,10 +1664,7 @@ namespace PlayerReader
             out["ptr"]           = PtrString(target);
             out["aliasId"]       = target->alias;
             out["hasConditions"] = static_cast<bool>(target->conditions);
-            out["unk00"]         = std::format("0x{:016X}", target->unk00);
-            out["unk11"]         = target->unk11;
-            out["unk12"]         = target->unk12;
-            out["unk14"]         = target->unk14;
+            out["flags"]         = static_cast<std::uint8_t>(target->flags.underlying());
 
             if (quest)
                 out["quest"] = QuestDebugJson(quest);

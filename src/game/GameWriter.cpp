@@ -7,6 +7,10 @@
 #include <format>
 #include <utility>
 
+// Windows wingdi.h defines GetObject as GetObjectW/GetObjectA;
+// conflict with RE::BGSDefaultObjectManager::GetObject.
+#undef GetObject
+
 namespace logger = SKSE::log;
 
 namespace GameWriter
@@ -397,13 +401,10 @@ namespace GameWriter
             return nullptr;
         }();
 
-        RE::BSString desc;
-        book->GetDescription(desc, nullptr);
-
         RE::NiMatrix3 rot{};
         rot.SetEulerAnglesXYZ(-0.05f, -0.05f, 1.50f);
 
-        RE::BookMenu::OpenBookMenu(desc, xList, nullptr, book, RE::NiPoint3(), rot, 1.0f, true);
+        RE::BookMenu::OpenMenuFromBaseForm(book, xList, RE::NiPoint3(), rot, 1.0f, true);
 
         logger::debug("read_book 0x{:08X} ('{}')", formId, book->GetName());
         PrintConsole("[WS] Read book " + std::string(book->GetName()));
@@ -1117,7 +1118,7 @@ namespace GameWriter
         if (!event)
             return {false, "Failed to allocate ButtonEvent"};
 
-        auto* handler = mc->favoritesHandler.get();
+        auto* handler = mc->favoritesHandler;
         const bool handled = handler->ProcessButton(event);
 
         // ButtonEvent::Create allocates via the game's heap; release it.
