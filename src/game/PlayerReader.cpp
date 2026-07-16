@@ -108,10 +108,23 @@ namespace PlayerReader
             pos["parentWorldspace"]       = rootEdid ? std::string(rootEdid) : std::string();
             pos["parentWorldspaceFormId"] = formIdStr(root->GetFormID());
         } else {
-            pos["worldspace"]             = nullptr;
-            pos["worldspaceFormId"]       = nullptr;
-            pos["parentWorldspace"]       = nullptr;
-            pos["parentWorldspaceFormId"] = nullptr;
+            // Interior cell — worldspace is null, but we can still resolve
+            // the parentWorldspace via the same fallback chain used by the
+            // map-markers query.
+            pos["worldspace"]       = nullptr;
+            pos["worldspaceFormId"] = nullptr;
+
+            if (auto* resolved = ResolvePlayerWorldspace()) {
+                auto* root = resolved;
+                while (root->parentWorld)
+                    root = root->parentWorld;
+                const char* rootEdid = root->GetFormEditorID();
+                pos["parentWorldspace"]       = rootEdid ? std::string(rootEdid) : std::string();
+                pos["parentWorldspaceFormId"] = formIdStr(root->GetFormID());
+            } else {
+                pos["parentWorldspace"]       = nullptr;
+                pos["parentWorldspaceFormId"] = nullptr;
+            }
         }
 
         auto* cell = player->GetParentCell();
@@ -277,6 +290,60 @@ namespace PlayerReader
         return BuildPlayerMarkerJson(GetPlayerMarkerRef());
     }
 
+    // Resolve the worldspace the player is currently "in" for map purposes.
+    //
+    // For exterior cells GetWorldspace() returns the worldspace directly.
+    // For interior cells (caves, houses, dungeons) it returns nullptr, so we
+    // try several fallbacks in order:
+    //   A. cell->worldSpace (set for some interior cells)
+    //   B. ExtraPersistentCell on the player -> persistentCell -> worldSpace
+    //   C. Walk the cell's BGSLocation hierarchy looking for a worldLocMarker
+    //      whose GetWorldspace() is non-null.
+    //
+    // Returns nullptr when every fallback fails.
+    static RE::TESWorldSpace* ResolvePlayerWorldspace()
+    {
+        auto* player = RE::PlayerCharacter::GetSingleton();
+        if (!player)
+            return nullptr;
+
+        auto* world = player->GetWorldspace();
+        if (world)
+            return world;
+
+        auto* cell = player->GetParentCell();
+        if (!cell)
+            return nullptr;
+
+        // A - cell's own worldSpace (may be set for some interiors).
+        world = cell->GetRuntimeData().worldSpace;
+        if (world)
+            return world;
+
+        // B - ExtraPersistentCell on the player.
+        if (auto* xPersist = player->extraList.GetByType<RE::ExtraPersistentCell>()) {
+            if (xPersist->persistentCell && xPersist->persistentCell->IsExteriorCell()) {
+                world = xPersist->persistentCell->GetRuntimeData().worldSpace;
+                if (world)
+                    return world;
+            }
+        }
+
+        // C - walk the location hierarchy via worldLocMarker.
+        RE::BGSLocation* loc = cell->GetLocation();
+        while (loc) {
+            auto* markerRef = loc->worldLocMarker.get().get();
+            if (markerRef) {
+                world = markerRef->GetWorldspace();
+                if (world)
+                    return world;
+            }
+            loc = loc->parentLoc;
+        }
+
+        return nullptr;
+    }
+
     static nlohmann::json ReadMapMarkersImpl(bool visibleOnly)
     {
         auto* player = RE::PlayerCharacter::GetSingleton();
@@ -369,44 +436,18 @@ namespace PlayerReader
         // turns each log line into a multi-millisecond disk write that
         // visibly freezes the renderer.
 
-        // Step 1 — determine the player's current worldspace.
-        auto* playerWorld = player->GetWorldspace();
-
-        // In interior cells (caves, houses, dungeons) GetWorldspace() returns
-        // null.  Resolve the worldspace from the cell's location hierarchy via
-        // worldLocMarker (same pattern as ReadExteriorPosition).
-        if (!playerWorld) {
-            auto* cell = player->GetParentCell();
-            if (cell) {
-                // Fallback A: cell->worldSpace (may be set for some interiors).
-                playerWorld = cell->GetRuntimeData().worldSpace;
-
-                // Fallback B: walk the location hierarchy looking for a marker.
-                if (!playerWorld) {
-                    RE::BGSLocation* loc = cell->GetLocation();
-                    while (loc && !playerWorld) {
-                        auto* markerRef = loc->worldLocMarker.get().get();
-                        if (markerRef) {
-                            playerWorld = markerRef->GetWorldspace();
-                        }
-                        if (!playerWorld)
-                            loc = loc->parentLoc;
-                    }
-                }
-            }
-        }
-
+        // Step 1 — determine the player's root (top-level) worldspace.
+        auto* playerWorld = ResolvePlayerWorldspace();
         if (!playerWorld) {
             logger::debug("[Map::Markers::Locations] cannot determine player's worldspace, returning empty");
             return result;
         }
 
-        // Step 2 — walk up to the root (top-level) parentWorldspace.
         auto* rootWorld = playerWorld;
         while (rootWorld->parentWorld)
             rootWorld = rootWorld->parentWorld;
 
-        // Step 3 — iterate the root worldspace's persistent cell.
+        // Step 2 — iterate the root worldspace's persistent cell.
         auto* persist = rootWorld->persistentCell;
         if (!persist) {
             logger::debug("[Map::Markers::Locations] root worldspace '{}' has no persistent cell, returning empty",
@@ -430,28 +471,34 @@ namespace PlayerReader
 
             auto* data = extra->mapData;
 
-            using Flag = RE::MapMarkerData::Flag;
-            const bool isVisible     = data->flags.any(Flag::kVisible);
-            const bool canFastTravel = data->flags.any(Flag::kCanTravelTo);
-
-            if (visibleOnly && !isVisible)
-                return;
-
-            // When visibleOnly is requested we want exactly what MapMenu would
-            // render: skip disabled / deleted refs and nameless markers (the
-            // engine itself filters those out before drawing).
-            if (visibleOnly && (form->IsDisabled() || form->IsDeleted()))
-                return;
-
             const auto typeId   = static_cast<uint32_t>(data->type.underlying());
             const auto typeName = typeId < kTypeNames.size()
                                       ? std::string(kTypeNames[typeId])
                                       : "Unknown";
 
+            // City markers (typeId == 1) are always shown regardless of
+            // visibility flags — they are permanent reference points on the
+            // world map.
+            const bool isCity = (typeId == 1);
+
+            using Flag = RE::MapMarkerData::Flag;
+            const bool isVisible     = data->flags.any(Flag::kVisible);
+            const bool canFastTravel = data->flags.any(Flag::kCanTravelTo);
+
+            if (visibleOnly && !isVisible && !isCity)
+                return;
+
+            // When visibleOnly is requested we want exactly what MapMenu would
+            // render: skip disabled / deleted refs and nameless markers (the
+            // engine itself filters those out before drawing).  City markers
+            // are exempt from these filters as well.
+            if (visibleOnly && (form->IsDisabled() || form->IsDeleted()) && !isCity)
+                return;
+
             const char* fullName = data->locationName.GetFullName();
             std::string name     = fullName ? fullName : "";
 
-            if (visibleOnly && name.empty())
+            if (visibleOnly && name.empty() && !isCity)
                 return;
 
             const float x = form->GetPositionX();
