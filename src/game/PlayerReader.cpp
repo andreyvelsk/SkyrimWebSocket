@@ -12,6 +12,8 @@
 
 namespace PlayerReader
 {
+    static RE::TESWorldSpace* ResolvePlayerWorldspace();
+
     nlohmann::json ReadLevel()
     {
         auto* player = RE::PlayerCharacter::GetSingleton();
