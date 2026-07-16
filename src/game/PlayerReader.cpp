@@ -356,20 +356,26 @@ namespace PlayerReader
 
         nlohmann::json result = nlohmann::json::array();
 
-        // Map markers are persistent refs attached to each worldspace, NOT
-        // members of TESDataHandler::GetFormArray<TESObjectREFR>() (that array
-        // does not store object references). We iterate every worldspace and
-        // walk its persistentCell via TESObjectCELL::ForEachReference, looking
-        // for refs that carry an ExtraMapMarker.
+        // Map markers are persistent refs attached to each worldspace, stored
+        // in the worldspace's persistentCell via ExtraMapMarker.  We only
+        // return markers that belong to the player's current worldspace so
+        // that e.g. Solstheim markers are not mixed into a Tamriel request.
         //
         // NOTE: this walks thousands of refs across all worldspaces.  Keep
         // this hot path silent (no per-ref logging); the per-flush-on-trace
         // fsync inside spdlog turns each log line into a multi-millisecond
         // disk write that visibly freezes the renderer.
 
-        auto* handler = RE::TESDataHandler::GetSingleton();
-        if (!handler) {
-            logger::warn("[Map::Markers::Locations] no TESDataHandler");
+        auto* playerWorld = player->GetWorldspace();
+        if (!playerWorld) {
+            logger::debug("[Map::Markers::Locations] player has no worldspace, returning empty");
+            return result;
+        }
+
+        auto* persist = playerWorld->persistentCell;
+        if (!persist) {
+            logger::debug("[Map::Markers::Locations] worldspace '{}' has no persistent cell, returning empty",
+                          playerWorld->GetFormEditorID() ? playerWorld->GetFormEditorID() : "?");
             return result;
         }
 
@@ -429,31 +435,22 @@ namespace PlayerReader
             result.push_back(std::move(entry));
         };
 
-        const auto& worlds = handler->GetFormArray<RE::TESWorldSpace>();
-
-        // We avoid touching world->fixedPersistentRefMap / mobilePersistentRefs
+        // Walk only the player's current worldspace's persistent cell using
+        // the public, safe API TESObjectCELL::ForEachReference.  We avoid
+        // touching world->fixedPersistentRefMap / mobilePersistentRefs
         // directly: in multi-targeting builds the BSTHashMap layout mismatches
-        // the header, which produces garbage iterators and crashes. Instead we
-        // walk every worldspace's persistent cell using the public, safe API
-        // TESObjectCELL::ForEachReference. Map markers live in the persistent
-        // cell of each worldspace.
+        // the header, which produces garbage iterators and crashes.
         std::size_t totalRefs = 0;
-        for (auto* world : worlds) {
-            if (!world)
-                continue;
-            auto* persist = world->persistentCell;
-            if (!persist)
-                continue;
+        persist->ForEachReference([&](RE::TESObjectREFR* ref) {
+            ++totalRefs;
+            emit(ref);
+            return RE::BSContainer::ForEachResult::kContinue;
+        });
 
-            persist->ForEachReference([&](RE::TESObjectREFR* ref) {
-                ++totalRefs;
-                emit(ref);
-                return RE::BSContainer::ForEachResult::kContinue;
-            });
-        }
-
-        logger::debug("[Map::Markers::Locations] visibleOnly={} worlds={} refs_visited={} markers={}",
-                      visibleOnly, worlds.size(), totalRefs, result.size());
+        logger::debug("[Map::Markers::Locations] visibleOnly={} worldspace='{}' refs_visited={} markers={}",
+                      visibleOnly,
+                      playerWorld->GetFormEditorID() ? playerWorld->GetFormEditorID() : "?",
+                      totalRefs, result.size());
         return result;
     }
 
