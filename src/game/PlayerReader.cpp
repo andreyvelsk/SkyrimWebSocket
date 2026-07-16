@@ -302,6 +302,8 @@ namespace PlayerReader
     //   B. ExtraPersistentCell on the player -> persistentCell -> worldSpace
     //   C. Walk the cell's BGSLocation hierarchy looking for a worldLocMarker
     //      whose GetWorldspace() is non-null.
+    //   D. TES::worldSpace — the game's own tracked current worldspace
+    //      (remains valid even while the player is in an interior cell).
     //
     // Returns nullptr when every fallback fails.
     static RE::TESWorldSpace* ResolvePlayerWorldspace()
@@ -325,7 +327,7 @@ namespace PlayerReader
 
         // B - ExtraPersistentCell on the player.
         if (auto* xPersist = player->extraList.GetByType<RE::ExtraPersistentCell>()) {
-            if (xPersist->persistentCell && xPersist->persistentCell->IsExteriorCell()) {
+            if (xPersist->persistentCell) {
                 world = xPersist->persistentCell->GetRuntimeData().worldSpace;
                 if (world)
                     return world;
@@ -342,6 +344,13 @@ namespace PlayerReader
                     return world;
             }
             loc = loc->parentLoc;
+        }
+
+        // D - TES::worldSpace (the game's own tracked current worldspace).
+        if (auto* tes = RE::TES::GetSingleton()) {
+            world = tes->GetRuntimeData2().worldSpace;
+            if (world)
+                return world;
         }
 
         return nullptr;
