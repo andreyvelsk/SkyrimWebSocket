@@ -9,6 +9,7 @@
 #include <string_view>
 #include <unordered_map>
 #include <unordered_set>
+#include <vector>
 
 namespace PlayerReader
 {
@@ -449,12 +450,28 @@ namespace PlayerReader
         while (rootWorld->parentWorld)
             rootWorld = rootWorld->parentWorld;
 
-        // Step 2 — iterate the root worldspace's persistent cell.
-        auto* persist = rootWorld->persistentCell;
-        if (!persist) {
-            logger::debug("[Map::Markers::Locations] root worldspace '{}' has no persistent cell, returning empty",
-                          rootWorld->GetFormEditorID() ? rootWorld->GetFormEditorID() : "?");
-            return result;
+        // Step 2 — collect all worldspaces in the root's hierarchy.
+        // Cities with interior worldspaces (Whiterun → WhiterunWorld,
+        // Riften → RiftenWorld, etc.) store their map-marker refs in the
+        // persistent cell of their *own* worldspace, not the root.
+        // Iterating only the root persistent cell misses those cities.
+        std::vector<RE::TESWorldSpace*> hierarchyWorlds;
+        hierarchyWorlds.push_back(rootWorld);
+
+        if (auto* handler = RE::TESDataHandler::GetSingleton()) {
+            for (auto* world : handler->GetFormArray<RE::TESWorldSpace>()) {
+                if (!world || world == rootWorld)
+                    continue;
+                // Walk up the parent chain — if we reach rootWorld,
+                // this worldspace belongs to the same map.
+                for (auto* ancestor = world->parentWorld; ancestor;
+                     ancestor = ancestor->parentWorld) {
+                    if (ancestor == rootWorld) {
+                        hierarchyWorlds.push_back(world);
+                        break;
+                    }
+                }
+            }
         }
 
         std::unordered_set<RE::FormID> seen;
@@ -519,22 +536,25 @@ namespace PlayerReader
             result.push_back(std::move(entry));
         };
 
-        // Walk the root worldspace's persistent cell using the public, safe
-        // API TESObjectCELL::ForEachReference.  We avoid touching
-        // world->fixedPersistentRefMap / mobilePersistentRefs directly: in
-        // multi-targeting builds the BSTHashMap layout mismatches the header,
-        // which produces garbage iterators and crashes.
+        // Step 3 — walk every worldspace in the hierarchy, collecting
+        // map-marker refs from each persistent cell.
         std::size_t totalRefs = 0;
-        persist->ForEachReference([&](RE::TESObjectREFR* ref) {
-            ++totalRefs;
-            emit(ref);
-            return RE::BSContainer::ForEachResult::kContinue;
-        });
+        for (auto* world : hierarchyWorlds) {
+            auto* persist = world->persistentCell;
+            if (!persist)
+                continue;
 
-        logger::debug("[Map::Markers::Locations] visibleOnly={} rootWorld='{}' refs_visited={} markers={}",
+            persist->ForEachReference([&](RE::TESObjectREFR* ref) {
+                ++totalRefs;
+                emit(ref);
+                return RE::BSContainer::ForEachResult::kContinue;
+            });
+        }
+
+        logger::debug("[Map::Markers::Locations] visibleOnly={} rootWorld='{}' worlds_visited={} refs_visited={} markers={}",
                       visibleOnly,
                       rootWorld->GetFormEditorID() ? rootWorld->GetFormEditorID() : "?",
-                      totalRefs, result.size());
+                      hierarchyWorlds.size(), totalRefs, result.size());
         return result;
     }
 
