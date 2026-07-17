@@ -304,6 +304,10 @@ namespace PlayerReader
     //      whose GetWorldspace() is non-null.
     //   D. TES::worldSpace — the game's own tracked current worldspace
     //      (remains valid even while the player is in an interior cell).
+    //   E. Brute-force scan of all worldspaces via TESDataHandler:
+    //      match by persistentCell pointer, or by location in locationMap.
+    //      This is the last resort — used when all faster methods fail
+    //      (e.g. right after loading a save, before TES::worldSpace is set).
     //
     // Returns nullptr when every fallback fails.
     static RE::TESWorldSpace* ResolvePlayerWorldspace()
@@ -351,6 +355,40 @@ namespace PlayerReader
             world = tes->GetRuntimeData2().worldSpace;
             if (world)
                 return world;
+        }
+
+        // E - brute-force scan of all worldspaces.
+        // After loading a save inside an interior, the faster fallbacks may
+        // all fail because TES::worldSpace hasn't been restored yet and
+        // persistentCell->worldSpace may not be initialised.  Walking every
+        // worldspace is cheap (there are only a handful) and guarantees we
+        // find the right one as long as the cell has a location or the
+        // ExtraPersistentCell pointer is valid.
+        if (auto* dh = RE::TESDataHandler::GetSingleton()) {
+            const auto& worlds = dh->GetFormArray<RE::TESWorldSpace>();
+
+            // E1 - match by ExtraPersistentCell::persistentCell pointer.
+            if (auto* xPersist = player->extraList.GetByType<RE::ExtraPersistentCell>()) {
+                if (xPersist->persistentCell) {
+                    for (auto* ws : worlds) {
+                        if (ws && ws->persistentCell == xPersist->persistentCell) {
+                            return ws;
+                        }
+                    }
+                }
+            }
+
+            // E2 - match by location in worldspace's locationMap.
+            for (auto* curLoc = cell->GetLocation(); curLoc; curLoc = curLoc->parentLoc) {
+                const RE::FormID locId = curLoc->GetFormID();
+                if (!locId)
+                    continue;
+                for (auto* ws : worlds) {
+                    if (ws && ws->locationMap.contains(locId)) {
+                        return ws;
+                    }
+                }
+            }
         }
 
         return nullptr;
