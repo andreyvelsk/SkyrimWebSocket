@@ -151,6 +151,11 @@ namespace GameWriter
     //   * the marker reference must not be disabled or deleted
     //   * the marker's parent worldspace must not have kCantFastTravel
     //   * the player must not be in combat
+    //   * if the player is in an interior cell, kCanTravelFromHere must be set
+    //   * if the player is in an exterior cell, the worldspace must not have
+    //     kCantFastTravel (e.g. Enderal)
+    //   * on failure, a native HUD notification is shown ("Cannot fast travel
+    //     from this location") matching vanilla behaviour
     //
     // Returns the same JSON shape used by Map::Markers::Locations entries on success
     // (refId, name, type, typeId, x, y, isVisible, canFastTravel) so callers

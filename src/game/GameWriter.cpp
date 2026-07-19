@@ -1300,6 +1300,40 @@ namespace GameWriter
             return {false, "Cannot fast-travel while in combat"};
         logger::info("[FastTravel] step5: player ok, inCombat=false");
 
+        // 5b. Player-location gate: mirror the restrictions that the in-game
+        //     MapMenu enforces before it calls Game.FastTravel().
+        //     * interior cells: only allow if kCanTravelFromHere is set
+        //       (e.g. player homes, some quest areas)
+        //     * exterior cells: check worldspace kCantFastTravel
+        //       (e.g. Enderal sets this globally)
+        //     Uses native HUD notifications so the player sees the same
+        //     message as in the vanilla game ("Cannot fast travel from
+        //     this location").
+        auto* playerCell = player->GetParentCell();
+        if (!playerCell)
+            return {false, "Cannot determine player's current cell"};
+
+        if (playerCell->IsInteriorCell()) {
+            using CellFlag = RE::TESObjectCELL::Flag;
+            if (!playerCell->cellFlags.any(CellFlag::kCanTravelFromHere)) {
+                RE::SendHUDMessage::ShowHUDMessage(
+                    "Cannot fast travel from this location", nullptr, true);
+                return {false, "Cannot fast-travel from this location"};
+            }
+        } else {
+            if (auto* playerWorld = player->GetWorldspace()) {
+                using WFlag = RE::TESWorldSpace::Flag;
+                if (playerWorld->flags.any(WFlag::kCantFastTravel)) {
+                    RE::SendHUDMessage::ShowHUDMessage(
+                        "Cannot fast travel from this location", nullptr, true);
+                    return {false, "Cannot fast-travel from this location"};
+                }
+                logger::info("[FastTravel] step5b: player worldspace='{}' editorId='{}'",
+                             playerWorld->GetName() ? playerWorld->GetName() : "<null>",
+                             playerWorld->GetFormEditorID() ? playerWorld->GetFormEditorID() : "<null>");
+            }
+        }
+
         // 6. Trigger a *real* fast travel via Papyrus `Game.FastTravel(akMarker)`.
         //    Unlike `player.moveto`, this dispatches into the engine's
         //    full fast-travel pipeline: fade animation, in-game time
