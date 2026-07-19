@@ -43,6 +43,22 @@ namespace MagicReader
         return (name && *name != '\0') ? name : fallback;
     }
 
+    // ─── GameSetting (GMST) helpers ───────────────────────────────────────
+
+    // Looks up a GameSetting string by key (e.g. "sSkillHeavyarmor").
+    // Returns an empty string when the key does not exist or is not a string setting.
+    static std::string GetGMSTString(const char* key)
+    {
+        auto* gmst = RE::GameSettingCollection::GetSingleton();
+        if (!gmst)
+            return {};
+        auto* setting = gmst->GetSetting(key);
+        if (!setting)
+            return {};
+        const char* str = setting->GetString();
+        return (str && *str != '\0') ? str : "";
+    }
+
     // ─── Interface-string helpers ─────────────────────────────────────────
 
     // Convert a wide (UTF-16) string to UTF-8.
@@ -133,6 +149,33 @@ namespace MagicReader
             if (!s.empty())
                 return s;
         }
+        return fallback;
+    }
+
+    // Resolve a localized category name by trying multiple sources in order:
+    //   1. GameSettingCollection (GMST) – most reliable, same as ActorValue path
+    //   2. Scaleform translation table   – fallback for mod-provided strings
+    //   3. Hardcoded fallback
+    // `gmstKeys` is a list of GMST key candidates (e.g. {"sMagicShouts", "sShouts"}).
+    static std::string GetLocalizedName(
+        std::initializer_list<const char*> gmstKeys,
+        std::initializer_list<const wchar_t*> interfaceKeys,
+        const char* fallback)
+    {
+        // 1) Try GameSetting strings first — these are the vanilla localised
+        //    strings and Are always available regardless of Scaleform state.
+        for (const char* gmstKey : gmstKeys) {
+            std::string s = GetGMSTString(gmstKey);
+            if (!s.empty())
+                return s;
+        }
+
+        // 2) Try Scaleform translation table.
+        std::string s = GetInterfaceName(interfaceKeys, "");
+        if (!s.empty())
+            return s;
+
+        // 3) Fallback.
         return fallback;
     }
 
@@ -450,13 +493,15 @@ namespace MagicReader
         }
 
         // Shouts (TESShout, separate from the SpellItem lists).
-        // The name is resolved from the Scaleform translation table so mods can
-        // provide localized strings via Interface/Translations/*.txt files.
-        // Keys tried in order; first match wins.  Falls back to English.
+        // The name is resolved by trying:
+        //   1. GameSetting strings (GMST) – e.g. sMagicShouts, sShouts
+        //   2. Scaleform translation table – for mod-provided strings
+        //   3. Hardcoded fallback ("Shouts")
         if (spellData && spellData->numShouts > 0)
             result.push_back({
                 { "categoryId", "Shouts" },
-                { "name",       GetInterfaceName(
+                { "name",       GetLocalizedName(
+                                    { "sMagicShouts", "sShouts", "sShoutSchool", "sShoutTab" },
                                     { L"$Shouts", L"$ShoutGroup", L"$ShoutTab",
                                       L"$SHOUTS", L"$MagicShout" },
                                     "Shouts") },
@@ -483,7 +528,8 @@ namespace MagicReader
         if (powerCount > 0)
             result.push_back({
                 { "categoryId", "Powers" },
-                { "name",       GetInterfaceName(
+                { "name",       GetLocalizedName(
+                                    { "sMagicPowers", "sPowers", "sPowerSchool", "sPowerTab" },
                                     { L"$Powers", L"$PowerGroup", L"$PowerTab",
                                       L"$POWERS", L"$MagicPower" },
                                     "Powers") },
@@ -492,7 +538,8 @@ namespace MagicReader
         if (lesserPowerCount > 0)
             result.push_back({
                 { "categoryId", "LesserPowers" },
-                { "name",       GetInterfaceName(
+                { "name",       GetLocalizedName(
+                                    { "sMagicLesserPowers", "sLesserPowers", "sLesserPowerSchool", "sLesserPowerTab" },
                                     { L"$LesserPowers", L"$LesserPowerGroup",
                                       L"$LesserPowerTab", L"$LESSER_POWERS",
                                       L"$MagicLesserPower" },
