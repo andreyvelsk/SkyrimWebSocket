@@ -1300,6 +1300,32 @@ namespace GameWriter
             return {false, "Cannot fast-travel while in combat"};
         logger::info("[FastTravel] step5: player ok, inCombat=false");
 
+        // 5b. Player-location gate: mirror the restrictions that the in-game
+        //     MapMenu enforces before it calls Game.FastTravel().
+        //     * interior cells never allow fast travel
+        //     * some exterior cells (e.g. DLC areas) explicitly clear
+        //       kCanTravelFromHere
+        //     * worldspaces like Enderal's set kCantFastTravel globally
+        auto* playerCell = player->GetParentCell();
+        if (!playerCell)
+            return {false, "Cannot determine player's current cell"};
+
+        if (playerCell->IsInteriorCell())
+            return {false, "Cannot fast-travel from an interior cell"};
+
+        using CellFlag = RE::TESObjectCELL::Flag;
+        if (!playerCell->cellFlags.any(CellFlag::kCanTravelFromHere))
+            return {false, "Current cell does not allow fast travel"};
+
+        if (auto* playerWorld = player->GetWorldspace()) {
+            using WFlag = RE::TESWorldSpace::Flag;
+            if (playerWorld->flags.any(WFlag::kCantFastTravel))
+                return {false, "Current worldspace forbids fast travel"};
+            logger::info("[FastTravel] step5b: player worldspace='{}' editorId='{}'",
+                         playerWorld->GetName() ? playerWorld->GetName() : "<null>",
+                         playerWorld->GetFormEditorID() ? playerWorld->GetFormEditorID() : "<null>");
+        }
+
         // 6. Trigger a *real* fast travel via Papyrus `Game.FastTravel(akMarker)`.
         //    Unlike `player.moveto`, this dispatches into the engine's
         //    full fast-travel pipeline: fade animation, in-game time

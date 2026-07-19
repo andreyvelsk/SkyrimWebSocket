@@ -151,6 +151,9 @@ namespace GameWriter
     //   * the marker reference must not be disabled or deleted
     //   * the marker's parent worldspace must not have kCantFastTravel
     //   * the player must not be in combat
+    //   * the player must not be in an interior cell
+    //   * the player's current cell must have kCanTravelFromHere
+    //   * the player's current worldspace must not have kCantFastTravel
     //
     // Returns the same JSON shape used by Map::Markers::Locations entries on success
     // (refId, name, type, typeId, x, y, isVisible, canFastTravel) so callers
