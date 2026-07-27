@@ -2,6 +2,14 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+### [1.15.1](https://github.com/andreyvelsk/SkyrimWebSocket/compare/v1.15.0...v1.15.1) (2026-07-27)
+
+
+### 🐛 Bug Fixes
+
+* **magic:** get shouts category localization" ([aee267f](https://github.com/andreyvelsk/SkyrimWebSocket/commits/aee267fd7c9c0cca4373385d8eb065e8e6254500))
+* **map:** map markers for current worldspace ([#48](https://github.com/andreyvelsk/SkyrimWebSocket/issues/48)) ([635fd98](https://github.com/andreyvelsk/SkyrimWebSocket/commits/635fd9859f3ff6fad1430f1064850ca2dbee7090))
+
 ## [1.15.0](https://github.com/andreyvelsk/SkyrimWebSocket/compare/v1.14.1...v1.15.0) (2026-06-01)
 
 
