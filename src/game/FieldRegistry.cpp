@@ -312,13 +312,15 @@ namespace FieldRegistry
 
         // Player position and heading
         { "Player::Position",
-          { "Player position and heading in the current worldspace/cell: { x, y, z, angle, worldspace, worldspaceFormId, parentWorldspace, parentWorldspaceFormId, cell, cellFormId, isInterior }. x/y/z are local to the current worldspace (or interior); worldspace fields are null in interiors. parentWorldspace walks up to the root world (e.g. Tamriel for city sub-worlds).", "object",
+          { "Player position and heading in the current worldspace/cell, plus exterior projection for global-map rendering: { x, y, z, angle, worldspace, worldspaceFormId, parentWorldspace, parentWorldspaceFormId, cell, cellFormId, isInterior, exteriorX, exteriorY, exteriorZ, exteriorWorldspace, exteriorWorldspaceFormId, exteriorParentWorldspace, exteriorParentWorldspaceFormId }. x/y/z are local to the current worldspace (or interior); worldspace fields are null in interiors. parentWorldspace walks up to the root world (e.g. Tamriel for city sub-worlds). exteriorX/Y/Z are the projected coordinates on the root world map: live player coords when outdoors in a top-level worldspace, or the BGSLocation entrance marker (city gate / cave door) when in a child worldspace or interior. Use exteriorX/Y/Z directly for global-map placement — Player::ExteriorPosition is no longer needed.", "object",
             &PlayerReader::ReadPosition } },
 
         // Last known exterior position (for placing the player on the global
-        // map while inside an interior or a city sub-worldspace)
+        // map while inside an interior or a city sub-worldspace).
+        // DEPRECATED: prefer Player::Position which now includes exteriorX/Y/Z
+        // fields with the same projection logic.
         { "Player::ExteriorPosition",
-          { "Last known exterior position cached by the game: { x, y, z, worldspace, worldspaceFormId, parentWorldspace, parentWorldspaceFormId }. Updated whenever the player is in an exterior cell; remains valid while in interiors. Useful for showing the player on a global (parent) worldspace map.", "object",
+          { "DEPRECATED — use Player::Position.exteriorX/Y/Z instead. Last known exterior position: { x, y, z, worldspace, worldspaceFormId, parentWorldspace, parentWorldspaceFormId }. Resolves BGSLocation::worldLocMarker when in interiors or child worldspaces.", "object",
             &PlayerReader::ReadExteriorPosition } },
 
         // Player quest journal

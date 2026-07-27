@@ -142,6 +142,64 @@ namespace PlayerReader
             pos["isInterior"] = false;
         }
 
+        // ---- Exterior projection (global-map coordinates) ----
+        // When the player is in a top-level exterior worldspace (Tamriel,
+        // Solstheim, etc.), exterior coords equal the live player position.
+        // When in a child worldspace (city) or interior, resolve the
+        // BGSLocation::worldLocMarker to get the fixed exterior entrance
+        // point (e.g. city gate or cave door on the parent world map).
+        {
+            const auto buildExteriorWorldspaceFields = [&](nlohmann::json& obj, RE::TESWorldSpace* ws) {
+                if (ws) {
+                    const char* edid = ws->GetFormEditorID();
+                    obj["exteriorWorldspace"]       = edid ? std::string(edid) : std::string();
+                    obj["exteriorWorldspaceFormId"] = formIdStr(ws->GetFormID());
+
+                    auto* root = ws;
+                    while (root->parentWorld)
+                        root = root->parentWorld;
+                    const char* rootEdid = root->GetFormEditorID();
+                    obj["exteriorParentWorldspace"]       = rootEdid ? std::string(rootEdid) : std::string();
+                    obj["exteriorParentWorldspaceFormId"] = formIdStr(root->GetFormID());
+                } else {
+                    obj["exteriorWorldspace"]             = nullptr;
+                    obj["exteriorWorldspaceFormId"]       = nullptr;
+                    obj["exteriorParentWorldspace"]       = nullptr;
+                    obj["exteriorParentWorldspaceFormId"] = nullptr;
+                }
+            };
+
+            if (world && !world->parentWorld && cell && !cell->IsInteriorCell()) {
+                // Top-level exterior — use live player coordinates.
+                pos["exteriorX"] = player->GetPositionX();
+                pos["exteriorY"] = player->GetPositionY();
+                pos["exteriorZ"] = player->GetPositionZ();
+                buildExteriorWorldspaceFields(pos, world);
+            } else {
+                // Child worldspace (city) or interior — resolve the
+                // BGSLocation entrance marker on the parent world map.
+                RE::BGSLocation*   loc       = cell ? cell->GetLocation() : nullptr;
+                RE::TESObjectREFR* markerRef = nullptr;
+                while (loc && !markerRef) {
+                    markerRef = loc->worldLocMarker.get().get();
+                    if (!markerRef)
+                        loc = loc->parentLoc;
+                }
+
+                if (markerRef) {
+                    pos["exteriorX"] = markerRef->GetPositionX();
+                    pos["exteriorY"] = markerRef->GetPositionY();
+                    pos["exteriorZ"] = markerRef->GetPositionZ();
+                    buildExteriorWorldspaceFields(pos, markerRef->GetWorldspace());
+                } else {
+                    pos["exteriorX"] = nullptr;
+                    pos["exteriorY"] = nullptr;
+                    pos["exteriorZ"] = nullptr;
+                    buildExteriorWorldspaceFields(pos, nullptr);
+                }
+            }
+        }
+
         return pos;
     }
 

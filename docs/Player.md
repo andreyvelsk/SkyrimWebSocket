@@ -98,8 +98,9 @@ Progress bar fill: `500.0 / 1000.0 = 50 %`.
 
 ## `Player::Position`
 
-Returns the player's current position, heading, and the worldspace / cell they
-are in.
+Returns the player's current position, heading, worldspace / cell, **and**
+exterior (global-map) projection — all in a single object.  Clients no longer
+need [`Player::ExteriorPosition`](#playerexteriorposition).
 
 ### Object shape
 
@@ -116,6 +117,25 @@ are in.
 | `cell` | `string \| null` | EditorID of the current cell. |
 | `cellFormId` | `string \| null` | Hex form ID of the current cell. |
 | `isInterior` | `bool` | `true` if the player is inside an interior cell (a building, dungeon, etc.). |
+| `exteriorX` | `float \| null` | Projected X coordinate on the root (parent) world map. |
+| `exteriorY` | `float \| null` | Projected Y coordinate on the root world map. |
+| `exteriorZ` | `float \| null` | Projected Z coordinate on the root world map. |
+| `exteriorWorldspace` | `string \| null` | EditorID of the worldspace where `exteriorX/Y/Z` are meaningful. |
+| `exteriorWorldspaceFormId` | `string \| null` | Hex form ID of the exterior projection worldspace. |
+| `exteriorParentWorldspace` | `string \| null` | EditorID of the root worldspace for the exterior projection. |
+| `exteriorParentWorldspaceFormId` | `string \| null` | Hex form ID of the exterior projection root worldspace. |
+
+### Exterior projection logic
+
+| Player location | `exteriorX/Y/Z` source |
+|---|---|
+| **Top-level exterior** (Tamriel, Solstheim, …) | Live player `x/y/z` |
+| **Child worldspace** (WhiterunWorld, RiftenWorld, …) | `BGSLocation::worldLocMarker` — city gate marker on the parent map |
+| **Interior cell** (cave, dungeon, inn, …) | `BGSLocation::worldLocMarker` — entrance marker on the parent map |
+
+When no `BGSLocation` marker can be found (rare: hand-placed test cells without
+location assignment), `exteriorX/Y/Z` and the exterior worldspace fields are
+`null`.
 
 ### Mapping to a global map
 
@@ -129,12 +149,22 @@ Skyrim has many separate worldspaces, each with its own coordinate system:
 - **Interiors** (homes, caves, dungeons) have no worldspace at all and use the
   cell's local coordinates.
 
-When rendering a global Tamriel map, only plot `Player::Position.x/y` directly
-when `worldspace == "Tamriel"`. Otherwise, use [`Player::ExteriorPosition`](#playerexteriorposition)
-to place the player at the last known Tamriel position (typically the marker
-of the city / dungeon they entered).
+Use `exteriorX` / `exteriorY` directly for global-map placement — they always
+represent the player's position projected onto the root (parent) worldspace map.
+No separate `Player::ExteriorPosition` subscription is required.
 
-### Example — high-frequency map position subscription
+### Recommended client logic for a global Tamriel map
+
+```js
+const { exteriorX: x, exteriorY: y, exteriorParentWorldspace } = pos;
+if (exteriorParentWorldspace === "Tamriel" && x != null) {
+  // Plot the player marker at (x, y) on the Tamriel map.
+} else if (exteriorParentWorldspace === "DLC2SolstheimWorld") {
+  // Switch to the Solstheim map.
+}
+```
+
+### Example — map position subscription (single field)
 
 ```json
 {
@@ -142,8 +172,7 @@ of the city / dungeon they entered).
   "id": "map-pos",
   "settings": { "frequency": 100, "sendOnChange": true },
   "fields": {
-    "pos":     "Player::Position",
-    "extPos": "Player::ExteriorPosition"
+    "pos": "Player::Position"
   }
 }
 ```
@@ -160,12 +189,31 @@ of the city / dungeon they entered).
       "worldspace": "Tamriel", "worldspaceFormId": "0x0000003C",
       "parentWorldspace": "Tamriel", "parentWorldspaceFormId": "0x0000003C",
       "cell": "Wilderness", "cellFormId": "0x00009BE9",
-      "isInterior": false
-    },
-    "extPos": {
-      "x": 18000.5, "y": -15200.3, "z": 312.0,
-      "worldspace": "Tamriel", "worldspaceFormId": "0x0000003C",
-      "parentWorldspace": "Tamriel", "parentWorldspaceFormId": "0x0000003C"
+      "isInterior": false,
+      "exteriorX": 18000.5, "exteriorY": -15200.3, "exteriorZ": 312.0,
+      "exteriorWorldspace": "Tamriel", "exteriorWorldspaceFormId": "0x0000003C",
+      "exteriorParentWorldspace": "Tamriel", "exteriorParentWorldspaceFormId": "0x0000003C"
+    }
+  }
+}
+```
+
+**Server push (player inside Whiterun — child worldspace):**
+```json
+{
+  "type": "data",
+  "id": "map-pos",
+  "ts": 1712462400456,
+  "fields": {
+    "pos": {
+      "x": 2500.0, "y": -800.0, "z": 0.0, "angle": 0.785398,
+      "worldspace": "WhiterunWorld", "worldspaceFormId": "0x0001A26F",
+      "parentWorldspace": "Tamriel", "parentWorldspaceFormId": "0x0000003C",
+      "cell": "WhiterunPlainsDistrict01", "cellFormId": "0x0001A273",
+      "isInterior": false,
+      "exteriorX": 4500.0, "exteriorY": 2000.0, "exteriorZ": 0.0,
+      "exteriorWorldspace": "Tamriel", "exteriorWorldspaceFormId": "0x0000003C",
+      "exteriorParentWorldspace": "Tamriel", "exteriorParentWorldspaceFormId": "0x0000003C"
     }
   }
 }
@@ -174,6 +222,11 @@ of the city / dungeon they entered).
 ---
 
 ## `Player::ExteriorPosition`
+
+> **DEPRECATED** — use [`Player::Position`](#playerposition) instead, which now
+> includes `exteriorX` / `exteriorY` / `exteriorZ` fields with the same
+> projection logic.  `Player::ExteriorPosition` is kept for backward
+> compatibility but will be removed in a future version.
 
 Returns the position to use when rendering the player on the global world map.
 
@@ -184,9 +237,6 @@ Returns the position to use when rendering the player on the global world map.
   i.e. the entrance point visible on the world map (e.g. the dungeon door on Tamriel,
   or the city gate marker).  The location hierarchy is walked upward until a marker is
   found, so even deeply nested locations are covered.
-
-This replaces the previous approach of reading the engine's `exteriorPosition` cache,
-which could be stale immediately after fast travel.
 
 ### Object shape
 
@@ -202,24 +252,6 @@ which could be stale immediately after fast travel.
 
 All fields are `null` only when the player is in a cell that has no `BGSLocation`
 assignment at all (very rare; typically hand-placed test cells).
-
-### Recommended client logic for a global Tamriel map
-
-```js
-let x, y;
-if (pos.parentWorldspace === "Tamriel" && !pos.isInterior
-    && pos.worldspace === "Tamriel") {
-  // Outside, in Tamriel proper — use live coordinates.
-  x = pos.x;
-  y = pos.y;
-} else if (extPos.parentWorldspace === "Tamriel") {
-  // Inside an interior or a Tamriel city sub-world — pin to the entrance.
-  x = extPos.x;
-  y = extPos.y;
-} else {
-  // Solstheim or another top-level world — switch maps or hide marker.
-}
-```
 
 ---
 
