@@ -18,7 +18,7 @@ env:
   CCACHE_NOHASHDIR: true
 
 permissions:
-  contents: read
+  contents: write
 
 jobs:
   build:
@@ -99,9 +99,17 @@ jobs:
       - name: Show ccache stats (after build)
         run: ccache -s
 
-      - name: Upload compiled DLL
+      - name: Upload compiled DLL (artifact)
         uses: actions/upload-artifact@v4
         with:
           name: SkyrimWebSocket-${{ github.sha }}
           path: build/release/SkyrimWebSocket.dll
           if-no-files-found: error
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          name: SkyrimWebSocket ${{ github.ref_name }}
+          generate_release_notes: true
+          files: build/release/SkyrimWebSocket.dll
+          fail_on_unmatched_files: true
