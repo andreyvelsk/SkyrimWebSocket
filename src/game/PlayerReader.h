@@ -34,29 +34,28 @@ namespace PlayerReader
     // Must be called on the game thread.
     nlohmann::json ReadLanguage();
 
-    // Returns the player's current world position, heading, and exterior
-    // (global-map) projection as a JSON object:
+    // Returns the player's current position and heading as a JSON object:
     // { "x", "y", "z", "angle",
     //   "worldspace", "worldspaceFormId",
     //   "parentWorldspace", "parentWorldspaceFormId",
-    //   "cell", "cellFormId", "isInterior",
-    //   "exteriorX", "exteriorY", "exteriorZ",
-    //   "exteriorWorldspace", "exteriorWorldspaceFormId",
-    //   "exteriorParentWorldspace", "exteriorParentWorldspaceFormId" }
-    // x/y/z are local to the current worldspace (or interior cell); angle is the
-    // Z-axis rotation (yaw) in radians. worldspace fields are null in interiors.
-    // parentWorldspace walks up TESWorldSpace::parentWorld to the root (e.g. Tamriel
-    // for city sub-worlds); equals worldspace for top-level worlds (Tamriel,
-    // Solstheim).
-    // exteriorX/Y/Z are the projected coordinates on the root (parent) world map:
-    //   - When outdoors in a top-level worldspace (Tamriel, Solstheim):
-    //     equal to x/y/z (live player position).
-    //   - When in a child worldspace (city) or interior cell:
-    //     resolved via BGSLocation::worldLocMarker — the fixed entrance point
-    //     on the parent world map (city gate, cave door, etc.).
-    // exteriorWorldspace/exteriorParentWorldspace describe the worldspace of the
-    // exterior projection.  Use exteriorX/Y/Z directly for global-map placement;
-    // Player::ExteriorPosition is no longer necessary.
+    //   "cell", "cellFormId", "isInterior" }
+    //
+    // x/y/z are always **global-map coordinates**:
+    //   - Exteriors (any worldspace): live player position.
+    //   - Interiors: BGSLocation::worldLocMarker coordinates — the fixed
+    //     entrance point on the parent world map (cave door, city gate, etc.).
+    //     Falls back through cell location → player current location →
+    //     player editor location chains.  When no marker is found at all,
+    //     returns live interior cell coords as a last resort.
+    //
+    // angle is the Z-axis rotation (yaw) in radians.
+    // worldspace fields are null in interiors.
+    // parentWorldspace walks up TESWorldSpace::parentWorld to the root
+    // (e.g. Tamriel for city sub-worlds).
+    //
+    // No separate Player::ExteriorPosition subscription is needed —
+    // use x/y/z directly for global-map placement.
+    //
     // Must be called on the game thread.
     nlohmann::json ReadPosition();
 

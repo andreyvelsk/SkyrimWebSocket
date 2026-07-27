@@ -89,9 +89,6 @@ namespace PlayerReader
             return nlohmann::json::object();
 
         nlohmann::json pos;
-        pos["x"]     = player->GetPositionX();
-        pos["y"]     = player->GetPositionY();
-        pos["z"]     = player->GetPositionZ();
         pos["angle"] = player->GetAngleZ();
 
         auto formIdStr = [](RE::FormID id) {
@@ -99,6 +96,52 @@ namespace PlayerReader
         };
 
         auto* world = player->GetWorldspace();
+        auto* cell  = player->GetParentCell();
+        const bool isInterior = cell ? cell->IsInteriorCell() : false;
+
+        // Resolve the effective position for x/y/z.
+        //
+        // Exteriors (top-level or child worldspace): live player coords.
+        // Interiors: BGSLocation::worldLocMarker coords — the entrance
+        // point on the parent world map (e.g. cave door on Tamriel).
+        // Falls back through multiple location sources (cell, player
+        // current/editor location) so cells without a direct BGSLocation
+        // assignment still resolve correctly.
+        if (!isInterior) {
+            pos["x"] = player->GetPositionX();
+            pos["y"] = player->GetPositionY();
+            pos["z"] = player->GetPositionZ();
+        } else {
+            RE::TESObjectREFR* markerRef = nullptr;
+
+            const auto tryLocationChain = [&](RE::BGSLocation* start) {
+                for (auto* loc = start; loc && !markerRef; loc = loc->parentLoc)
+                    markerRef = loc->worldLocMarker.get().get();
+            };
+
+            // A – cell's location chain.
+            if (cell)
+                tryLocationChain(cell->GetLocation());
+            // B – player's current location.
+            if (!markerRef)
+                tryLocationChain(player->GetCurrentLocation());
+            // C – player's editor location.
+            if (!markerRef)
+                tryLocationChain(player->GetEditorLocation());
+
+            if (markerRef) {
+                pos["x"] = markerRef->GetPositionX();
+                pos["y"] = markerRef->GetPositionY();
+                pos["z"] = markerRef->GetPositionZ();
+            } else {
+                // Last resort: live interior cell coords (better than null).
+                pos["x"] = player->GetPositionX();
+                pos["y"] = player->GetPositionY();
+                pos["z"] = player->GetPositionZ();
+            }
+        }
+
+        // Worldspace / parentWorldspace fields.
         if (world) {
             const char* edid = world->GetFormEditorID();
             pos["worldspace"]       = edid ? std::string(edid) : std::string();
@@ -111,9 +154,6 @@ namespace PlayerReader
             pos["parentWorldspace"]       = rootEdid ? std::string(rootEdid) : std::string();
             pos["parentWorldspaceFormId"] = formIdStr(root->GetFormID());
         } else {
-            // Interior cell — worldspace is null, but we can still resolve
-            // the parentWorldspace via the same fallback chain used by the
-            // map-markers query.
             pos["worldspace"]       = nullptr;
             pos["worldspaceFormId"] = nullptr;
 
@@ -130,74 +170,16 @@ namespace PlayerReader
             }
         }
 
-        auto* cell = player->GetParentCell();
+        // Cell fields.
         if (cell) {
             const char* cedid = cell->GetFormEditorID();
             pos["cell"]       = cedid ? std::string(cedid) : std::string();
             pos["cellFormId"] = formIdStr(cell->GetFormID());
-            pos["isInterior"] = cell->IsInteriorCell();
+            pos["isInterior"] = isInterior;
         } else {
             pos["cell"]       = nullptr;
             pos["cellFormId"] = nullptr;
             pos["isInterior"] = false;
-        }
-
-        // ---- Exterior projection (global-map coordinates) ----
-        // When the player is in a top-level exterior worldspace (Tamriel,
-        // Solstheim, etc.), exterior coords equal the live player position.
-        // When in a child worldspace (city) or interior, resolve the
-        // BGSLocation::worldLocMarker to get the fixed exterior entrance
-        // point (e.g. city gate or cave door on the parent world map).
-        {
-            const auto buildExteriorWorldspaceFields = [&](nlohmann::json& obj, RE::TESWorldSpace* ws) {
-                if (ws) {
-                    const char* edid = ws->GetFormEditorID();
-                    obj["exteriorWorldspace"]       = edid ? std::string(edid) : std::string();
-                    obj["exteriorWorldspaceFormId"] = formIdStr(ws->GetFormID());
-
-                    auto* root = ws;
-                    while (root->parentWorld)
-                        root = root->parentWorld;
-                    const char* rootEdid = root->GetFormEditorID();
-                    obj["exteriorParentWorldspace"]       = rootEdid ? std::string(rootEdid) : std::string();
-                    obj["exteriorParentWorldspaceFormId"] = formIdStr(root->GetFormID());
-                } else {
-                    obj["exteriorWorldspace"]             = nullptr;
-                    obj["exteriorWorldspaceFormId"]       = nullptr;
-                    obj["exteriorParentWorldspace"]       = nullptr;
-                    obj["exteriorParentWorldspaceFormId"] = nullptr;
-                }
-            };
-
-            if (world && !world->parentWorld && cell && !cell->IsInteriorCell()) {
-                // Top-level exterior — use live player coordinates.
-                pos["exteriorX"] = player->GetPositionX();
-                pos["exteriorY"] = player->GetPositionY();
-                pos["exteriorZ"] = player->GetPositionZ();
-                buildExteriorWorldspaceFields(pos, world);
-            } else {
-                // Child worldspace (city) or interior — resolve the
-                // BGSLocation entrance marker on the parent world map.
-                RE::BGSLocation*   loc       = cell ? cell->GetLocation() : nullptr;
-                RE::TESObjectREFR* markerRef = nullptr;
-                while (loc && !markerRef) {
-                    markerRef = loc->worldLocMarker.get().get();
-                    if (!markerRef)
-                        loc = loc->parentLoc;
-                }
-
-                if (markerRef) {
-                    pos["exteriorX"] = markerRef->GetPositionX();
-                    pos["exteriorY"] = markerRef->GetPositionY();
-                    pos["exteriorZ"] = markerRef->GetPositionZ();
-                    buildExteriorWorldspaceFields(pos, markerRef->GetWorldspace());
-                } else {
-                    pos["exteriorX"] = nullptr;
-                    pos["exteriorY"] = nullptr;
-                    pos["exteriorZ"] = nullptr;
-                    buildExteriorWorldspaceFields(pos, nullptr);
-                }
-            }
         }
 
         return pos;
