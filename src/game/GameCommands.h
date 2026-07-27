@@ -4,7 +4,7 @@
 
 #include <nlohmann/json.hpp>
 
-namespace GameWriter
+namespace GameCommands
 {
     struct CommandResult
     {

@@ -3,7 +3,7 @@
 #include "WsSession.h"
 #include "../game/FieldRegistry.h"
 #include "../game/GameReader.h"
-#include "../game/GameWriter.h"
+#include "../game/GameCommands.h"
 #include "../Utils.h"
 
 #include <chrono>
@@ -65,7 +65,7 @@ namespace MessageRouter
     }
 
     // Build the JSON response for a command result.
-    static std::string BuildCommandResultJson(const std::string& id, const GameWriter::CommandResult& result)
+    static std::string BuildCommandResultJson(const std::string& id, const GameCommands::CommandResult& result)
     {
         nlohmann::json resp;
         resp["type"]    = "commandResult";
@@ -129,13 +129,13 @@ namespace MessageRouter
                 }
 
                 SKSE::GetTaskInterface()->AddTask([session, cmdId, x, y, z]() {
-                    auto        result = GameWriter::SetPlayerMarker(x, y, z);
+                    auto        result = GameCommands::SetPlayerMarker(x, y, z);
                     std::string json   = BuildCommandResultJson(cmdId, result);
                     asio::post(session->ioc(), [session, json] { session->send(json); });
                 });
             } else {  // player_marker_clear
                 SKSE::GetTaskInterface()->AddTask([session, cmdId]() {
-                    auto        result = GameWriter::ClearPlayerMarker();
+                    auto        result = GameCommands::ClearPlayerMarker();
                     std::string json   = BuildCommandResultJson(cmdId, result);
                     asio::post(session->ioc(), [session, json] { session->send(json); });
                 });
@@ -187,14 +187,14 @@ namespace MessageRouter
             }
 
             SKSE::GetTaskInterface()->AddTask([session, cmdId, command, slot, formId]() {
-                GameWriter::CommandResult result;
+                GameCommands::CommandResult result;
                 const auto slotU8 = static_cast<std::uint8_t>(slot);
                 if (command == "hotkey_set")
-                    result = GameWriter::SetHotkey(slotU8, formId);
+                    result = GameCommands::SetHotkey(slotU8, formId);
                 else if (command == "hotkey_clear")
-                    result = GameWriter::ClearHotkey(slotU8);
+                    result = GameCommands::ClearHotkey(slotU8);
                 else
-                    result = GameWriter::TriggerHotkey(slotU8);
+                    result = GameCommands::TriggerHotkey(slotU8);
 
                 std::string json = BuildCommandResultJson(cmdId, result);
                 asio::post(session->ioc(), [session, json] { session->send(json); });
@@ -239,7 +239,7 @@ namespace MessageRouter
             const RE::FormID formId = *parsed;
             const bool active = msg["active"].get<bool>();
             SKSE::GetTaskInterface()->AddTask([session, cmdId, formId, active]() {
-                auto result = GameWriter::SetQuestActive(formId, active);
+                auto result = GameCommands::SetQuestActive(formId, active);
                 std::string json = BuildCommandResultJson(cmdId, result);
                 asio::post(session->ioc(), [session, json] { session->send(json); });
             });
@@ -271,36 +271,36 @@ namespace MessageRouter
         const RE::FormID formId = *parsed;
 
         SKSE::GetTaskInterface()->AddTask([session, cmdId, command, formId, hand, count]() {
-            GameWriter::CommandResult result;
+            GameCommands::CommandResult result;
 
             if (command == "equip")
-                result = GameWriter::EquipItem(formId, hand);
+                result = GameCommands::EquipItem(formId, hand);
             else if (command == "unequip")
-                result = GameWriter::UnequipItem(formId, hand);
+                result = GameCommands::UnequipItem(formId, hand);
             else if (command == "use")
-                result = GameWriter::UseItem(formId);
+                result = GameCommands::UseItem(formId);
             else if (command == "read_book")
-                result = GameWriter::ReadBook(formId);
+                result = GameCommands::ReadBook(formId);
             else if (command == "drop")
-                result = GameWriter::DropItem(formId, count);
+                result = GameCommands::DropItem(formId, count);
             else if (command == "favorite")
-                result = GameWriter::FavoriteItem(formId);
+                result = GameCommands::FavoriteItem(formId);
             else if (command == "equip_spell")
-                result = GameWriter::EquipSpell(formId, hand);
+                result = GameCommands::EquipSpell(formId, hand);
             else if (command == "unequip_spell")
-                result = GameWriter::UnequipSpell(formId, hand);
+                result = GameCommands::UnequipSpell(formId, hand);
             else if (command == "favorite_spell")
-                result = GameWriter::FavoriteSpell(formId);
+                result = GameCommands::FavoriteSpell(formId);
             else if (command == "equip_shout")
-                result = GameWriter::EquipShout(formId);
+                result = GameCommands::EquipShout(formId);
             else if (command == "unequip_shout")
-                result = GameWriter::UnequipShout(formId);
+                result = GameCommands::UnequipShout(formId);
             else if (command == "equip_power")
-                result = GameWriter::EquipPower(formId);
+                result = GameCommands::EquipPower(formId);
             else if (command == "favorite_shout")
-                result = GameWriter::FavoriteShout(formId);
+                result = GameCommands::FavoriteShout(formId);
             else if (command == "fast_travel")
-                result = GameWriter::FastTravelToMarker(formId);
+                result = GameCommands::FastTravelToMarker(formId);
             else
                 result = {false, "Unknown command: '" + command + "'"};
 

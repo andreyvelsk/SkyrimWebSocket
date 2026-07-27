@@ -1,4 +1,5 @@
 #include "MagicReader.h"
+#include "Common.h"
 
 #include <format>
 #include <unordered_map>
@@ -47,7 +48,7 @@ namespace MagicReader
 
     // Looks up a GameSetting string by key (e.g. "sSkillHeavyarmor").
     // Returns an empty string when the key does not exist or is not a string setting.
-    static std::string GetGMSTString(const char* key)
+    static std::string Common::GetGMSTString(const char* key)
     {
         auto* gmst = RE::GameSettingCollection::GetSingleton();
         if (!gmst)
@@ -64,7 +65,7 @@ namespace MagicReader
     // Convert a wide (UTF-16) string to UTF-8.
     // Handles the full Basic Multilingual Plane (U+0000..U+FFFF), which covers
     // all practical UI scripts: Latin, Cyrillic, CJK, etc.
-    static std::string WcsToUtf8(const wchar_t* ws)
+    static std::string Common::WcsToUtf8(const wchar_t* ws)
     {
         if (!ws) return {};
         std::string out;
@@ -118,7 +119,7 @@ namespace MagicReader
             if (it != translator->translator.translationMap.end()) {
                 const wchar_t* val = it->second.c_str();
                 if (val && *val != L'\0')
-                    return WcsToUtf8(val);
+                    return Common::WcsToUtf8(val);
             }
         }
 
@@ -132,7 +133,7 @@ namespace MagicReader
                 if (it != translator->translator.translationMap.end()) {
                     const wchar_t* val = it->second.c_str();
                     if (val && *val != L'\0')
-                        return WcsToUtf8(val);
+                        return Common::WcsToUtf8(val);
                 }
             }
         }
@@ -165,7 +166,7 @@ namespace MagicReader
         // 1) Try GameSetting strings first — these are the vanilla localised
         //    strings and Are always available regardless of Scaleform state.
         for (const char* gmstKey : gmstKeys) {
-            std::string s = GetGMSTString(gmstKey);
+            std::string s = Common::GetGMSTString(gmstKey);
             if (!s.empty())
                 return s;
         }

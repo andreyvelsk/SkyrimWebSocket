@@ -1,7 +1,11 @@
-#include "PlayerReader.h"
+#include "QuestMarkers.h"
+#include "Common.h"
+#include "PlayerPosition.h"
 #include "QuestText.h"
 
 #include "../../logger.h"
+
+#include <RE/Skyrim.h>
 
 #include <array>
 #include <cctype>
@@ -11,610 +15,8 @@
 #include <unordered_set>
 #include <vector>
 
-namespace PlayerReader
+namespace QuestMarkers
 {
-    static RE::TESWorldSpace* ResolvePlayerWorldspace();
-
-    nlohmann::json ReadLevel()
-    {
-        auto* player = RE::PlayerCharacter::GetSingleton();
-        if (!player)
-            return 0;
-        return static_cast<int>(player->GetLevel());
-    }
-
-    nlohmann::json ReadXPCurrent()
-    {
-        auto* player = RE::PlayerCharacter::GetSingleton();
-        if (!player)
-            return 0.0f;
-        auto& info = player->GetInfoRuntimeData();
-        if (!info.skills || !info.skills->data)
-            return 0.0f;
-        return info.skills->data->xp;
-    }
-
-    nlohmann::json ReadXPNext()
-    {
-        auto* player = RE::PlayerCharacter::GetSingleton();
-        if (!player)
-            return 0.0f;
-        auto& info = player->GetInfoRuntimeData();
-        if (!info.skills || !info.skills->data)
-            return 0.0f;
-        return info.skills->data->levelThreshold;
-    }
-
-    nlohmann::json ReadXPLevelStart()
-    {
-        return 0.0f;
-    }
-
-    nlohmann::json ReadInventoryWeight()
-    {
-        auto* player = RE::PlayerCharacter::GetSingleton();
-        if (!player)
-            return 0.0f;
-        return player->GetWeightInContainer();
-    }
-
-    nlohmann::json ReadCarryWeight()
-    {
-        auto* player = RE::PlayerCharacter::GetSingleton();
-        if (!player)
-            return 0.0f;
-        auto* avo = player->AsActorValueOwner();
-        if (!avo)
-            return 0.0f;
-        return avo->GetActorValue(RE::ActorValue::kCarryWeight);
-    }
-
-    nlohmann::json ReadLanguage()
-    {
-        static constexpr const char* kDefaultLanguage = "english";
-        auto* settings = RE::INISettingCollection::GetSingleton();
-        if (!settings)
-            return kDefaultLanguage;
-        auto* setting = settings->GetSetting("sLanguage:General");
-        if (!setting)
-            return kDefaultLanguage;
-        const char* str = setting->GetString();
-        return str ? std::string(str) : kDefaultLanguage;
-    }
-
-    nlohmann::json ReadPosition()
-    {
-        auto* player = RE::PlayerCharacter::GetSingleton();
-        if (!player)
-            return nlohmann::json::object();
-
-        nlohmann::json pos;
-        pos["x"]     = player->GetPositionX();
-        pos["y"]     = player->GetPositionY();
-        pos["z"]     = player->GetPositionZ();
-        pos["angle"] = player->GetAngleZ();
-
-        auto formIdStr = [](RE::FormID id) {
-            return std::format("0x{:08X}", id);
-        };
-
-        auto* world = player->GetWorldspace();
-        if (world) {
-            const char* edid = world->GetFormEditorID();
-            pos["worldspace"]       = edid ? std::string(edid) : std::string();
-            pos["worldspaceFormId"] = formIdStr(world->GetFormID());
-
-            auto* root = world;
-            while (root->parentWorld)
-                root = root->parentWorld;
-            const char* rootEdid = root->GetFormEditorID();
-            pos["parentWorldspace"]       = rootEdid ? std::string(rootEdid) : std::string();
-            pos["parentWorldspaceFormId"] = formIdStr(root->GetFormID());
-        } else {
-            // Interior cell — worldspace is null, but we can still resolve
-            // the parentWorldspace via the same fallback chain used by the
-            // map-markers query.
-            pos["worldspace"]       = nullptr;
-            pos["worldspaceFormId"] = nullptr;
-
-            if (auto* resolved = ResolvePlayerWorldspace()) {
-                auto* root = resolved;
-                while (root->parentWorld)
-                    root = root->parentWorld;
-                const char* rootEdid = root->GetFormEditorID();
-                pos["parentWorldspace"]       = rootEdid ? std::string(rootEdid) : std::string();
-                pos["parentWorldspaceFormId"] = formIdStr(root->GetFormID());
-            } else {
-                pos["parentWorldspace"]       = nullptr;
-                pos["parentWorldspaceFormId"] = nullptr;
-            }
-        }
-
-        auto* cell = player->GetParentCell();
-        if (cell) {
-            const char* cedid = cell->GetFormEditorID();
-            pos["cell"]       = cedid ? std::string(cedid) : std::string();
-            pos["cellFormId"] = formIdStr(cell->GetFormID());
-            pos["isInterior"] = cell->IsInteriorCell();
-        } else {
-            pos["cell"]       = nullptr;
-            pos["cellFormId"] = nullptr;
-            pos["isInterior"] = false;
-        }
-
-        return pos;
-    }
-
-    nlohmann::json ReadExteriorPosition()
-    {
-        auto* player = RE::PlayerCharacter::GetSingleton();
-        if (!player)
-            return nlohmann::json::object();
-
-        const auto formIdStr = [](RE::FormID id) {
-            return std::format("0x{:08X}", id);
-        };
-
-        const auto buildWorldspaceFields = [&](nlohmann::json& obj, RE::TESWorldSpace* world) {
-            if (world) {
-                const char* edid = world->GetFormEditorID();
-                obj["worldspace"]       = edid ? std::string(edid) : std::string();
-                obj["worldspaceFormId"] = formIdStr(world->GetFormID());
-
-                auto* root = world;
-                while (root->parentWorld)
-                    root = root->parentWorld;
-                const char* rootEdid = root->GetFormEditorID();
-                obj["parentWorldspace"]       = rootEdid ? std::string(rootEdid) : std::string();
-                obj["parentWorldspaceFormId"] = formIdStr(root->GetFormID());
-            } else {
-                obj["worldspace"]             = nullptr;
-                obj["worldspaceFormId"]       = nullptr;
-                obj["parentWorldspace"]       = nullptr;
-                obj["parentWorldspaceFormId"] = nullptr;
-            }
-        };
-
-        nlohmann::json out;
-        auto* world = player->GetWorldspace();
-        auto* cell  = player->GetParentCell();
-
-        // Player is in a top-level exterior worldspace (Tamriel, Solstheim, etc.) —
-        // return live coordinates directly. No caching involved, so fast travel
-        // cannot produce stale values.
-        if (world && !world->parentWorld && cell && !cell->IsInteriorCell()) {
-            out["x"] = player->GetPositionX();
-            out["y"] = player->GetPositionY();
-            out["z"] = player->GetPositionZ();
-            buildWorldspaceFields(out, world);
-            return out;
-        }
-
-        // Player is in an interior cell or a city sub-worldspace.
-        // Resolve the BGSLocation's world-map marker reference to get the
-        // location's fixed exterior coordinates (e.g. the cave entrance on
-        // Tamriel, or the city gate on the Tamriel map).  Walk up the location
-        // hierarchy until a marker is found.
-        RE::BGSLocation*   loc       = cell ? cell->GetLocation() : nullptr;
-        RE::TESObjectREFR* markerRef = nullptr;
-        while (loc && !markerRef) {
-            markerRef = loc->worldLocMarker.get().get();
-            if (!markerRef)
-                loc = loc->parentLoc;
-        }
-
-        if (markerRef) {
-            out["x"] = markerRef->GetPositionX();
-            out["y"] = markerRef->GetPositionY();
-            out["z"] = markerRef->GetPositionZ();
-            buildWorldspaceFields(out, markerRef->GetWorldspace());
-        } else {
-            out["x"] = nullptr;
-            out["y"] = nullptr;
-            out["z"] = nullptr;
-            buildWorldspaceFields(out, nullptr);
-        }
-
-        return out;
-    }
-
-    RE::TESObjectREFR* GetPlayerMarkerRef()
-    {
-        auto* player = RE::PlayerCharacter::GetSingleton();
-        if (!player)
-            return nullptr;
-
-        // INFO_RUNTIME_DATA is exposed via the public GetInfoRuntimeData()
-        // accessor in every targeting mode (SE/AE/VR), so we don't need
-        // offset hacks here.
-        auto& info = player->GetInfoRuntimeData();
-        return info.playerMapMarker.get().get();
-    }
-
-    nlohmann::json BuildPlayerMarkerJson(RE::TESObjectREFR* ref)
-    {
-        nlohmann::json out;
-
-        const auto setNullSpatial = [&]() {
-            out["x"]                      = nullptr;
-            out["y"]                      = nullptr;
-            out["z"]                      = nullptr;
-            out["worldspace"]             = nullptr;
-            out["worldspaceFormId"]       = nullptr;
-            out["parentWorldspace"]       = nullptr;
-            out["parentWorldspaceFormId"] = nullptr;
-        };
-
-        if (!ref) {
-            out["isSet"] = false;
-            setNullSpatial();
-            return out;
-        }
-
-        // The marker ref always exists once the engine has touched the map
-        // menu; the *visibility* of its ExtraMapMarker is what tells whether
-        // the player has a marker placed right now.
-        auto*      extra     = ref->extraList.GetByType<RE::ExtraMapMarker>();
-        const bool hasData   = extra && extra->mapData;
-        const bool isVisible = hasData && extra->mapData->flags.any(RE::MapMarkerData::Flag::kVisible);
-
-        out["isSet"] = isVisible;
-        out["x"]     = ref->GetPositionX();
-        out["y"]     = ref->GetPositionY();
-        out["z"]     = ref->GetPositionZ();
-
-        const auto formIdStr = [](RE::FormID id) {
-            return std::format("0x{:08X}", id);
-        };
-
-        if (auto* world = ref->GetWorldspace()) {
-            const char* edid = world->GetFormEditorID();
-            out["worldspace"]       = edid ? std::string(edid) : std::string();
-            out["worldspaceFormId"] = formIdStr(world->GetFormID());
-
-            auto* root = world;
-            while (root->parentWorld)
-                root = root->parentWorld;
-            const char* rootEdid = root->GetFormEditorID();
-            out["parentWorldspace"]       = rootEdid ? std::string(rootEdid) : std::string();
-            out["parentWorldspaceFormId"] = formIdStr(root->GetFormID());
-        } else {
-            out["worldspace"]             = nullptr;
-            out["worldspaceFormId"]       = nullptr;
-            out["parentWorldspace"]       = nullptr;
-            out["parentWorldspaceFormId"] = nullptr;
-        }
-
-        return out;
-    }
-
-    nlohmann::json ReadPlayerMarker()
-    {
-        return BuildPlayerMarkerJson(GetPlayerMarkerRef());
-    }
-
-    // Resolve the worldspace the player is currently "in" for map purposes.
-    //
-    // For exterior cells GetWorldspace() returns the worldspace directly.
-    // For interior cells (caves, houses, dungeons) it returns nullptr, so we
-    // try several fallbacks in order:
-    //   A. cell->worldSpace (set for some interior cells)
-    //   B. ExtraPersistentCell on the player -> persistentCell -> worldSpace
-    //   C. Walk the cell's BGSLocation hierarchy looking for a worldLocMarker
-    //      whose GetWorldspace() is non-null.
-    //   D. TES::worldSpace — the game's own tracked current worldspace
-    //      (remains valid even while the player is in an interior cell).
-    //   E. Brute-force scan of all worldspaces via TESDataHandler:
-    //      match by persistentCell pointer, or by location in locationMap.
-    //      This is the last resort — used when all faster methods fail
-    //      (e.g. right after loading a save, before TES::worldSpace is set).
-    //
-    // Returns nullptr when every fallback fails.
-    static RE::TESWorldSpace* ResolvePlayerWorldspace()
-    {
-        auto* player = RE::PlayerCharacter::GetSingleton();
-        if (!player)
-            return nullptr;
-
-        auto* world = player->GetWorldspace();
-        if (world)
-            return world;
-
-        auto* cell = player->GetParentCell();
-        if (!cell)
-            return nullptr;
-
-        // A - cell's own worldSpace (may be set for some interiors).
-        world = cell->GetRuntimeData().worldSpace;
-        if (world)
-            return world;
-
-        // B - ExtraPersistentCell on the player.
-        if (auto* xPersist = player->extraList.GetByType<RE::ExtraPersistentCell>()) {
-            if (xPersist->persistentCell) {
-                world = xPersist->persistentCell->GetRuntimeData().worldSpace;
-                if (world)
-                    return world;
-            }
-        }
-
-        // C - walk the location hierarchy via worldLocMarker.
-        RE::BGSLocation* loc = cell->GetLocation();
-        while (loc) {
-            auto* markerRef = loc->worldLocMarker.get().get();
-            if (markerRef) {
-                world = markerRef->GetWorldspace();
-                if (world)
-                    return world;
-            }
-            loc = loc->parentLoc;
-        }
-
-        // D - TES::worldSpace (the game's own tracked current worldspace).
-        if (auto* tes = RE::TES::GetSingleton()) {
-            world = tes->GetRuntimeData2().worldSpace;
-            if (world)
-                return world;
-        }
-
-        // E - brute-force scan of all worldspaces.
-        // After loading a save inside an interior, the faster fallbacks may
-        // all fail because TES::worldSpace hasn't been restored yet and
-        // persistentCell->worldSpace may not be initialised.  Walking every
-        // worldspace is cheap (there are only a handful) and guarantees we
-        // find the right one as long as the cell has a location or the
-        // ExtraPersistentCell pointer is valid.
-        if (auto* dh = RE::TESDataHandler::GetSingleton()) {
-            const auto& worlds = dh->GetFormArray<RE::TESWorldSpace>();
-
-            // E1 - match by ExtraPersistentCell::persistentCell pointer.
-            if (auto* xPersist = player->extraList.GetByType<RE::ExtraPersistentCell>()) {
-                if (xPersist->persistentCell) {
-                    for (auto* ws : worlds) {
-                        if (ws && ws->persistentCell == xPersist->persistentCell) {
-                            return ws;
-                        }
-                    }
-                }
-            }
-
-            // E2 - match by location in worldspace's locationMap.
-            for (auto* curLoc = cell->GetLocation(); curLoc; curLoc = curLoc->parentLoc) {
-                const RE::FormID locId = curLoc->GetFormID();
-                if (!locId)
-                    continue;
-                for (auto* ws : worlds) {
-                    if (ws && ws->locationMap.contains(locId)) {
-                        return ws;
-                    }
-                }
-            }
-        }
-
-        return nullptr;
-    }
-
-    static nlohmann::json ReadMapMarkersImpl(bool visibleOnly)
-    {
-        auto* player = RE::PlayerCharacter::GetSingleton();
-        if (!player)
-            return nlohmann::json::array();
-
-        // clang-format off
-        static constexpr std::array<std::string_view, 66> kTypeNames = {
-            "None",               //  0
-            "City",               //  1
-            "Town",               //  2
-            "Settlement",         //  3
-            "Cave",               //  4
-            "Camp",               //  5
-            "Fort",               //  6
-            "NordicRuin",         //  7
-            "DwemerRuin",         //  8
-            "Shipwreck",          //  9
-            "Grove",              // 10
-            "Landmark",           // 11
-            "DragonLair",         // 12
-            "Farm",               // 13
-            "WoodMill",           // 14
-            "Mine",               // 15
-            "ImperialCamp",       // 16
-            "StormcloakCamp",     // 17
-            "Doomstone",          // 18
-            "WheatMill",          // 19
-            "Smelter",            // 20
-            "Stable",             // 21
-            "ImperialTower",      // 22
-            "Clearing",           // 23
-            "Pass",               // 24
-            "Altar",              // 25
-            "Rock",               // 26
-            "Lighthouse",         // 27
-            "OrcStronghold",      // 28
-            "GiantCamp",          // 29
-            "Shack",              // 30
-            "NordicTower",        // 31
-            "NordicDwelling",     // 32
-            "Docks",              // 33
-            "Shrine",             // 34
-            "RiftenCastle",       // 35
-            "RiftenCapitol",      // 36
-            "WindhelmCastle",     // 37
-            "WindhelmCapitol",    // 38
-            "WhiterunCastle",     // 39
-            "WhiterunCapitol",    // 40
-            "SolitudeCastle",     // 41
-            "SolitudeCapitol",    // 42
-            "MarkarthCastle",     // 43
-            "MarkarthCapitol",    // 44
-            "WinterholdCastle",   // 45
-            "WinterholdCapitol",  // 46
-            "MorthalCastle",      // 47
-            "MorthalCapitol",     // 48
-            "FalkreathCastle",    // 49
-            "FalkreathCapitol",   // 50
-            "DawnstarCastle",     // 51
-            "DawnstarCapitol",    // 52
-            "DLC02MiraakTemple",  // 53
-            "DLC02RavenRock",     // 54
-            "DLC02BeastStone",    // 55
-            "DLC02TelMithryn",    // 56
-            "DLC02ToSkyrim",      // 57
-            "DLC02StalhrimSource",// 58
-            "DLC02CastleKarstaag",// 59
-            "Unknown",            // 60  (kTotalLocationTypes sentinel)
-            "Door",               // 61
-            "QuestTarget",        // 62
-            "Unknown",            // 63
-            "PlayerSet",          // 64
-            "YouAreHere",         // 65
-        };
-        // clang-format on
-
-        nlohmann::json result = nlohmann::json::array();
-
-        // Global map markers (cities, towns, dungeons, etc.) live in the
-        // persistent cell of the top-level (root) worldspace — Tamriel,
-        // DLC2SolstheimWorld, etc.  Child worldspaces like WindhelmWorld
-        // only contain local markers.
-        //
-        // We resolve the player's root parentWorldspace and return only
-        // markers from that top-level worldspace's persistent cell.
-        //
-        // NOTE: this walks thousands of refs.  Keep this hot path silent
-        // (no per-ref logging); the per-flush-on-trace fsync inside spdlog
-        // turns each log line into a multi-millisecond disk write that
-        // visibly freezes the renderer.
-
-        // Step 1 — determine the player's root (top-level) worldspace.
-        auto* playerWorld = ResolvePlayerWorldspace();
-        if (!playerWorld) {
-            logger::debug("[Map::Markers::Locations] cannot determine player's worldspace, returning empty");
-            return result;
-        }
-
-        auto* rootWorld = playerWorld;
-        while (rootWorld->parentWorld)
-            rootWorld = rootWorld->parentWorld;
-
-        // Step 2 — collect all worldspaces in the root's hierarchy.
-        // Cities with interior worldspaces (Whiterun → WhiterunWorld,
-        // Riften → RiftenWorld, etc.) store their map-marker refs in the
-        // persistent cell of their *own* worldspace, not the root.
-        // Iterating only the root persistent cell misses those cities.
-        std::vector<RE::TESWorldSpace*> hierarchyWorlds;
-        hierarchyWorlds.push_back(rootWorld);
-
-        if (auto* handler = RE::TESDataHandler::GetSingleton()) {
-            for (auto* world : handler->GetFormArray<RE::TESWorldSpace>()) {
-                if (!world || world == rootWorld)
-                    continue;
-                // Walk up the parent chain — if we reach rootWorld,
-                // this worldspace belongs to the same map.
-                for (auto* ancestor = world->parentWorld; ancestor;
-                     ancestor = ancestor->parentWorld) {
-                    if (ancestor == rootWorld) {
-                        hierarchyWorlds.push_back(world);
-                        break;
-                    }
-                }
-            }
-        }
-
-        std::unordered_set<RE::FormID> seen;
-
-        auto emit = [&](RE::TESObjectREFR* form) {
-            if (!form)
-                return;
-            const auto formId = form->GetFormID();
-
-            auto* extra = form->extraList.GetByType<RE::ExtraMapMarker>();
-            if (!extra || !extra->mapData)
-                return;
-
-            if (!seen.insert(formId).second)
-                return;
-
-            auto* data = extra->mapData;
-
-            const auto typeId   = static_cast<uint32_t>(data->type.underlying());
-            const auto typeName = typeId < kTypeNames.size()
-                                      ? std::string(kTypeNames[typeId])
-                                      : "Unknown";
-
-            // City markers (typeId == 1) are always shown regardless of
-            // visibility flags — they are permanent reference points on the
-            // world map.
-            const bool isCity = (typeId == 1);
-
-            using Flag = RE::MapMarkerData::Flag;
-            const bool isVisible     = data->flags.any(Flag::kVisible);
-            const bool canFastTravel = data->flags.any(Flag::kCanTravelTo);
-
-            if (visibleOnly && !isVisible && !isCity)
-                return;
-
-            // When visibleOnly is requested we want exactly what MapMenu would
-            // render: skip disabled / deleted refs and nameless markers (the
-            // engine itself filters those out before drawing).  City markers
-            // are exempt from these filters as well.
-            if (visibleOnly && (form->IsDisabled() || form->IsDeleted()) && !isCity)
-                return;
-
-            const char* fullName = data->locationName.GetFullName();
-            std::string name     = fullName ? fullName : "";
-
-            if (visibleOnly && name.empty() && !isCity)
-                return;
-
-            const float x = form->GetPositionX();
-            const float y = form->GetPositionY();
-
-            nlohmann::json entry;
-            entry["refId"]         = std::format("0x{:08X}", formId);
-            entry["name"]          = name;
-            entry["type"]          = typeName;
-            entry["typeId"]        = typeId;
-            entry["x"]             = x;
-            entry["y"]             = y;
-            entry["isVisible"]     = isVisible;
-            entry["canFastTravel"] = canFastTravel;
-
-            result.push_back(std::move(entry));
-        };
-
-        // Step 3 — walk every worldspace in the hierarchy, collecting
-        // map-marker refs from each persistent cell.
-        std::size_t totalRefs = 0;
-        for (auto* world : hierarchyWorlds) {
-            auto* persist = world->persistentCell;
-            if (!persist)
-                continue;
-
-            persist->ForEachReference([&](RE::TESObjectREFR* ref) {
-                ++totalRefs;
-                emit(ref);
-                return RE::BSContainer::ForEachResult::kContinue;
-            });
-        }
-
-        logger::debug("[Map::Markers::Locations] visibleOnly={} rootWorld='{}' worlds_visited={} refs_visited={} markers={}",
-                      visibleOnly,
-                      rootWorld->GetFormEditorID() ? rootWorld->GetFormEditorID() : "?",
-                      hierarchyWorlds.size(), totalRefs, result.size());
-        return result;
-    }
-
-    nlohmann::json ReadMapMarkers()
-    {
-        return ReadMapMarkersImpl(/*visibleOnly=*/true);
-    }
-
-    nlohmann::json ReadMapMarkersAll()
-    {
-        return ReadMapMarkersImpl(/*visibleOnly=*/false);
-    }
-
     namespace
     {
         bool g_miscObjectivesVisibilityKnown = false;
@@ -623,17 +25,11 @@ namespace PlayerReader
 
         // ---------------------------------------------------------------------------
         // Persistent-ref cache
-        // Built once on first quest-marker poll, reset on save load.
-        // Avoids iterating all worldspace persistent cells on every poll.
         // ---------------------------------------------------------------------------
         struct PersistentRefCache
         {
-            // All persistent refs keyed by FormID.
             std::unordered_map<RE::FormID, RE::TESObjectREFR*> byFormId;
-            // Map-marker refs (exterior + top-level worldspace) keyed by
-            // the BGSLocation FormID attached via ExtraLocation.
             std::unordered_map<RE::FormID, RE::TESObjectREFR*> markerByLocationId;
-            // Same refs keyed by the map-marker name (lower-case).
             std::unordered_map<std::string, RE::TESObjectREFR*> markerByName;
             bool built = false;
         };
@@ -969,9 +365,6 @@ namespace PlayerReader
             };
         }
 
-        // Find the BGSRefAlias in `quest` whose aliasID matches the
-        // TESQuestTarget::alias byte. Returns nullptr when nothing matches
-        // (e.g. data alias, location alias, or unfilled).
         RE::BGSRefAlias* FindRefAlias(RE::TESQuest* quest, std::uint32_t aliasID)
         {
             if (!quest)
@@ -981,9 +374,6 @@ namespace PlayerReader
                     continue;
                 if (alias->aliasID != aliasID)
                     continue;
-                // Identify a ref alias by its scripting VM type tag rather
-                // than RTTI so we don't depend on dynamic_cast working
-                // across module boundaries (BGSRefAlias::VMTYPEID == 140).
                 if (alias->GetVMTypeID() == RE::BGSRefAlias::VMTYPEID)
                     return static_cast<RE::BGSRefAlias*>(alias);
                 return nullptr;
@@ -991,41 +381,17 @@ namespace PlayerReader
             return nullptr;
         }
 
-        std::string_view TrimAscii(std::string_view value)
-        {
-            while (!value.empty() && std::isspace(static_cast<unsigned char>(value.front())))
-                value.remove_prefix(1);
-            while (!value.empty() && std::isspace(static_cast<unsigned char>(value.back())))
-                value.remove_suffix(1);
-            return value;
-        }
-
-        bool EqualAsciiIgnoreCase(std::string_view lhs, std::string_view rhs)
-        {
-            if (lhs.size() != rhs.size())
-                return false;
-            for (std::size_t i = 0; i < lhs.size(); ++i) {
-                const auto l = static_cast<unsigned char>(lhs[i]);
-                const auto r = static_cast<unsigned char>(rhs[i]);
-                if (std::tolower(l) != std::tolower(r))
-                    return false;
-            }
-            return true;
-        }
-
         bool IsAliasTokenHead(std::string_view head)
         {
-            head = TrimAscii(head);
+            head = Common::TrimAscii(head);
             return head.size() >= 5
-                && EqualAsciiIgnoreCase(head.substr(0, 5), "Alias")
+                && Common::EqualAsciiIgnoreCase(head.substr(0, 5), "Alias")
                 && (head.size() == 5 || head[5] == '.');
         }
 
-        // Lookup an alias by its (case-insensitive) editor name on a quest.
-        // Used to resolve <Alias=Foo> tokens in objective text.
         RE::BGSBaseAlias* FindAliasByName(RE::TESQuest* quest, std::string_view name)
         {
-            name = TrimAscii(name);
+            name = Common::TrimAscii(name);
             if (!quest || name.empty())
                 return nullptr;
             for (auto* alias : quest->aliases) {
@@ -1034,7 +400,7 @@ namespace PlayerReader
                 const char* aname = alias->aliasName.c_str();
                 if (!aname)
                     continue;
-                if (EqualAsciiIgnoreCase(aname, name))
+                if (Common::EqualAsciiIgnoreCase(aname, name))
                     return alias;
             }
             return nullptr;
@@ -1107,7 +473,7 @@ namespace PlayerReader
             const char* editorID = quest->GetFormEditorID();
             const char* name     = quest->GetFullName();
             out["ptr"]            = PtrString(quest);
-            out["formId"]         = std::format("0x{:08X}", quest->GetFormID());
+            out["formId"]         = Common::FormIdToString(quest->GetFormID());
             out["editorId"]       = editorID ? std::string(editorID) : std::string();
             out["name"]           = name ? std::string(name) : std::string();
             out["type"]           = std::string(QuestTypeName(quest->GetType()));
@@ -1140,10 +506,10 @@ namespace PlayerReader
             out["numTargets"]   = objective->numTargets;
             out["text"]         = text;
             out["instanceID"]   = instanceID;
-            if (auto* quest = objective->ownerQuest) {
-                out["questFormId"]  = std::format("0x{:08X}", quest->GetFormID());
-                out["questEditorId"] = quest->GetFormEditorID() ? quest->GetFormEditorID() : "";
-                out["questType"]     = std::string(QuestTypeName(quest->GetType()));
+            if (auto* q = objective->ownerQuest) {
+                out["questFormId"]  = Common::FormIdToString(q->GetFormID());
+                out["questEditorId"] = q->GetFormEditorID() ? q->GetFormEditorID() : "";
+                out["questType"]     = std::string(QuestTypeName(q->GetType()));
             }
             return out;
         }
@@ -1200,8 +566,6 @@ namespace PlayerReader
                     if (fid)
                         s_persistentCache.byFormId.emplace(fid, ref);
 
-                    // Only include map-markers in exterior top-level worldspaces
-                    // in the location-keyed maps (same filter as ReadMapMarkersImpl).
                     if (IsMapMarkerRef(ref) && HasGlobalMapCoordinates(ref)) {
                         if (auto* xl = ref->extraList.GetByType<RE::ExtraLocation>()) {
                             if (xl->location) {
@@ -1304,7 +668,6 @@ namespace PlayerReader
 
             EnsurePersistentRefCache();
 
-            // Primary: match by ExtraLocation attached to the map-marker ref.
             {
                 const auto it = s_persistentCache.markerByLocationId.find(
                     location->GetFormID());
@@ -1312,7 +675,6 @@ namespace PlayerReader
                     return it->second;
             }
 
-            // Fallback: match by location full name (case-insensitive).
             const char* locationName = location->GetFullName();
             if (locationName && *locationName) {
                 std::string key(locationName);
@@ -1470,10 +832,6 @@ namespace PlayerReader
                                        RE::TESObjectREFR* ref,
                                        const ReferenceSpatialJsonKeys& keys)
         {
-            const auto formIdStr = [](RE::FormID id) {
-                return std::format("0x{:08X}", id);
-            };
-
             if (!ref) {
                 out[keys.x]                      = nullptr;
                 out[keys.y]                      = nullptr;
@@ -1493,16 +851,7 @@ namespace PlayerReader
             out[keys.z] = ref->GetPositionZ();
 
             if (auto* world = ref->GetWorldspace()) {
-                const char* edid = world->GetFormEditorID();
-                out[keys.worldspace]       = edid ? std::string(edid) : std::string();
-                out[keys.worldspaceFormId] = formIdStr(world->GetFormID());
-
-                auto* root = world;
-                while (root->parentWorld)
-                    root = root->parentWorld;
-                const char* rootEdid = root->GetFormEditorID();
-                out[keys.parentWorldspace]       = rootEdid ? std::string(rootEdid) : std::string();
-                out[keys.parentWorldspaceFormId] = formIdStr(root->GetFormID());
+                Common::BuildWorldspaceFields(out, world);
             } else {
                 out[keys.worldspace]             = nullptr;
                 out[keys.worldspaceFormId]       = nullptr;
@@ -1513,7 +862,7 @@ namespace PlayerReader
             if (auto* cell = ref->GetParentCell()) {
                 const char* cedid = cell->GetFormEditorID();
                 out[keys.cell]       = cedid ? std::string(cedid) : std::string();
-                out[keys.cellFormId] = formIdStr(cell->GetFormID());
+                out[keys.cellFormId] = Common::FormIdToString(cell->GetFormID());
                 out[keys.isInterior] = cell->IsInteriorCell();
             } else {
                 out[keys.cell]       = nullptr;
@@ -1558,14 +907,10 @@ namespace PlayerReader
 
         nlohmann::json QuestMarkerCoordinatesJson(const QuestMarkerCoordinates& coordinates)
         {
-            const auto formIdStr = [](RE::FormID id) {
-                return std::format("0x{:08X}", id);
-            };
-
             nlohmann::json out = nlohmann::json::object();
             out["source"] = coordinates.source;
             if (coordinates.ref) {
-                out["refId"] = formIdStr(coordinates.ref->GetFormID());
+                out["refId"] = Common::FormIdToString(coordinates.ref->GetFormID());
                 out["name"]  = RefDisplayName(coordinates.ref);
             } else {
                 out["refId"] = nullptr;
@@ -1575,7 +920,7 @@ namespace PlayerReader
             if (coordinates.location) {
                 const char* locationEditorId = coordinates.location->GetFormEditorID();
                 const char* locationName = coordinates.location->GetFullName();
-                out["locationFormId"]  = formIdStr(coordinates.location->GetFormID());
+                out["locationFormId"]  = Common::FormIdToString(coordinates.location->GetFormID());
                 out["locationEditorId"] = locationEditorId ? std::string(locationEditorId) : std::string();
                 out["locationName"]     = locationName ? std::string(locationName) : std::string();
             } else {
@@ -1590,10 +935,6 @@ namespace PlayerReader
 
         nlohmann::json LocationDebugJson(RE::BGSLocation* location)
         {
-            const auto formIdStr = [](RE::FormID id) {
-                return std::format("0x{:08X}", id);
-            };
-
             if (!location)
                 return nullptr;
 
@@ -1601,7 +942,7 @@ namespace PlayerReader
             const char* name     = location->GetFullName();
 
             nlohmann::json out;
-            out["formId"]            = formIdStr(location->GetFormID());
+            out["formId"]            = Common::FormIdToString(location->GetFormID());
             out["editorId"]          = editorId ? std::string(editorId) : std::string();
             out["name"]              = name ? std::string(name) : std::string();
             out["worldLocRadius"]    = location->worldLocRadius;
@@ -1632,19 +973,19 @@ namespace PlayerReader
                 nlohmann::json item;
                 if (specialRef.type) {
                     const char* typeEditorId = specialRef.type->GetFormEditorID();
-                    item["typeFormId"]  = formIdStr(specialRef.type->GetFormID());
+                    item["typeFormId"]  = Common::FormIdToString(specialRef.type->GetFormID());
                     item["typeEditorId"] = typeEditorId ? std::string(typeEditorId) : std::string();
                 } else {
                     item["typeFormId"]  = nullptr;
                     item["typeEditorId"] = nullptr;
                 }
-                item["refId"]         = formIdStr(specialRef.refData.refID);
-                item["parentSpaceId"] = formIdStr(specialRef.refData.parentSpaceID);
+                item["refId"]         = Common::FormIdToString(specialRef.refData.refID);
+                item["parentSpaceId"] = Common::FormIdToString(specialRef.refData.parentSpaceID);
                 item["cellKeyRaw"]    = specialRef.refData.cellKey.raw;
                 if (auto* ref = FindPersistentReferenceByFormID(specialRef.refData.refID)) {
                     nlohmann::json resolved;
                     resolved["ptr"] = PtrString(ref);
-                    resolved["refId"] = formIdStr(ref->GetFormID());
+                    resolved["refId"] = Common::FormIdToString(ref->GetFormID());
                     resolved["name"] = RefDisplayName(ref);
                     resolved["hasMapMarker"] = IsMapMarkerRef(ref);
                     resolved["hasGlobalMapCoordinates"] = HasGlobalMapCoordinates(ref);
@@ -1662,10 +1003,6 @@ namespace PlayerReader
 
         nlohmann::json ReferenceCoordinateCandidateJson(const char* source, RE::TESObjectREFR* ref)
         {
-            const auto formIdStr = [](RE::FormID id) {
-                return std::format("0x{:08X}", id);
-            };
-
             nlohmann::json out;
             out["source"]    = source;
             out["available"] = ref != nullptr;
@@ -1673,14 +1010,14 @@ namespace PlayerReader
                 return out;
 
             out["ptr"]       = PtrString(ref);
-            out["refId"]     = formIdStr(ref->GetFormID());
+            out["refId"]     = Common::FormIdToString(ref->GetFormID());
             out["name"]      = RefDisplayName(ref);
             out["isDeleted"] = ref->IsDeleted();
             out["isDisabled"] = ref->IsDisabled();
 
             if (auto* base = ref->GetBaseObject()) {
                 const char* baseName = base->GetName();
-                out["baseFormId"] = formIdStr(base->GetFormID());
+                out["baseFormId"] = Common::FormIdToString(base->GetFormID());
                 out["baseName"]   = baseName ? std::string(baseName) : std::string();
             } else {
                 out["baseFormId"] = nullptr;
@@ -1712,10 +1049,10 @@ namespace PlayerReader
             out["cellLocation"]    = LocationDebugJson(cellLocation);
 
             auto linkedDoor = ref->extraList.GetTeleportLinkedDoor().get();
-            out["teleportLinkedDoorRefId"] = linkedDoor ? nlohmann::json(formIdStr(linkedDoor->GetFormID())) : nullptr;
+            out["teleportLinkedDoorRefId"] = linkedDoor ? nlohmann::json(Common::FormIdToString(linkedDoor->GetFormID())) : nullptr;
 
             if (auto* randomMarker = ref->extraList.GetByType<RE::ExtraRandomTeleportMarker>(); randomMarker && randomMarker->marker)
-                out["randomTeleportMarkerRefId"] = formIdStr(randomMarker->marker->GetFormID());
+                out["randomTeleportMarkerRefId"] = Common::FormIdToString(randomMarker->marker->GetFormID());
             else
                 out["randomTeleportMarkerRefId"] = nullptr;
 
@@ -1724,10 +1061,6 @@ namespace PlayerReader
 
         nlohmann::json EditorLocationCandidateJson(RE::TESObjectREFR* ref)
         {
-            const auto formIdStr = [](RE::FormID id) {
-                return std::format("0x{:08X}", id);
-            };
-
             nlohmann::json out;
             out["source"] = "TESObjectREFR::GetEditorLocation(out)";
             if (!ref) {
@@ -1752,7 +1085,7 @@ namespace PlayerReader
             out["rotationZ"] = rot.z;
 
             if (worldOrCell) {
-                out["worldOrCellFormId"] = formIdStr(worldOrCell->GetFormID());
+                out["worldOrCellFormId"] = Common::FormIdToString(worldOrCell->GetFormID());
                 if (auto* world = worldOrCell->As<RE::TESWorldSpace>()) {
                     const char* edid = world->GetFormEditorID();
                     out["worldOrCellType"] = "TESWorldSpace";
@@ -1825,7 +1158,7 @@ namespace PlayerReader
                 if (ref) {
                     out["ref"] = {
                         { "ptr", PtrString(ref) },
-                        { "formId", std::format("0x{:08X}", ref->GetFormID()) },
+                        { "formId", Common::FormIdToString(ref->GetFormID()) },
                         { "name", RefDisplayName(ref) },
                         { "isDeleted", ref->IsDeleted() },
                         { "x", ref->GetPositionX() },
@@ -1833,11 +1166,11 @@ namespace PlayerReader
                         { "z", ref->GetPositionZ() }
                     };
                     if (auto* cell = ref->GetParentCell()) {
-                        out["ref"]["cellFormId"] = std::format("0x{:08X}", cell->GetFormID());
+                        out["ref"]["cellFormId"] = Common::FormIdToString(cell->GetFormID());
                         out["ref"]["cell"] = cell->GetFormEditorID() ? cell->GetFormEditorID() : "";
                     }
                     if (auto* world = ref->GetWorldspace()) {
-                        out["ref"]["worldspaceFormId"] = std::format("0x{:08X}", world->GetFormID());
+                        out["ref"]["worldspaceFormId"] = Common::FormIdToString(world->GetFormID());
                         out["ref"]["worldspace"] = world->GetFormEditorID() ? world->GetFormEditorID() : "";
                     }
                     const auto coordinates = ResolveQuestMarkerCoordinates(ref);
@@ -1940,10 +1273,6 @@ namespace PlayerReader
             return matches == 1 ? onlyName : std::string();
         }
 
-        // Best-effort display string for a quest alias. For radiant quests,
-        // the static alias usually has only a template name (BanditCamp),
-        // while the concrete value lives in TESQuest::instanceData as
-        // BGSQuestInstanceText::StringData(aliasID -> fullNameFormID).
         std::string ResolveAliasDisplayName(RE::TESQuest* quest,
                                             RE::BGSBaseAlias* alias,
                                             std::uint32_t instanceID)
@@ -1963,12 +1292,6 @@ namespace PlayerReader
             return {};
         }
 
-        // Replace every <Alias[.<sub>]=<Name>> token in `raw` with the
-        // resolved alias name from `quest`. Tokens we can't resolve are
-        // left in place verbatim so callers can still see what's missing.
-        // We do not try to handle <Global=...>, <Spouse>, <Faction=...>,
-        // etc. here - those would need additional context (textGlobals,
-        // player relationships) and are out of scope for now.
         std::string ResolveQuestObjectiveText(RE::TESQuest* quest,
                                               const std::string& raw,
                                               std::uint32_t instanceID)
@@ -1990,15 +1313,13 @@ namespace PlayerReader
                     out.append(raw, i, std::string::npos);
                     break;
                 }
-                // Token without the angle brackets:
-                //   "Alias=BanditCamp"  or  "Alias.ShortName=BanditLeader"
                 std::string_view token(&raw[i + 1], end - i - 1);
 
                 bool         matched = false;
                 const auto eq = token.find('=');
                 if (eq != std::string_view::npos) {
-                    const auto head = TrimAscii(token.substr(0, eq));
-                    const auto name = TrimAscii(token.substr(eq + 1));
+                    const auto head = Common::TrimAscii(token.substr(0, eq));
+                    const auto name = Common::TrimAscii(token.substr(eq + 1));
 
                     if (IsAliasTokenHead(head)) {
                         if (auto* a = FindAliasByName(quest, name)) {
@@ -2022,7 +1343,6 @@ namespace PlayerReader
                 }
 
                 if (!matched) {
-                    // Leave the original "<...>" untouched.
                     out.append(raw, i, end - i + 1);
                 }
                 i = end + 1;
@@ -2128,10 +1448,6 @@ namespace PlayerReader
             return result;
         }
 
-        const auto formIdStr = [](RE::FormID id) {
-            return std::format("0x{:08X}", id);
-        };
-
         std::unordered_set<QuestMarkerDestinationKey, QuestMarkerDestinationKeyHash> seenDestinations;
         const auto miscObjectivesVisibility = GetMiscObjectivesVisibility();
 
@@ -2151,9 +1467,6 @@ namespace PlayerReader
             };
         };
 
-        // Build one JSON entry from a BGSQuestObjective + a TESQuestTarget +
-        // resolved ref. Returns false when the target couldn't be resolved
-        // and nothing was emitted.
         const auto emitTargetEntry = [&](RE::TESQuest*          quest,
                                          RE::BGSQuestObjective* objective,
                                          RE::TESQuestTarget*    target,
@@ -2199,7 +1512,7 @@ namespace PlayerReader
                 QuestText::ResolveText(quest, objectiveText, instanceID);
 
             nlohmann::json entry;
-            entry["questFormId"]    = formIdStr(quest->GetFormID());
+            entry["questFormId"]    = Common::FormIdToString(quest->GetFormID());
             entry["questEditorId"]  = questEditorId;
             entry["questName"]      = questName;
             entry["questType"]      = std::string(QuestTypeName(quest->GetType()));
@@ -2214,7 +1527,7 @@ namespace PlayerReader
             entry["objectiveText"]  = objectiveText;
             entry["objectiveTextResolved"] = objectiveTextResolved;
             entry["aliasId"]        = aliasID;
-            entry["refId"]          = formIdStr(ref->GetFormID());
+            entry["refId"]          = Common::FormIdToString(ref->GetFormID());
             entry["isDeleted"]      = refIsDeleted;
 
             const char* refNameC = ref->GetDisplayFullName();
@@ -2223,12 +1536,12 @@ namespace PlayerReader
             entry["name"] = refNameC ? std::string(refNameC) : std::string();
 
             entry["coordinateSource"] = coordinates.source;
-            entry["coordinateRefId"]  = coordinateRef ? nlohmann::json(formIdStr(coordinateRef->GetFormID())) : nullptr;
+            entry["coordinateRefId"]  = coordinateRef ? nlohmann::json(Common::FormIdToString(coordinateRef->GetFormID())) : nullptr;
             entry["coordinateRefName"] = coordinateRef ? RefDisplayName(coordinateRef) : std::string();
             if (coordinates.location) {
                 const char* locationEditorId = coordinates.location->GetFormEditorID();
                 const char* locationName = coordinates.location->GetFullName();
-                entry["locationFormId"]  = formIdStr(coordinates.location->GetFormID());
+                entry["locationFormId"]  = Common::FormIdToString(coordinates.location->GetFormID());
                 entry["locationEditorId"] = locationEditorId ? std::string(locationEditorId) : std::string();
                 entry["locationName"]     = locationName ? std::string(locationName) : std::string();
             } else {
@@ -2240,45 +1553,9 @@ namespace PlayerReader
             WriteReferenceLocalSpatialJson(entry, ref);
             WriteReferenceSpatialJson(entry, coordinateRef);
 
-            const std::string coordinateRefId = coordinateRef ? formIdStr(coordinateRef->GetFormID()) : "null";
-            const float mapX = coordinateRef ? coordinateRef->GetPositionX() : 0.0f;
-            const float mapY = coordinateRef ? coordinateRef->GetPositionY() : 0.0f;
-            const float mapZ = coordinateRef ? coordinateRef->GetPositionZ() : 0.0f;
-            logger::debug("[Map::Markers::Quests] emit quest='{}' (type={}, formId={}) obj#{} alias={} ref={} '{}' local=({}, {}, {}) coordRef={} source={} map=({}, {}, {})",
-                          questEditorId, std::string(QuestTypeName(quest->GetType())),
-                          formIdStr(quest->GetFormID()), objective->index, aliasID,
-                          formIdStr(ref->GetFormID()), entry["name"].get<std::string>(),
-                          ref->GetPositionX(), ref->GetPositionY(), ref->GetPositionZ(),
-                          coordinateRefId, coordinates.source, mapX, mapY, mapZ);
-
             result.push_back(std::move(entry));
             return true;
         };
-
-        // For SE/AE, PLAYER_RUNTIME_DATA::questTargets contains the engine's
-        // current quest-target candidates. QuestFlag::kActive is the journal
-        // tracking bit set by the user via SetActiveQuest / the journal UI; use
-        // both so displayed-but-untracked objectives don't leak into clients.
-        // VR has a different runtime layout, so it keeps a best-effort static
-        // fallback gated by that quest flag.
-        //
-        //  1. PLAYER_RUNTIME_DATA::questTargets — a runtime BSTHashMap keyed
-        //     by TESQuest*; the values are BSTArrays of TESQuestTarget* that
-        //     the engine itself uses to draw compass arrows / quest-target
-        //     icons.
-        //
-        //  2. PLAYER_RUNTIME_DATA::objectives — a BSTArray of
-        //     BGSInstancedQuestObjective. Tells us which objectives are in
-        //     the kDisplayed runtime state for the current playthrough. We only
-        //     query it to find the objective instance ID for text resolution.
-        //
-        //  3. Static fallback: VR only, because we don't translate its quest
-        //     target runtime layout yet.
-        //
-        // PLAYER_RUNTIME_DATA fields are not exposed as struct members in
-        // multi-targeting builds; we resolve by absolute offsets.
-        //   objectives    : SE 0x580, AE 1.6.629+ 0x588
-        //   questTargets  : SE 0x598, AE 1.6.629+ 0x5A0
 
         std::size_t fromQuestTargets   = 0;
         std::size_t fromStaticFallback = 0;
@@ -2303,11 +1580,6 @@ namespace PlayerReader
                     if (!target)
                         continue;
 
-                    // We need an objective for the entry's index/displayText,
-                    // but questTargets has only (quest, target) and target
-                    // carries no objective back-pointer. Walk the quest's
-                    // objectives and pick the one whose `targets[]` contains
-                    // this target pointer.
                     auto* matchedObj = FindObjectiveForTarget(quest, target);
                     if (!matchedObj)
                         continue;
@@ -2483,120 +1755,6 @@ namespace PlayerReader
             { "staticDisplayedObjectives", out["staticDisplayedObjectives"].size() },
             { "markers", out["markers"].size() }
         };
-        return out;
-    }
-
-    nlohmann::json ReadGameStatus()
-    {
-        nlohmann::json out = {
-            { "paused",           false },
-            { "loading",          false },
-            { "inMainMenu",       false },
-            { "inDialogue",       false },
-            { "inCombat",         false },
-            { "dead",             false },
-            { "controlsEnabled",  true  },
-            { "canAct",           false },
-        };
-
-        bool paused     = false;
-        bool loading    = false;
-        bool inMainMenu = false;
-        bool inDialogue = false;
-
-        if (auto* ui = RE::UI::GetSingleton())
-        {
-            paused     = ui->GameIsPaused();
-            // NOTE: official menu names contain a space:
-            // LoadingMenu::MENU_NAME = "Loading Menu", MainMenu::MENU_NAME = "Main Menu",
-            // DialogueMenu::MENU_NAME = "Dialogue Menu".
-            loading    = ui->IsMenuOpen(RE::LoadingMenu::MENU_NAME);
-            inMainMenu = ui->IsMenuOpen(RE::MainMenu::MENU_NAME);
-            inDialogue = ui->IsMenuOpen(RE::DialogueMenu::MENU_NAME);
-
-            // Quick interior door transitions don't open the full LoadingMenu,
-            // they fade through FaderMenu instead. Treat that as loading too.
-            if (!loading && ui->IsMenuOpen("Fader Menu"))
-                loading = true;
-        }
-
-        // MenuTopicManager.speaker / lastSpeaker remain set while a conversation
-        // is active even after the dialogue menu has been torn down (e.g. the
-        // NPC is still speaking the last line). Treat any valid speaker handle
-        // as "in dialogue".
-        if (auto* mtm = RE::MenuTopicManager::GetSingleton())
-        {
-            if (mtm->speaker || mtm->lastSpeaker)
-                inDialogue = true;
-        }
-
-        bool inCombat        = false;
-        bool dead            = false;
-        bool inKillMove      = false;
-        bool inFurniture     = false;
-        bool inForcedAnim    = false;  // ragdoll, knock-down, sit/sleep, mount, getting on/off mount
-
-        if (auto* player = RE::PlayerCharacter::GetSingleton())
-        {
-            inCombat = player->IsInCombat();
-
-            // Use ActorState life-state so we catch the entire death sequence
-            // (dying animation -> ragdoll -> "you died" load screen), not just
-            // the final state.
-            switch (player->AsActorState()->GetLifeState())
-            {
-            case RE::ACTOR_LIFE_STATE::kAlive:
-                dead = false;
-                break;
-            default:
-                // kDying, kDead, kUnconcious, kReanimate, kRecycle,
-                // kRestrained, kEssentialDown, kBleedout
-                dead = true;
-                break;
-            }
-
-            inKillMove = player->IsInKillMove();
-
-            // Crafting (forge, workbench, alchemy, enchanting, cooking),
-            // sitting, sleeping, wait-menu — all set an occupied-furniture
-            // reference on the actor.
-            if (player->GetOccupiedFurniture())
-                inFurniture = true;
-
-            // Sit / sleep / mount transitions disable normal controls even
-            // while no UI menu is open (animation in progress).
-            const auto sitSleep = player->AsActorState()->GetSitSleepState();
-            if (sitSleep != RE::SIT_SLEEP_STATE::kNormal)
-                inForcedAnim = true;
-
-            // Knockdown / stagger / ragdoll
-            if (player->AsActorState()->GetKnockState() != RE::KNOCK_STATE_ENUM::kNormal)
-                inForcedAnim = true;
-        }
-
-        // PlayerControls::blockPlayerInput is set in cinematics / scripted
-        // sequences / cart intro / forced first-person scenes. Combined with
-        // the actor-state checks above, this gives a reliable
-        // "the engine has taken control away from the player" signal.
-        bool inputBlocked = false;
-        if (auto* pc = RE::PlayerControls::GetSingleton())
-        {
-            inputBlocked = pc->blockPlayerInput;
-        }
-
-        bool controlsEnabled =
-            !inputBlocked && !inKillMove && !inFurniture && !inForcedAnim && !dead;
-
-        out["paused"]          = paused;
-        out["loading"]         = loading;
-        out["inMainMenu"]      = inMainMenu;
-        out["inDialogue"]      = inDialogue;
-        out["inCombat"]        = inCombat;
-        out["dead"]            = dead;
-        out["controlsEnabled"] = controlsEnabled;
-        out["canAct"]          = !paused && !loading && !inMainMenu &&
-                                 !inDialogue && !dead && controlsEnabled;
-
         return out;
     }
 }

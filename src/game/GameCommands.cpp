@@ -1,6 +1,7 @@
-#include "GameWriter.h"
+#include "GameCommands.h"
+#include "MapMarkers.h"
 #include "../Utils.h"
-#include "PlayerReader.h"
+#include "PlayerPosition.h"
 #include "QuestReader.h"
 
 #include <algorithm>
@@ -13,7 +14,7 @@
 
 namespace logger = SKSE::log;
 
-namespace GameWriter
+namespace GameCommands
 {
     // ─── Helpers ──────────────────────────────────────────────────────────
 
@@ -1167,7 +1168,7 @@ namespace GameWriter
 
     CommandResult SetPlayerMarker(float a_x, float a_y, float a_z)
     {
-        auto* ref = PlayerReader::GetPlayerMarkerRef();
+        auto* ref = PlayerPosition::GetPlayerMarkerRef();
         if (!ref) {
             return {false,
                     "Player marker ref not initialized — open the world map at least once before placing a marker"};
@@ -1187,7 +1188,7 @@ namespace GameWriter
 
         CommandResult result;
         result.success = true;
-        result.data    = PlayerReader::BuildPlayerMarkerJson(ref);
+        result.data    = PlayerPosition::BuildPlayerMarkerJson(ref);
         PrintConsole(std::format("[WS] Player marker set to ({:.1f}, {:.1f}, {:.1f})",
                                  a_x, a_y, a_z));
         return result;
@@ -1195,13 +1196,13 @@ namespace GameWriter
 
     CommandResult ClearPlayerMarker()
     {
-        auto* ref = PlayerReader::GetPlayerMarkerRef();
+        auto* ref = PlayerPosition::GetPlayerMarkerRef();
         if (!ref) {
             // No ref means there is no marker to clear — return the
             // canonical "not set" payload as a successful no-op.
             CommandResult result;
             result.success = true;
-            result.data    = PlayerReader::BuildPlayerMarkerJson(nullptr);
+            result.data    = PlayerPosition::BuildPlayerMarkerJson(nullptr);
             return result;
         }
 
@@ -1213,7 +1214,7 @@ namespace GameWriter
 
         CommandResult result;
         result.success = true;
-        result.data    = PlayerReader::BuildPlayerMarkerJson(ref);
+        result.data    = PlayerPosition::BuildPlayerMarkerJson(ref);
         PrintConsole("[WS] Player marker cleared");
         return result;
     }
@@ -1221,7 +1222,7 @@ namespace GameWriter
     // ─── Fast travel ──────────────────────────────────────────────
 
     // Build a JSON payload describing a map-marker ref (matches the per-entry
-    // shape produced by PlayerReader::ReadMapMarkers).
+    // shape produced by MapMarkers::ReadMapMarkers).
     static nlohmann::json BuildMarkerPayload(RE::TESObjectREFR* ref, RE::MapMarkerData* data)
     {
         using Flag = RE::MapMarkerData::Flag;

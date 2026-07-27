@@ -1,6 +1,6 @@
 #include "EventBus.h"
 
-#include "PlayerReader.h"
+#include "QuestMarkers.h"
 
 #include "../../logger.h"
 
@@ -112,7 +112,7 @@ namespace EventBus
 
                 if (event->menuName == RE::JournalMenu::MENU_NAME) {
                     if (!event->opening)
-                        PlayerReader::CaptureQuestJournalState();
+                        QuestMarkers::CaptureQuestJournalState();
                     logger::trace("[EventBus] observed JournalMenu {}", event->opening ? "open" : "close");
                     return RE::BSEventNotifyControl::kContinue;
                 }
@@ -193,7 +193,7 @@ namespace EventBus
                 RE::BSTEventSource<RE::TESLoadGameEvent>*) override
             {
                 // A new save invalidates every cached value.
-                PlayerReader::ResetQuestJournalState();
+                QuestMarkers::ResetQuestJournalState();
                 BumpAll("TESLoadGame");
                 return RE::BSEventNotifyControl::kContinue;
             }
