@@ -1,5 +1,6 @@
 #include "QuestReader.h"
 #include "PlayerStats.h"
+#include "Common.h"
 #include "QuestText.h"
 
 #include <algorithm>
@@ -48,13 +49,6 @@ namespace QuestReader
         };
 
         std::unordered_map<std::string, LocalizedStringFile> g_localizedStringFiles;
-
-        std::string Common::ToLowerAscii(std::string value)
-        {
-            for (char& ch : value)
-                ch = static_cast<char>(std::tolower(static_cast<unsigned char>(ch)));
-            return value;
-        }
 
         std::string StringFileStem(std::string_view filename)
         {

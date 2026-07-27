@@ -44,47 +44,6 @@ namespace MagicReader
         return (name && *name != '\0') ? name : fallback;
     }
 
-    // ─── GameSetting (GMST) helpers ───────────────────────────────────────
-
-    // Looks up a GameSetting string by key (e.g. "sSkillHeavyarmor").
-    // Returns an empty string when the key does not exist or is not a string setting.
-    static std::string Common::GetGMSTString(const char* key)
-    {
-        auto* gmst = RE::GameSettingCollection::GetSingleton();
-        if (!gmst)
-            return {};
-        auto* setting = gmst->GetSetting(key);
-        if (!setting)
-            return {};
-        const char* str = setting->GetString();
-        return (str && *str != '\0') ? str : "";
-    }
-
-    // ─── Interface-string helpers ─────────────────────────────────────────
-
-    // Convert a wide (UTF-16) string to UTF-8.
-    // Handles the full Basic Multilingual Plane (U+0000..U+FFFF), which covers
-    // all practical UI scripts: Latin, Cyrillic, CJK, etc.
-    static std::string Common::WcsToUtf8(const wchar_t* ws)
-    {
-        if (!ws) return {};
-        std::string out;
-        for (; *ws; ++ws) {
-            const auto c = static_cast<unsigned>(*ws);
-            if (c < 0x80u) {
-                out += static_cast<char>(c);
-            } else if (c < 0x800u) {
-                out += static_cast<char>(0xC0u | (c >> 6u));
-                out += static_cast<char>(0x80u | (c & 0x3Fu));
-            } else {
-                out += static_cast<char>(0xE0u | (c >> 12u));
-                out += static_cast<char>(0x80u | ((c >> 6u) & 0x3Fu));
-                out += static_cast<char>(0x80u | (c & 0x3Fu));
-            }
-        }
-        return out;
-    }
-
     // Look up a single key in the Scaleform GFx translation table.
     // Translation tables are populated from all loaded Interface/Translations/*.txt
     // files (vanilla Skyrim, SkyUI, and any other mod that ships a translation file).

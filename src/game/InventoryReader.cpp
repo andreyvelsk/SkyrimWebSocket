@@ -72,20 +72,6 @@ namespace InventoryReader
         }
     }
 
-    // Looks up a GameSetting string by key (e.g. "sSkillHeavyarmor").
-    // Returns an empty string when the key does not exist or is not a string setting.
-    static std::string Common::GetGMSTString(const char* key)
-    {
-        auto* gmst = RE::GameSettingCollection::GetSingleton();
-        if (!gmst)
-            return "";
-        auto* setting = gmst->GetSetting(key);
-        if (!setting)
-            return "";
-        const char* str = setting->GetString();
-        return str ? str : "";
-    }
-
     // Returns true if at least one ExtraDataList on the entry carries an ownership
     // record.  In Skyrim an item is considered stolen when it has ExtraOwnership data
     // (set when the item is picked up from a non-player owner).
