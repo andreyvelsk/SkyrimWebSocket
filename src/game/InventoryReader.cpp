@@ -1,4 +1,5 @@
 #include "InventoryReader.h"
+#include "Common.h"
 #include "../Utils.h"
 
 #include <array>
@@ -69,20 +70,6 @@ namespace InventoryReader
             case RE::SOUL_LEVEL::kGrand:   return "Grand";
             default:                       return "Unknown";
         }
-    }
-
-    // Looks up a GameSetting string by key (e.g. "sSkillHeavyarmor").
-    // Returns an empty string when the key does not exist or is not a string setting.
-    static std::string GetGMSTString(const char* key)
-    {
-        auto* gmst = RE::GameSettingCollection::GetSingleton();
-        if (!gmst)
-            return "";
-        auto* setting = gmst->GetSetting(key);
-        if (!setting)
-            return "";
-        const char* str = setting->GetString();
-        return str ? str : "";
     }
 
     // Returns true if at least one ExtraDataList on the entry carries an ownership
@@ -321,7 +308,7 @@ namespace InventoryReader
             std::string displayName;
             auto gmstIt = s_categoryGMSTKeys.find(catId);
             if (gmstIt != s_categoryGMSTKeys.end() && gmstIt->second[0] != '\0')
-                displayName = GetGMSTString(gmstIt->second);
+                displayName = Common::GetGMSTString(gmstIt->second);
             if (displayName.empty())
                 displayName = catId;
 
@@ -488,11 +475,11 @@ namespace InventoryReader
         //   RU: "Тяжелая броня" / "Легкая броня"
         // When a GMST is not found the stable armorTypeId value is used as fallback.
         const std::string localizedHeavy   = [] {
-            auto s = GetGMSTString("sSkillHeavyarmor");
+            auto s = Common::GetGMSTString("sSkillHeavyarmor");
             return s.empty() ? "Heavy" : s;
         }();
         const std::string localizedLight   = [] {
-            auto s = GetGMSTString("sSkillLightarmor");
+            auto s = Common::GetGMSTString("sSkillLightarmor");
             return s.empty() ? "Light" : s;
         }();
         // No vanilla GMST exists for "Clothing" — keep the stable ID as display name.

@@ -1,5 +1,6 @@
 #include "QuestReader.h"
-#include "PlayerReader.h"
+#include "PlayerStats.h"
+#include "Common.h"
 #include "QuestText.h"
 
 #include <algorithm>
@@ -49,13 +50,6 @@ namespace QuestReader
 
         std::unordered_map<std::string, LocalizedStringFile> g_localizedStringFiles;
 
-        std::string ToLowerAscii(std::string value)
-        {
-            for (char& ch : value)
-                ch = static_cast<char>(std::tolower(static_cast<unsigned char>(ch)));
-            return value;
-        }
-
         std::string StringFileStem(std::string_view filename)
         {
             const auto slash = filename.find_last_of("/\\");
@@ -71,13 +65,13 @@ namespace QuestReader
 
         std::string CurrentLanguage()
         {
-            auto languageJson = PlayerReader::ReadLanguage();
+            auto languageJson = PlayerStats::ReadLanguage();
             if (!languageJson.is_string())
                 return "english";
             auto language = languageJson.get<std::string>();
             if (language.empty())
                 return "english";
-            return ToLowerAscii(std::move(language));
+            return Common::ToLowerAscii(std::move(language));
         }
 
         template <class T>

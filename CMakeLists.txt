@@ -40,14 +40,19 @@ find_package(Boost REQUIRED COMPONENTS system)
 find_package(nlohmann_json CONFIG REQUIRED)
 add_commonlibsse_plugin(${PROJECT_NAME} SOURCES
     plugin.cpp
+    src/game/Common.cpp
     src/game/EventBus.cpp
     src/game/FieldRegistry.cpp
+    src/game/GameCommands.cpp
     src/game/GameReader.cpp
-    src/game/GameWriter.cpp
+    src/game/GameStatus.cpp
     src/game/HotkeyReader.cpp
     src/game/InventoryReader.cpp
     src/game/MagicReader.cpp
-    src/game/PlayerReader.cpp
+    src/game/MapMarkers.cpp
+    src/game/PlayerPosition.cpp
+    src/game/PlayerStats.cpp
+    src/game/QuestMarkers.cpp
     src/game/QuestReader.cpp
     src/game/QuestText.cpp
     src/server/MessageRouter.cpp
