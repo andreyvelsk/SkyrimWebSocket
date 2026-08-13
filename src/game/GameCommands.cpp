@@ -447,31 +447,69 @@ namespace GameCommands
         return {true, ""};
     }
 
+    // Returns the inventory (ICON) texture for any item form that carries one.
+    // Most item types inherit RE::TESIcon directly (weapon, potion, ingredient,
+    // book, ammo, misc/key/soul gem); armor instead stores two (male/female)
+    // icons in TESBipedModelForm::inventoryIcons.
+    static const RE::TESIcon* GetInventoryIcon(RE::TESBoundObject* item)
+    {
+        switch (item->GetFormType()) {
+            case RE::FormType::Weapon:
+                return static_cast<const RE::TESIcon*>(item->As<RE::TESObjectWEAP>());
+            case RE::FormType::Armor:
+                return &item->As<RE::TESObjectARMO>()->inventoryIcons[RE::TESBipedModelForm::Sexes::kMale];
+            case RE::FormType::AlchemyItem:
+                return static_cast<const RE::TESIcon*>(item->As<RE::AlchemyItem>());
+            case RE::FormType::Ingredient:
+                return static_cast<const RE::TESIcon*>(item->As<RE::IngredientItem>());
+            case RE::FormType::Book:
+                return static_cast<const RE::TESIcon*>(item->As<RE::TESObjectBOOK>());
+            case RE::FormType::Ammo:
+                return static_cast<const RE::TESIcon*>(item->As<RE::TESAmmo>());
+            case RE::FormType::Misc:
+            case RE::FormType::KeyMaster:
+            case RE::FormType::SoulGem:
+                return static_cast<const RE::TESIcon*>(item->As<RE::TESObjectMISC>());
+            default:
+                return nullptr;
+        }
+    }
+
     CommandResult GetItemPreview(RE::FormID formId)
     {
         auto* form = RE::TESForm::LookupByID<RE::TESBoundObject>(formId);
         if (!form)
             return { false, "Form not found" };
 
-        RE::BSString pathBuf;
-        const char*  iconPath = nullptr;
+        logger::debug("item_preview 0x{:08X} ('{}') formType={}",
+                      formId,
+                      form->GetName() ? form->GetName() : "<unnamed>",
+                      static_cast<int>(form->GetFormType()));
 
-        if (auto* weap = form->As<RE::TESObjectWEAP>()) {
-            // TESObjectWEAP inherits TESIcon directly, so the ICON subrecord
-            // path is reachable through the TESIcon base.
-            iconPath = static_cast<const RE::TESIcon*>(weap)->GetAsNormalFile(pathBuf);
-        } else if (auto* armor = form->As<RE::TESObjectARMO>()) {
-            // TESObjectARMO inherits TESBipedModelForm, which stores the male
-            // and female inventory icons (usually identical).
-            iconPath = armor->inventoryIcons[RE::TESBipedModelForm::Sexes::kMale].GetAsNormalFile(pathBuf);
+        const RE::TESIcon* icon = GetInventoryIcon(form);
+        if (!icon) {
+            logger::debug("item_preview 0x{:08X}: form type carries no 2D inventory icon", formId);
+            return { false, "Item has no inventory icon" };
         }
 
+        RE::BSString pathBuf;
+        const char*  iconPath = icon->GetAsNormalFile(pathBuf);
+        logger::debug("item_preview 0x{:08X}: textureName='{}' resolvedPath='{}'",
+                      formId,
+                      icon->textureName.c_str(),
+                      (iconPath && iconPath[0]) ? iconPath : "<empty>");
+
         if (!iconPath || iconPath[0] == '\0')
-            return { false, "Item has no inventory icon" };
+            return { false, "Item has no inventory icon (empty ICON subrecord)" };
 
         const auto preview = TextureConverter::DdsToPngBase64(iconPath);
-        if (!preview.success)
+        if (!preview.success) {
+            logger::warn("item_preview 0x{:08X}: {}", formId, preview.error);
             return { false, preview.error };
+        }
+
+        logger::debug("item_preview 0x{:08X}: encoded {}x{} PNG ({} base64 chars)",
+                      formId, preview.width, preview.height, preview.imageBase64.size());
 
         nlohmann::json data;
         data["mimeType"]    = preview.mimeType;

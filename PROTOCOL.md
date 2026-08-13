@@ -296,9 +296,9 @@ has a **transparent background** and can be shown directly in a web client via
 
 | Field | Required | Default | Description |
 |---|---|---|---|
-| `formId` | **yes** | — | Hex form ID of the item. Must resolve to a weapon or apparel form that carries an inventory icon. |
+| `formId` | **yes** | — | Hex form ID of the item. Must resolve to an item form that carries a 2D inventory icon. |
 
-**Applies to:** Weapons, Apparel.
+**Applies to:** Weapons, Apparel, Potions, Food, Ingredients, Books, Ammo, Misc, Keys, Soul Gems.
 
 **Response** — the `data` object of `commandResult`:
 
