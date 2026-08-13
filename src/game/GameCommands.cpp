@@ -1375,22 +1375,51 @@ namespace GameCommands
         if (command.empty())
             return {false, "Console command cannot be empty"};
 
-        // Begin capturing all ConsoleLog::VPrint output produced by this command.
+        // Diagnostic: inspect ConsoleLog state BEFORE command execution.
+        auto* clog = RE::ConsoleLog::GetSingleton();
+        nlohmann::json diag;
+
+        diag["clog_ptr"]     = clog ? "valid" : "null";
+        diag["vprint_hook"]  = "installed (write_branch<5>)";
+        diag["hook_active"]  = "Hook_VPrint checks s_capturing";
+
+        if (clog) {
+            diag["lastMessage_before"] = clog->lastMessage[0] != '\0'
+                                              ? std::string(clog->lastMessage)
+                                              : "(empty)";
+            // Also inspect the BSString buffer at offset 0x408
+            auto& buf = clog->buffer;
+            diag["buffer_is_empty"] = buf.empty();
+            if (!buf.empty())
+                diag["buffer_preview"] = std::string(buf.c_str()).substr(0, 200);
+        }
+
+        // Clear lastMessage so we can detect if the command wrote to it.
+        if (clog)
+            clog->lastMessage[0] = '\0';
+
+        // Start VPrint capture.
         ConsoleHook::BeginCapture();
 
         RE::Console::ExecuteCommand(command.c_str());
 
-        // Retrieve everything the command printed.
         auto captured = ConsoleHook::EndCapture();
 
-        CommandResult result;
-        result.success         = true;
-        result.data["command"] = command;
+        diag["command"] = command;
 
+        if (clog) {
+            diag["lastMessage_after"] = clog->lastMessage[0] != '\0'
+                                             ? std::string(clog->lastMessage)
+                                             : "(empty)";
+        }
+
+        diag["captured_lines"] = captured ? (int)captured->size() : -1;
         if (captured && !captured->empty())
-            result.data["output"] = std::move(*captured);
-        else
-            result.data["output"] = nullptr;
+            diag["captured_preview"] = captured->substr(0, 200);
+
+        CommandResult result;
+        result.success = true;
+        result.data    = std::move(diag);
 
         return result;
     }
