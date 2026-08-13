@@ -37,6 +37,13 @@ namespace GameCommands
     // Must be called on the game thread.
     CommandResult DropItem(RE::FormID formId, int count);
 
+    // Produce a base64 PNG preview of an item's inventory icon (weapons and
+    // apparel). The PNG has a transparent background. Returns:
+    //   { "mimeType": "image/png", "width": int, "height": int, "imageBase64": string }
+    // Fails for item types that carry no inventory icon.
+    // Must be called on the game thread.
+    CommandResult GetItemPreview(RE::FormID formId);
+
     // Toggle favorite status on an item.
     // Must be called on the game thread.
     CommandResult FavoriteItem(RE::FormID formId);

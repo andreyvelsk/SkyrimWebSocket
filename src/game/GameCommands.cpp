@@ -1,4 +1,5 @@
 #include "GameCommands.h"
+#include "TextureConverter.h"
 #include "MapMarkers.h"
 #include "../Utils.h"
 #include "PlayerPosition.h"
@@ -444,6 +445,40 @@ namespace GameCommands
         logger::debug("drop 0x{:08X} ('{}') count={}", formId, form->GetName(), count);
         PrintConsole("[WS] Drop " + std::to_string(count) + "x " + std::string(form->GetName()));
         return {true, ""};
+    }
+
+    CommandResult GetItemPreview(RE::FormID formId)
+    {
+        auto* form = RE::TESForm::LookupByID<RE::TESBoundObject>(formId);
+        if (!form)
+            return { false, "Form not found" };
+
+        RE::BSString pathBuf;
+        const char*  iconPath = nullptr;
+
+        if (auto* weap = form->As<RE::TESObjectWEAP>()) {
+            // TESObjectWEAP inherits TESIcon directly, so the ICON subrecord
+            // path is reachable through the TESIcon base.
+            iconPath = static_cast<const RE::TESIcon*>(weap)->GetAsNormalFile(pathBuf);
+        } else if (auto* armor = form->As<RE::TESObjectARMO>()) {
+            // TESObjectARMO inherits TESBipedModelForm, which stores the male
+            // and female inventory icons (usually identical).
+            iconPath = armor->inventoryIcons[RE::TESBipedModelForm::Sexes::kMale].GetAsNormalFile(pathBuf);
+        }
+
+        if (!iconPath || iconPath[0] == '\0')
+            return { false, "Item has no inventory icon" };
+
+        const auto preview = TextureConverter::DdsToPngBase64(iconPath);
+        if (!preview.success)
+            return { false, preview.error };
+
+        nlohmann::json data;
+        data["mimeType"]    = preview.mimeType;
+        data["width"]       = preview.width;
+        data["height"]      = preview.height;
+        data["imageBase64"] = preview.imageBase64;
+        return { true, "", std::move(data) };
     }
 
     CommandResult FavoriteItem(RE::FormID formId)

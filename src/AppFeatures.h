@@ -16,6 +16,7 @@ inline constexpr std::array kAppFeatures = {
     std::string_view{"player.hotkeys"},
     std::string_view{"player.quests"},
     std::string_view{"inventory"},
+    std::string_view{"inventory.preview"},
     std::string_view{"magic"},
     std::string_view{"map"},
 };

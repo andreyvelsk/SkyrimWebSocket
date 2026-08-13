@@ -285,6 +285,8 @@ namespace MessageRouter
                 result = GameCommands::DropItem(formId, count);
             else if (command == "favorite")
                 result = GameCommands::FavoriteItem(formId);
+            else if (command == "item_preview")
+                result = GameCommands::GetItemPreview(formId);
             else if (command == "equip_spell")
                 result = GameCommands::EquipSpell(formId, hand);
             else if (command == "unequip_spell")

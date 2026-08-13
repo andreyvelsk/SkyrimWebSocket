@@ -137,6 +137,7 @@ below.
 | `read_book` | Open and read a book from inventory. | [↓](#read_book) |
 | `drop` | Drop one or more inventory items onto the ground. | [↓](#drop) |
 | `favorite` | Toggle the favorite flag on an inventory item. | [↓](#favorite) |
+| `item_preview` | Produce a base64 PNG preview of an item's inventory icon. | [↓](#item_preview) |
 | `equip_spell` | Equip a known spell to a hand. | [↓](#equip_spell) |
 | `unequip_spell` | Unequip a spell from a hand. | [↓](#unequip_spell) |
 | `favorite_spell` | Toggle the favorite flag on a known spell or power. | [↓](#favorite_spell) |
@@ -282,6 +283,53 @@ Toggles the favorite flag on an inventory item.
   "id": "fav-sword",
   "command": "favorite",
   "formId": "0x00012EB7"
+}
+```
+
+---
+
+#### `item_preview`
+
+Produces a base64-encoded PNG preview of an item's inventory icon. The image
+has a **transparent background** and can be shown directly in a web client via
+`<img src="data:image/png;base64,...">`.
+
+| Field | Required | Default | Description |
+|---|---|---|---|
+| `formId` | **yes** | — | Hex form ID of the item. Must resolve to a weapon or apparel form that carries an inventory icon. |
+
+**Applies to:** Weapons, Apparel.
+
+**Response** — the `data` object of `commandResult`:
+
+| Field | Type | Description |
+|---|---|---|
+| `mimeType` | string | Always `"image/png"`. |
+| `width` | integer | Image width in pixels. |
+| `height` | integer | Image height in pixels. |
+| `imageBase64` | string | Base64-encoded PNG bytes (no `data:` URI prefix). |
+
+```json
+{
+  "type": "command",
+  "id": "prev-sword",
+  "command": "item_preview",
+  "formId": "0x00012EB7"
+}
+```
+
+```jsonc
+// Success response:
+{
+  "type": "commandResult",
+  "id": "prev-sword",
+  "success": true,
+  "data": {
+    "mimeType": "image/png",
+    "width": 64,
+    "height": 64,
+    "imageBase64": "iVBORw0KGgo..."
+  }
 }
 ```
 
