@@ -617,7 +617,7 @@ Useful for:
   "success": true,
   "data": {
     "command": "player.showinventory",
-    "output": "Iron Sword (00012EB7) (100, 100.00%) - 1\r\n..."
+    "output": "Iron Sword (00012EB7) (100, 100.00%) - 1\nSteel Dagger (00013CE6) (100, 100.00%) - 1"
   }
 }
 ```
@@ -625,14 +625,15 @@ Useful for:
 | Response field | Type | Description |
 |---|---|---|
 | `data.command` | string | Echo of the executed console command text. |
-| `data.output` | string or null | Text printed by the console in response to the command. `null` when the command produced no output (e.g. `tgm`). Limited to the last ~1024 characters — the ConsoleLog buffer size. |
+| `data.output` | string or null | All text printed to the console by the command, joined with `\n`. `null` when the command produced no output (e.g. `tgm`, `tcl`). |
 
-> **Note:** Multi-line console output is returned with `\r\n` line separators
-> as stored by the engine. Commands that open UI panels (e.g. `showracemenu`,
-> `showinventory`) execute synchronously and the panel may remain open after
-> the response is sent; close it with `console` again before issuing further
-> commands. For machine-readable inventory diagnostics, prefer
-> `Inventory::Debug`.
+> **Implementation note:** The plugin installs a hook on `ConsoleLog::VPrint`
+> at startup. Every line printed to the in-game console is intercepted and
+> accumulated into a per-command buffer. This captures output from all console
+> commands, including multi-line output from `player.showinventory`, `help`,
+> etc. The console UI still shows the output normally.
+>
+> For machine-readable inventory diagnostics, prefer `Inventory::Debug`.
 
 ---
 

@@ -1,4 +1,5 @@
 #include "GameCommands.h"
+#include "ConsoleHook.h"
 #include "MapMarkers.h"
 #include "../Utils.h"
 #include "PlayerPosition.h"
@@ -1374,22 +1375,20 @@ namespace GameCommands
         if (command.empty())
             return {false, "Console command cannot be empty"};
 
-        // Clear the ConsoleLog buffer before executing so lastMessage will
-        // only contain output produced by our command.
-        auto* clog = RE::ConsoleLog::GetSingleton();
-        if (clog) {
-            clog->lastMessage[0] = '\0';
-        }
+        // Begin capturing all ConsoleLog::VPrint output produced by this command.
+        ConsoleHook::BeginCapture();
 
         RE::Console::ExecuteCommand(command.c_str());
 
+        // Retrieve everything the command printed.
+        auto captured = ConsoleHook::EndCapture();
+
         CommandResult result;
-        result.success        = true;
+        result.success         = true;
         result.data["command"] = command;
 
-        // Capture whatever the console printed into lastMessage.
-        if (clog && clog->lastMessage[0] != '\0')
-            result.data["output"] = std::string(clog->lastMessage);
+        if (captured && !captured->empty())
+            result.data["output"] = std::move(*captured);
         else
             result.data["output"] = nullptr;
 
