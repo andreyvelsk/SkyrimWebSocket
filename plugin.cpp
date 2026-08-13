@@ -1,4 +1,6 @@
 #include "logger.h"
+#include "src/Network.h"
+#include "src/Utils.h"
 #include "src/game/EventBus.h"
 #include "src/server/WsServer.h"
 
@@ -8,15 +10,14 @@
 #include <thread>
 #include <vector>
 
-static constexpr std::uint16_t DEFAULT_PORT    = 8765;
-static constexpr const char*   DEFAULT_ADDRESS = "127.0.0.1";
+static constexpr std::uint16_t DEFAULT_PORT = 8765;
 
 namespace asio = boost::asio;
 using     tcp  = asio::ip::tcp;
 
-static asio::io_context                                       g_ioc;
-static std::unique_ptr<WsServer>                              g_server;
-static std::thread                                            g_ioThread;
+static asio::io_context                          g_ioc;
+static std::vector<std::unique_ptr<WsServer>>    g_servers;
+static std::thread                               g_ioThread;
 // Keeps g_ioc.run() alive even when there are no async operations scheduled.
 static std::unique_ptr<asio::executor_work_guard<
     asio::io_context::executor_type>>                         g_workGuard;
@@ -141,7 +142,7 @@ SKSEPluginLoad(const SKSE::LoadInterface* skse)
     // Field resolvers are responsible for returning null for fields that
     // require an actual in-game session (see FieldRegistry::IsInGame).
     SKSE::GetMessagingInterface()->RegisterListener([](SKSE::MessagingInterface::Message* msg) {
-        if (msg->type == SKSE::MessagingInterface::kDataLoaded && !g_server) {
+        if (msg->type == SKSE::MessagingInterface::kDataLoaded && g_servers.empty()) {
             // Wire up SKSE event sinks for the event-driven optimisation
             // layer.  Must run on the game thread — kDataLoaded is delivered
             // there.
@@ -149,24 +150,52 @@ SKSEPluginLoad(const SKSE::LoadInterface* skse)
 
             std::string iniPath = GetIniPath();
 
-            char addressBuf[64];
+            char addressBuf[256] = {};
             ::GetPrivateProfileStringA(
-                "Server", "ListenAddress", DEFAULT_ADDRESS,
+                "Server", "ListenAddress", "",
                 addressBuf, sizeof(addressBuf), iniPath.c_str());
 
             UINT port = ::GetPrivateProfileIntA("Server", "Port", DEFAULT_PORT, iniPath.c_str());
             if (port == 0 || port > 65535)
                 port = DEFAULT_PORT;
 
-            boost::system::error_code ec;
-            auto addr = asio::ip::make_address(addressBuf, ec);
-            if (ec)
-                addr = asio::ip::make_address(DEFAULT_ADDRESS);
+            // Empty or absent ListenAddress => bind to loopback plus every
+            // automatically detected IPv4 address of the local interfaces,
+            // so devices on the local subnets can connect by default.
+            std::vector<std::string> addresses;
+            if (addressBuf[0] != '\0') {
+                addresses.emplace_back(addressBuf);
+            } else {
+                addresses.emplace_back("127.0.0.1");
+                auto locals = EnumerateLocalIPv4Addresses();
+                addresses.insert(addresses.end(), locals.begin(), locals.end());
+            }
 
-            logger::debug("WS server starting on {}:{}", addressBuf, port);
+            logger::debug("WS server starting on port {}", port);
 
-            tcp::endpoint endpoint(addr, static_cast<std::uint16_t>(port));
-            g_server = std::make_unique<WsServer>(g_ioc, endpoint);
+            for (const auto& addrStr : addresses) {
+                boost::system::error_code ec;
+                auto addr = asio::ip::make_address(addrStr, ec);
+                if (ec) {
+                    logger::error("WS server: invalid listen address '{}': {}",
+                                  addrStr, ec.message());
+                    continue;
+                }
+
+                tcp::endpoint endpoint(addr, static_cast<std::uint16_t>(port));
+                auto server = std::make_unique<WsServer>(g_ioc, endpoint);
+                if (server->ok())
+                    g_servers.push_back(std::move(server));
+                // On failure WsServer already logged the reason.
+            }
+
+            if (g_servers.empty()) {
+                logger::error("WS server: failed to bind on any address");
+                SKSE::GetTaskInterface()->AddTask([] {
+                    PrintConsole("[WS] Server failed to bind on any address");
+                });
+                return;
+            }
 
             // Keep the io_context alive even if there are momentarily no
             // pending operations — avoids the run() thread exiting early.
