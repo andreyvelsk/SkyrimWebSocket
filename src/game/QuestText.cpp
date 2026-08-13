@@ -38,6 +38,46 @@ namespace QuestText
                 (head.size() == 5 || head[5] == '.');
         }
 
+        bool IsGlobalTokenHead(std::string_view head)
+        {
+            head = TrimAscii(head);
+            return head.size() >= 6 &&
+                EqualAsciiIgnoreCase(head.substr(0, 6), "Global") &&
+                (head.size() == 6 || head[6] == '.');
+        }
+
+        std::string ResolveGlobalValue(RE::TESQuest* quest, std::string_view editorID)
+        {
+            editorID = TrimAscii(editorID);
+            if (editorID.empty())
+                return {};
+
+            // First, try to find the global in the quest's textGlobals list
+            if (quest && quest->textGlobals) {
+                for (auto* global : *quest->textGlobals) {
+                    if (!global)
+                        continue;
+                    const char* globalEditorID = global->GetFormEditorID();
+                    if (globalEditorID && EqualAsciiIgnoreCase(globalEditorID, editorID)) {
+                        const float val = global->value;
+                        if (val == static_cast<float>(static_cast<std::int32_t>(val)))
+                            return std::to_string(static_cast<std::int32_t>(val));
+                        return std::to_string(val);
+                    }
+                }
+            }
+
+            // Fallback: lookup by editor ID globally
+            auto* global = RE::TESForm::LookupByEditorID<RE::TESGlobal>(std::string(editorID));
+            if (!global)
+                return {};
+
+            const float val = global->value;
+            if (val == static_cast<float>(static_cast<std::int32_t>(val)))
+                return std::to_string(static_cast<std::int32_t>(val));
+            return std::to_string(val);
+        }
+
         RE::BGSBaseAlias* FindAliasByName(RE::TESQuest* quest, std::string_view name)
         {
             name = TrimAscii(name);
@@ -289,6 +329,15 @@ namespace QuestText
                             out += replacement;
                             replaced = true;
                         }
+                    }
+                } else if (IsGlobalTokenHead(head)) {
+                    std::string replacement = ResolveGlobalValue(quest, name);
+                    if (!replacement.empty()) {
+                        logger::debug("[QuestText] resolved token '<{}>' -> '{}' (quest=0x{:08X})",
+                                      std::string(token), replacement,
+                                      quest ? quest->GetFormID() : 0);
+                        out += replacement;
+                        replaced = true;
                     }
                 }
             }
