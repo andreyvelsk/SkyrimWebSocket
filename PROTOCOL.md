@@ -615,13 +615,24 @@ Useful for:
   "type": "commandResult",
   "id": "console-1",
   "success": true,
-  "data": { "command": "player.showinventory" }
+  "data": {
+    "command": "player.showinventory",
+    "output": "Iron Sword (00012EB7) (100, 100.00%) - 1\r\n..."
+  }
 }
 ```
 
-> **Note:** The `ExecuteCommand` call is fire-and-forget — the plugin cannot
-> capture console output text. Results appear in the game's console overlay.
-> Use `Inventory::Debug` for machine-readable inventory diagnostics.
+| Response field | Type | Description |
+|---|---|---|
+| `data.command` | string | Echo of the executed console command text. |
+| `data.output` | string or null | Text printed by the console in response to the command. `null` when the command produced no output (e.g. `tgm`). Limited to the last ~1024 characters — the ConsoleLog buffer size. |
+
+> **Note:** Multi-line console output is returned with `\r\n` line separators
+> as stored by the engine. Commands that open UI panels (e.g. `showracemenu`,
+> `showinventory`) execute synchronously and the panel may remain open after
+> the response is sent; close it with `console` again before issuing further
+> commands. For machine-readable inventory diagnostics, prefer
+> `Inventory::Debug`.
 
 ---
 

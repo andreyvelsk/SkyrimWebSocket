@@ -1374,11 +1374,25 @@ namespace GameCommands
         if (command.empty())
             return {false, "Console command cannot be empty"};
 
+        // Clear the ConsoleLog buffer before executing so lastMessage will
+        // only contain output produced by our command.
+        auto* clog = RE::ConsoleLog::GetSingleton();
+        if (clog) {
+            clog->lastMessage[0] = '\0';
+        }
+
         RE::Console::ExecuteCommand(command.c_str());
 
         CommandResult result;
-        result.success = true;
+        result.success        = true;
         result.data["command"] = command;
+
+        // Capture whatever the console printed into lastMessage.
+        if (clog && clog->lastMessage[0] != '\0')
+            result.data["output"] = std::string(clog->lastMessage);
+        else
+            result.data["output"] = nullptr;
+
         return result;
     }
 }
