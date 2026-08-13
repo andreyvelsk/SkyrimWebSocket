@@ -1,4 +1,5 @@
 #include "logger.h"
+#include "src/game/ConsoleHook.h"
 #include "src/game/EventBus.h"
 #include "src/server/WsServer.h"
 
@@ -146,6 +147,10 @@ SKSEPluginLoad(const SKSE::LoadInterface* skse)
             // layer.  Must run on the game thread — kDataLoaded is delivered
             // there.
             EventBus::Install();
+
+            // Install the ConsoleLog::VPrint hook so the "console" WS command
+            // can capture output from any console command.
+            ConsoleHook::Install();
 
             std::string iniPath = GetIniPath();
 
