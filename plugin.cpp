@@ -171,6 +171,21 @@ SKSEPluginLoad(const SKSE::LoadInterface* skse)
                 addresses.insert(addresses.end(), locals.begin(), locals.end());
             }
 
+            // Build a human-readable list for the console / log.
+            {
+                std::string addrList;
+                for (size_t i = 0; i < addresses.size(); ++i) {
+                    if (i > 0) addrList += ", ";
+                    addrList += addresses[i];
+                }
+                logger::info("WS server: binding to {} address(es): [{}]",
+                             addresses.size(), addrList);
+                SKSE::GetTaskInterface()->AddTask(
+                    [msg = std::format("[WS] Binding to: {}", addrList)] {
+                        PrintConsole(msg);
+                    });
+            }
+
             logger::debug("WS server starting on port {}", port);
 
             for (const auto& addrStr : addresses) {
@@ -187,6 +202,15 @@ SKSEPluginLoad(const SKSE::LoadInterface* skse)
                 if (server->ok())
                     g_servers.push_back(std::move(server));
                 // On failure WsServer already logged the reason.
+            }
+
+            {
+                auto n = g_servers.size();
+                logger::info("WS server: successfully bound on {} address(es)", n);
+                SKSE::GetTaskInterface()->AddTask(
+                    [msg = std::format("[WS] Successfully bound on {} address(es)", n)] {
+                        PrintConsole(msg);
+                    });
             }
 
             if (g_servers.empty()) {
