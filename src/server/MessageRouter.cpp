@@ -246,6 +246,25 @@ namespace MessageRouter
             return;
         }
 
+        if (command == "texture_preview") {
+            if (!msg.contains("path") || !msg["path"].is_string()) {
+                nlohmann::json err;
+                err["type"]    = "commandResult";
+                err["id"]      = cmdId;
+                err["success"] = false;
+                err["error"]   = "texture_preview requires string 'path'";
+                session->send(err.dump());
+                return;
+            }
+            const std::string path = msg["path"].get<std::string>();
+            SKSE::GetTaskInterface()->AddTask([session, cmdId, path]() {
+                auto        result = GameCommands::GetTexturePreview(path);
+                std::string json   = BuildCommandResultJson(cmdId, result);
+                asio::post(session->ioc(), [session, json] { session->send(json); });
+            });
+            return;
+        }
+
         if (!msg.contains("formId") || !msg["formId"].is_string()) {
             session->send(BuildCommandResultJson(cmdId, {false, "Missing 'formId' field"}));
             return;

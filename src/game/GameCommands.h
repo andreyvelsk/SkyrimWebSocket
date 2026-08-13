@@ -39,12 +39,21 @@ namespace GameCommands
 
     // Produce a base64 PNG preview of an item's inventory icon. Supports every
     // item type that carries a 2D inventory icon (weapons, apparel, potions,
-    // food, ingredients, books, ammo, misc, keys, soul gems). The PNG has a
-    // transparent background. Returns:
+    // food, ingredients, books, ammo, misc, keys, soul gems). Also accepts
+    // location (BGSLocation) and map-marker reference (TESObjectREFR) form IDs
+    // and resolves the marker-type icon. The PNG has a transparent background.
+    // Returns:
     //   { "mimeType": "image/png", "width": int, "height": int, "imageBase64": string }
     // Fails for item types that carry no inventory icon (e.g. scrolls).
     // Must be called on the game thread.
     CommandResult GetItemPreview(RE::FormID formId);
+
+    // Produce a base64 PNG preview of a raw DDS texture path (relative to the
+    // game Data folder, e.g. "textures/interface/icons/weapons/ironsword.dds").
+    // This is the generic primitive for any texture asset — item icons, map
+    // marker icons, book art, etc. Returns the same data shape as
+    // GetItemPreview. Must be called on the game thread.
+    CommandResult GetTexturePreview(const std::string& path);
 
     // Toggle favorite status on an item.
     // Must be called on the game thread.
