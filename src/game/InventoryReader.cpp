@@ -832,6 +832,77 @@ namespace InventoryReader
         return result;
     }
 
+    // ─── ReadDebug ──────────────────────────────────────────────────────────
+    // Returns every item in the player inventory with full raw metadata.
+    // Useful for diagnosing why an item is missing from category views.
+
+    nlohmann::json ReadDebug()
+    {
+        auto* player = RE::PlayerCharacter::GetSingleton();
+        if (!player)
+            return nlohmann::json::array();
+
+        auto inv = player->GetInventory();
+
+        // Inline form-type-to-string table so ReadDebug has no dependency on
+        // the private s_formTypeNames (which maps to category names, not
+        // raw FormType identifiers).
+        static const std::unordered_map<RE::FormType, const char*> kFormTypeNames = {
+            { RE::FormType::None,         "None"         },
+            { RE::FormType::Weapon,       "Weapon"       },
+            { RE::FormType::Armor,        "Armor"        },
+            { RE::FormType::Book,         "Book"         },
+            { RE::FormType::AlchemyItem,  "AlchemyItem"  },
+            { RE::FormType::Ingredient,   "Ingredient"   },
+            { RE::FormType::Misc,         "Misc"         },
+            { RE::FormType::Light,        "Light"        },
+            { RE::FormType::Ammo,         "Ammo"         },
+            { RE::FormType::KeyMaster,    "KeyMaster"    },
+            { RE::FormType::SoulGem,      "SoulGem"      },
+            { RE::FormType::Scroll,       "Scroll"       },
+            { RE::FormType::LeveledItem,  "LeveledItem"  },
+        };
+
+        nlohmann::json result = nlohmann::json::array();
+        for (auto& [item, data] : inv) {
+            if (!item || data.first <= 0)
+                continue;
+
+            auto* entry = data.second.get();
+            nlohmann::json j;
+            j["name"]         = item->GetName();
+            j["formId"]       = std::format("0x{:08X}", item->GetFormID());
+            j["count"]        = data.first;
+            j["weight"]       = entry ? entry->GetWeight() : 0.f;
+            j["value"]        = entry ? entry->GetValue() : 0;
+            j["formType"]     = "Unknown";
+            j["isFavorite"]   = entry ? entry->IsFavorited() : false;
+            j["isStolen"]     = IsItemStolen(entry);
+            j["isEquipped"]   = entry ? entry->IsWorn() : false;
+            j["categoryType"] = "Unknown";
+
+            const auto ft = item->GetFormType();
+            auto ftIt = kFormTypeNames.find(ft);
+            if (ftIt != kFormTypeNames.end())
+                j["formType"] = ftIt->second;
+
+            j["categoryType"] = CategoryTypeFor(*item);
+
+            // For LeveledItem, also include the resolved effective type
+            if (ft == RE::FormType::LeveledItem) {
+                const auto* lev = item->As<RE::TESLevItem>();
+                const auto  eff = ResolveLeveledItemType(lev);
+                auto effIt = kFormTypeNames.find(eff);
+                j["effectiveFormType"] = effIt != kFormTypeNames.end()
+                                              ? effIt->second
+                                              : "Unknown";
+            }
+
+            result.push_back(std::move(j));
+        }
+        return result;
+    }
+
     // ─── ReadBooks ────────────────────────────────────────────────────────
 
     nlohmann::json ReadBooks()

@@ -1366,4 +1366,19 @@ namespace GameCommands
         logger::info("[FastTravel] END success");
         return result;
     }
+
+    // ─── Console ───────────────────────────────────────────────────────────
+
+    CommandResult RunConsoleCommand(const std::string& command)
+    {
+        if (command.empty())
+            return {false, "Console command cannot be empty"};
+
+        RE::Console::ExecuteCommand(command.c_str());
+
+        CommandResult result;
+        result.success = true;
+        result.data["command"] = command;
+        return result;
+    }
 }
