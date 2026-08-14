@@ -18,6 +18,7 @@ namespace InventoryReader
         { RE::FormType::AlchemyItem, "Potions"     },
         { RE::FormType::Ingredient,  "Ingredients" },
         { RE::FormType::Misc,        "Misc"        },
+        { RE::FormType::Light,       "Misc"        },
         { RE::FormType::Ammo,        "Ammo"        },
         { RE::FormType::KeyMaster,   "Keys"        },
         { RE::FormType::SoulGem,     "SoulGems"    },
@@ -259,6 +260,7 @@ namespace InventoryReader
             }
             case RE::FormType::Ingredient: return "Ingredient";
             case RE::FormType::Misc:       return "Misc";
+            case RE::FormType::Light:      return "Misc";
             case RE::FormType::Ammo:       return "Ammo";
             case RE::FormType::KeyMaster:  return "Key";
             case RE::FormType::SoulGem:    return "SoulGem";
@@ -608,7 +610,8 @@ namespace InventoryReader
             return nlohmann::json::array();
 
         auto inv = player->GetInventory([](RE::TESBoundObject& obj) {
-            return obj.GetFormType() == RE::FormType::Misc &&
+            return (obj.GetFormType() == RE::FormType::Misc ||
+                    obj.GetFormType() == RE::FormType::Light) &&
                    obj.GetFormID() != kGoldFormID;
         });
 
