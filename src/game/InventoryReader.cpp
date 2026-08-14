@@ -451,20 +451,6 @@ namespace InventoryReader
 
     // ─── Per-type item readers ────────────────────────────────────────────
 
-    // Returns true when obj is either the target type or a LeveledItem whose
-    // first contained form matches the target type.
-    static bool MatchFormType(const RE::TESBoundObject& obj, RE::FormType target)
-    {
-        const auto ft = obj.GetFormType();
-        if (ft == target)
-            return true;
-        if (ft == RE::FormType::LeveledItem) {
-            const auto* lev = obj.As<RE::TESLevItem>();
-            return ResolveLeveledItemType(lev) == target;
-        }
-        return false;
-    }
-
     nlohmann::json ReadWeapons()
     {
         auto* player = RE::PlayerCharacter::GetSingleton();

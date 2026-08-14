@@ -1379,15 +1379,27 @@ namespace GameCommands
         auto* clog = RE::ConsoleLog::GetSingleton();
         nlohmann::json diag;
 
-        diag["clog_ptr"]     = clog ? "valid" : "null";
-        diag["vprint_hook"]  = "installed (write_branch<5>)";
-        diag["hook_active"]  = "Hook_VPrint checks s_capturing";
+        diag["clog_ptr"] = clog ? "valid" : "null";
+
+        // ── Self-test: does the VPrint hook actually capture anything? ──
+        // Call ConsoleLog::Print() manually inside a capture session. If the
+        // hook works, the test string will appear in the captured buffer.
+        {
+            ConsoleHook::BeginCapture();
+            if (clog)
+                clog->Print("__WS_HOOK_TEST__");
+            auto test = ConsoleHook::EndCapture();
+            diag["hook_selftest"] = (test && test->find("__WS_HOOK_TEST__") != std::string::npos)
+                                         ? "PASS (hook captures Print)"
+                                         : "FAIL (hook did not capture Print)";
+            if (test && !test->empty())
+                diag["selftest_captured"] = test->substr(0, 200);
+        }
 
         if (clog) {
             diag["lastMessage_before"] = clog->lastMessage[0] != '\0'
                                               ? std::string(clog->lastMessage)
                                               : "(empty)";
-            // Also inspect the BSString buffer at offset 0x408
             auto& buf = clog->buffer;
             diag["buffer_is_empty"] = buf.empty();
             if (!buf.empty())
