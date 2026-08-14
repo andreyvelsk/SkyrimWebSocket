@@ -246,6 +246,27 @@ namespace MessageRouter
             return;
         }
 
+        // Console command — runs a raw Skyrim console command.
+        // Requires "text" (string), no formId needed.
+        if (command == "console") {
+            if (!msg.contains("text") || !msg["text"].is_string()) {
+                nlohmann::json err;
+                err["type"]    = "commandResult";
+                err["id"]      = cmdId;
+                err["success"] = false;
+                err["error"]   = "console command requires string 'text'";
+                session->send(err.dump());
+                return;
+            }
+            const std::string consoleCmd = msg["text"].get<std::string>();
+            SKSE::GetTaskInterface()->AddTask([session, cmdId, consoleCmd]() {
+                auto        result = GameCommands::RunConsoleCommand(consoleCmd);
+                std::string json   = BuildCommandResultJson(cmdId, result);
+                asio::post(session->ioc(), [session, json] { session->send(json); });
+            });
+            return;
+        }
+
         if (!msg.contains("formId") || !msg["formId"].is_string()) {
             session->send(BuildCommandResultJson(cmdId, {false, "Missing 'formId' field"}));
             return;

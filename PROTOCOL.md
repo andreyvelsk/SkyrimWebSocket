@@ -149,6 +149,7 @@ below.
 | `player_marker_set` | Place / move the player's custom map marker. | [↓](#player_marker_set) |
 | `player_marker_clear` | Hide the player's custom map marker. | [↓](#player_marker_clear) |
 | `fast_travel` | Teleport the player to a discovered map marker. | [↓](#fast_travel) |
+| `console` | Execute a raw Skyrim console command. | [↓](#console) |
 
 ---
 
@@ -578,6 +579,61 @@ This command takes no parameters beyond the common envelope.
   "command": "player_marker_clear"
 }
 ```
+
+---
+
+#### `console`
+
+Executes a raw Skyrim console command on the game thread — the same as typing it
+into the in-game console (usually opened with the `~` key). The command runs
+synchronously; output appears in the in-game console overlay.
+
+Useful for:
+- Running debug commands like `player.showinventory` or `player.getitemcount`
+  when you don't have a keyboard connected to the game instance
+- Looking up FormIDs with `help "item name"`
+- Any other console command available in Skyrim
+
+| Field | Required | Default | Description |
+|---|---|---|---|
+| `text` | **yes** | — | Raw console command text to execute (e.g. `"player.showinventory"`, `"help \"Iron Sword\""`). |
+
+**Applies to:** Any valid Skyrim console command.
+
+```json
+{
+  "type": "command",
+  "id": "console-1",
+  "command": "console",
+  "text": "player.showinventory"
+}
+```
+
+**Response (success):**
+```json
+{
+  "type": "commandResult",
+  "id": "console-1",
+  "success": true,
+  "data": {
+    "command": "player.showinventory",
+    "output": "Iron Sword (00012EB7) (100, 100.00%) - 1\nSteel Dagger (00013CE6) (100, 100.00%) - 1"
+  }
+}
+```
+
+| Response field | Type | Description |
+|---|---|---|
+| `data.command` | string | Echo of the executed console command text. |
+| `data.output` | string or null | All text printed to the console by the command, joined with `\n`. `null` when the command produced no output (e.g. `tgm`, `tcl`). |
+
+> **Implementation note:** The plugin installs a hook on `ConsoleLog::VPrint`
+> at startup. Every line printed to the in-game console is intercepted and
+> accumulated into a per-command buffer. This captures output from all console
+> commands, including multi-line output from `player.showinventory`, `help`,
+> etc. The console UI still shows the output normally.
+>
+> For machine-readable inventory diagnostics, prefer `Inventory::Debug`.
 
 ---
 

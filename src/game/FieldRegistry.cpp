@@ -245,6 +245,14 @@ namespace FieldRegistry
           { "Favorited items across all categories", "array",
             &InventoryReader::ReadFavorites } },
 
+        // Debug: raw inventory dump — every item with full metadata
+        // (formId, formType, name, count, categoryType, isFavorite, isStolen, isEquipped).
+        // Includes items that may not appear in normal category views.
+        { "Inventory::Debug",
+          { "Raw debug dump of every item in the player inventory with form type and category resolution metadata. Use to diagnose why specific items are missing from normal category views.",
+            "array",
+            &InventoryReader::ReadDebug } },
+
         // Magic schools and spells
         { "Magic::Categories",
           { "Array of magic schools with spell counts", "array",

@@ -27,6 +27,11 @@ namespace InventoryReader
     nlohmann::json ReadSoulGems();
     nlohmann::json ReadFavorites();
 
+    // Debug: returns ALL items in the player inventory with raw metadata
+    // (formId, formType, name, count, categoryType, isFavorited, isStolen, isWorn)
+    // for diagnosing classification/visibility issues.
+    nlohmann::json ReadDebug();
+
     // Generic resolver for categories without specialised data (Ammo, Keys).
     // The returned function must be called on the game thread.
     std::function<nlohmann::json()> MakeItemsResolver(RE::FormType formType);

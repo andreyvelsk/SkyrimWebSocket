@@ -41,6 +41,7 @@ find_package(nlohmann_json CONFIG REQUIRED)
 add_commonlibsse_plugin(${PROJECT_NAME} SOURCES
     plugin.cpp
     src/game/Common.cpp
+    src/game/ConsoleHook.cpp
     src/game/EventBus.cpp
     src/game/FieldRegistry.cpp
     src/game/GameCommands.cpp

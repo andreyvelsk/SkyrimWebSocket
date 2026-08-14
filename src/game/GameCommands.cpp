@@ -1,4 +1,5 @@
 #include "GameCommands.h"
+#include "ConsoleHook.h"
 #include "MapMarkers.h"
 #include "../Utils.h"
 #include "PlayerPosition.h"
@@ -1364,6 +1365,74 @@ namespace GameCommands
                                  formId,
                                  result.data.value("name", std::string{"unnamed"})));
         logger::info("[FastTravel] END success");
+        return result;
+    }
+
+    // ─── Console ───────────────────────────────────────────────────────────
+
+    CommandResult RunConsoleCommand(const std::string& command)
+    {
+        if (command.empty())
+            return {false, "Console command cannot be empty"};
+
+        // Diagnostic: inspect ConsoleLog state BEFORE command execution.
+        auto* clog = RE::ConsoleLog::GetSingleton();
+        nlohmann::json diag;
+
+        diag["clog_ptr"] = clog ? "valid" : "null";
+
+        // ── Self-test: does the VPrint hook actually capture anything? ──
+        // Call ConsoleLog::Print() manually inside a capture session. If the
+        // hook works, the test string will appear in the captured buffer.
+        {
+            ConsoleHook::BeginCapture();
+            if (clog)
+                clog->Print("__WS_HOOK_TEST__");
+            auto test = ConsoleHook::EndCapture();
+            diag["hook_selftest"] = (test && test->find("__WS_HOOK_TEST__") != std::string::npos)
+                                         ? "PASS (hook captures Print)"
+                                         : "FAIL (hook did not capture Print)";
+            if (test && !test->empty())
+                diag["selftest_captured"] = test->substr(0, 200);
+        }
+
+        if (clog) {
+            diag["lastMessage_before"] = clog->lastMessage[0] != '\0'
+                                              ? std::string(clog->lastMessage)
+                                              : "(empty)";
+            auto& buf = clog->buffer;
+            diag["buffer_is_empty"] = buf.empty();
+            if (!buf.empty())
+                diag["buffer_preview"] = std::string(buf.c_str()).substr(0, 200);
+        }
+
+        // Clear lastMessage so we can detect if the command wrote to it.
+        if (clog)
+            clog->lastMessage[0] = '\0';
+
+        // Start VPrint capture.
+        ConsoleHook::BeginCapture();
+
+        RE::Console::ExecuteCommand(command.c_str());
+
+        auto captured = ConsoleHook::EndCapture();
+
+        diag["command"] = command;
+
+        if (clog) {
+            diag["lastMessage_after"] = clog->lastMessage[0] != '\0'
+                                             ? std::string(clog->lastMessage)
+                                             : "(empty)";
+        }
+
+        diag["captured_lines"] = captured ? (int)captured->size() : -1;
+        if (captured && !captured->empty())
+            diag["captured_preview"] = captured->substr(0, 200);
+
+        CommandResult result;
+        result.success = true;
+        result.data    = std::move(diag);
+
         return result;
     }
 }

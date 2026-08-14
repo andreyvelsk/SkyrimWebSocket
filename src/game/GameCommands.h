@@ -164,4 +164,12 @@ namespace GameCommands
     // arrival happens asynchronously inside the engine.
     // Must be called on the game thread.
     CommandResult FastTravelToMarker(RE::FormID formId);
+
+    // ─── Console ───────────────────────────────────────────────────────────
+
+    // Execute a raw Skyrim console command (the same as typing it into the
+    // in-game console).  The command runs synchronously on the game thread.
+    // Returns the command text in `data.command` on success for confirmation.
+    // Must be called on the game thread.
+    CommandResult RunConsoleCommand(const std::string& command);
 }

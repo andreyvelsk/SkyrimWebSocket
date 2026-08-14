@@ -18,6 +18,7 @@ namespace InventoryReader
         { RE::FormType::AlchemyItem, "Potions"     },
         { RE::FormType::Ingredient,  "Ingredients" },
         { RE::FormType::Misc,        "Misc"        },
+        { RE::FormType::Light,       "Misc"        },
         { RE::FormType::Ammo,        "Ammo"        },
         { RE::FormType::KeyMaster,   "Keys"        },
         { RE::FormType::SoulGem,     "SoulGems"    },
@@ -44,6 +45,21 @@ namespace InventoryReader
     // clang-format on
 
     // ─── Helpers ──────────────────────────────────────────────────────────
+
+    // For LeveledItem forms, inspects the contained forms to guess the
+    // "effective" FormType (e.g. a levelled weapon list → FormType::Weapon).
+    // Returns FormType::LeveledItem when the list is empty or unreadable.
+    static RE::FormType ResolveLeveledItemType(const RE::TESLevItem* levItem)
+    {
+        if (!levItem)
+            return RE::FormType::LeveledItem;
+
+        const auto forms = levItem->GetContainedForms();
+        if (forms.empty() || !forms[0])
+            return RE::FormType::LeveledItem;
+
+        return forms[0]->GetFormType();
+    }
 
     // Gets the TESDescription text for forms that carry it (books).
     static std::string GetFormDescription(RE::TESBoundObject* item)
@@ -259,11 +275,37 @@ namespace InventoryReader
             }
             case RE::FormType::Ingredient: return "Ingredient";
             case RE::FormType::Misc:       return "Misc";
+            case RE::FormType::Light:      return "Misc";
             case RE::FormType::Ammo:       return "Ammo";
             case RE::FormType::KeyMaster:  return "Key";
             case RE::FormType::SoulGem:    return "SoulGem";
             case RE::FormType::Scroll:     return "Scroll";
-            default:                       return "Unknown";
+            case RE::FormType::LeveledItem: {
+                const auto* lev = obj.As<RE::TESLevItem>();
+                const auto  eff = ResolveLeveledItemType(lev);
+                // Recurse: build a temporary TESBoundObject-like type dispatch.
+                // We cannot call CategoryTypeFor recursively because we only have
+                // FormType, not the resolved TESBoundObject.  Do the mapping inline.
+                switch (eff) {
+                    case RE::FormType::Weapon:     return "Weapon";
+                    case RE::FormType::Armor:      return "Apparel";
+                    case RE::FormType::Book:       return "Book";
+                    case RE::FormType::AlchemyItem: {
+                        // AlchemyItem could be Food or Potion; safe default is Potion.
+                        const auto* alch = obj.As<RE::AlchemyItem>();
+                        return (alch && alch->IsFood()) ? "Food" : "Potion";
+                    }
+                    case RE::FormType::Ingredient: return "Ingredient";
+                    case RE::FormType::Misc:       return "Misc";
+                    case RE::FormType::Light:      return "Misc";
+                    case RE::FormType::Ammo:       return "Ammo";
+                    case RE::FormType::KeyMaster:  return "Key";
+                    case RE::FormType::SoulGem:    return "SoulGem";
+                    case RE::FormType::Scroll:     return "Scroll";
+                    default:                       return "Unknown";
+                }
+            }
+            default: return "Unknown";
         }
     }
 
@@ -294,6 +336,16 @@ namespace InventoryReader
                     categoryCounts["Food"] += data.first;
                     continue;  // count as Food, not Potions
                 }
+            }
+
+            // LeveledItem — derive category from the first contained form
+            if (item->GetFormType() == RE::FormType::LeveledItem) {
+                const auto* lev = item->As<RE::TESLevItem>();
+                const auto  eff = ResolveLeveledItemType(lev);
+                auto it = s_formTypeNames.find(eff);
+                if (it != s_formTypeNames.end())
+                    categoryCounts[it->second] += data.first;
+                continue;
             }
 
             auto it = s_formTypeNames.find(item->GetFormType());
@@ -406,7 +458,10 @@ namespace InventoryReader
             return nlohmann::json::array();
 
         auto inv = player->GetInventory([](RE::TESBoundObject& obj) {
-            return obj.GetFormType() == RE::FormType::Weapon;
+            return obj.GetFormType() == RE::FormType::Weapon ||
+                   (obj.GetFormType() == RE::FormType::LeveledItem &&
+                    obj.As<RE::TESLevItem>() &&
+                    ResolveLeveledItemType(obj.As<RE::TESLevItem>()) == RE::FormType::Weapon);
         });
 
         nlohmann::json result = nlohmann::json::array();
@@ -465,7 +520,10 @@ namespace InventoryReader
             return nlohmann::json::array();
 
         auto inv = player->GetInventory([](RE::TESBoundObject& obj) {
-            return obj.GetFormType() == RE::FormType::Armor;
+            return obj.GetFormType() == RE::FormType::Armor ||
+                   (obj.GetFormType() == RE::FormType::LeveledItem &&
+                    obj.As<RE::TESLevItem>() &&
+                    ResolveLeveledItemType(obj.As<RE::TESLevItem>()) == RE::FormType::Armor);
         });
 
         // Lookup localized armor-type display names once per call.
@@ -541,7 +599,15 @@ namespace InventoryReader
             return nlohmann::json::array();
 
         auto inv = player->GetInventory([](RE::TESBoundObject& obj) {
-            if (obj.GetFormType() != RE::FormType::AlchemyItem)
+            const auto ft = obj.GetFormType();
+            if (ft == RE::FormType::LeveledItem) {
+                const auto* lev = obj.As<RE::TESLevItem>();
+                if (!lev || ResolveLeveledItemType(lev) != RE::FormType::AlchemyItem)
+                    return false;
+                // For levelled AlchemyItem we default to Potion
+                return true;
+            }
+            if (ft != RE::FormType::AlchemyItem)
                 return false;
             const auto* alch = obj.As<RE::AlchemyItem>();
             return alch && !alch->IsFood();
@@ -568,7 +634,10 @@ namespace InventoryReader
             return nlohmann::json::array();
 
         auto inv = player->GetInventory([](RE::TESBoundObject& obj) {
-            return obj.GetFormType() == RE::FormType::Ingredient;
+            return obj.GetFormType() == RE::FormType::Ingredient ||
+                   (obj.GetFormType() == RE::FormType::LeveledItem &&
+                    obj.As<RE::TESLevItem>() &&
+                    ResolveLeveledItemType(obj.As<RE::TESLevItem>()) == RE::FormType::Ingredient);
         });
 
         nlohmann::json result = nlohmann::json::array();
@@ -608,7 +677,12 @@ namespace InventoryReader
             return nlohmann::json::array();
 
         auto inv = player->GetInventory([](RE::TESBoundObject& obj) {
-            return obj.GetFormType() == RE::FormType::Misc &&
+            return (obj.GetFormType() == RE::FormType::Misc ||
+                    obj.GetFormType() == RE::FormType::Light ||
+                    (obj.GetFormType() == RE::FormType::LeveledItem &&
+                     obj.As<RE::TESLevItem>() &&
+                     (ResolveLeveledItemType(obj.As<RE::TESLevItem>()) == RE::FormType::Misc ||
+                      ResolveLeveledItemType(obj.As<RE::TESLevItem>()) == RE::FormType::Light))) &&
                    obj.GetFormID() != kGoldFormID;
         });
 
@@ -630,7 +704,10 @@ namespace InventoryReader
             return nlohmann::json::array();
 
         auto inv = player->GetInventory([](RE::TESBoundObject& obj) {
-            return obj.GetFormType() == RE::FormType::Scroll;
+            return obj.GetFormType() == RE::FormType::Scroll ||
+                   (obj.GetFormType() == RE::FormType::LeveledItem &&
+                    obj.As<RE::TESLevItem>() &&
+                    ResolveLeveledItemType(obj.As<RE::TESLevItem>()) == RE::FormType::Scroll);
         });
 
         nlohmann::json result = nlohmann::json::array();
@@ -654,7 +731,16 @@ namespace InventoryReader
             return nlohmann::json::array();
 
         auto inv = player->GetInventory([](RE::TESBoundObject& obj) {
-            if (obj.GetFormType() != RE::FormType::AlchemyItem)
+            const auto ft = obj.GetFormType();
+            if (ft == RE::FormType::LeveledItem) {
+                const auto* lev = obj.As<RE::TESLevItem>();
+                if (!lev || ResolveLeveledItemType(lev) != RE::FormType::AlchemyItem)
+                    return false;
+                // For levelled AlchemyItem we default to Food
+                const auto* alch = obj.As<RE::AlchemyItem>();
+                return alch && alch->IsFood();
+            }
+            if (ft != RE::FormType::AlchemyItem)
                 return false;
             const auto* alch = obj.As<RE::AlchemyItem>();
             return alch && alch->IsFood();
@@ -681,7 +767,10 @@ namespace InventoryReader
             return nlohmann::json::array();
 
         auto inv = player->GetInventory([](RE::TESBoundObject& obj) {
-            return obj.GetFormType() == RE::FormType::SoulGem;
+            return obj.GetFormType() == RE::FormType::SoulGem ||
+                   (obj.GetFormType() == RE::FormType::LeveledItem &&
+                    obj.As<RE::TESLevItem>() &&
+                    ResolveLeveledItemType(obj.As<RE::TESLevItem>()) == RE::FormType::SoulGem);
         });
 
         nlohmann::json result = nlohmann::json::array();
@@ -729,6 +818,77 @@ namespace InventoryReader
         return result;
     }
 
+    // ─── ReadDebug ──────────────────────────────────────────────────────────
+    // Returns every item in the player inventory with full raw metadata.
+    // Useful for diagnosing why an item is missing from category views.
+
+    nlohmann::json ReadDebug()
+    {
+        auto* player = RE::PlayerCharacter::GetSingleton();
+        if (!player)
+            return nlohmann::json::array();
+
+        auto inv = player->GetInventory();
+
+        // Inline form-type-to-string table so ReadDebug has no dependency on
+        // the private s_formTypeNames (which maps to category names, not
+        // raw FormType identifiers).
+        static const std::unordered_map<RE::FormType, const char*> kFormTypeNames = {
+            { RE::FormType::None,         "None"         },
+            { RE::FormType::Weapon,       "Weapon"       },
+            { RE::FormType::Armor,        "Armor"        },
+            { RE::FormType::Book,         "Book"         },
+            { RE::FormType::AlchemyItem,  "AlchemyItem"  },
+            { RE::FormType::Ingredient,   "Ingredient"   },
+            { RE::FormType::Misc,         "Misc"         },
+            { RE::FormType::Light,        "Light"        },
+            { RE::FormType::Ammo,         "Ammo"         },
+            { RE::FormType::KeyMaster,    "KeyMaster"    },
+            { RE::FormType::SoulGem,      "SoulGem"      },
+            { RE::FormType::Scroll,       "Scroll"       },
+            { RE::FormType::LeveledItem,  "LeveledItem"  },
+        };
+
+        nlohmann::json result = nlohmann::json::array();
+        for (auto& [item, data] : inv) {
+            if (!item || data.first <= 0)
+                continue;
+
+            auto* entry = data.second.get();
+            nlohmann::json j;
+            j["name"]         = item->GetName();
+            j["formId"]       = std::format("0x{:08X}", item->GetFormID());
+            j["count"]        = data.first;
+            j["weight"]       = entry ? entry->GetWeight() : 0.f;
+            j["value"]        = entry ? entry->GetValue() : 0;
+            j["formType"]     = "Unknown";
+            j["isFavorite"]   = entry ? entry->IsFavorited() : false;
+            j["isStolen"]     = IsItemStolen(entry);
+            j["isEquipped"]   = entry ? entry->IsWorn() : false;
+            j["categoryType"] = "Unknown";
+
+            const auto ft = item->GetFormType();
+            auto ftIt = kFormTypeNames.find(ft);
+            if (ftIt != kFormTypeNames.end())
+                j["formType"] = ftIt->second;
+
+            j["categoryType"] = CategoryTypeFor(*item);
+
+            // For LeveledItem, also include the resolved effective type
+            if (ft == RE::FormType::LeveledItem) {
+                const auto* lev = item->As<RE::TESLevItem>();
+                const auto  eff = ResolveLeveledItemType(lev);
+                auto effIt = kFormTypeNames.find(eff);
+                j["effectiveFormType"] = effIt != kFormTypeNames.end()
+                                              ? effIt->second
+                                              : "Unknown";
+            }
+
+            result.push_back(std::move(j));
+        }
+        return result;
+    }
+
     // ─── ReadBooks ────────────────────────────────────────────────────────
 
     nlohmann::json ReadBooks()
@@ -738,7 +898,10 @@ namespace InventoryReader
             return nlohmann::json::array();
 
         auto inv = player->GetInventory([](RE::TESBoundObject& obj) {
-            return obj.GetFormType() == RE::FormType::Book;
+            return obj.GetFormType() == RE::FormType::Book ||
+                   (obj.GetFormType() == RE::FormType::LeveledItem &&
+                    obj.As<RE::TESLevItem>() &&
+                    ResolveLeveledItemType(obj.As<RE::TESLevItem>()) == RE::FormType::Book);
         });
 
         nlohmann::json result = nlohmann::json::array();
@@ -762,7 +925,10 @@ namespace InventoryReader
             return nlohmann::json::array();
 
         auto inv = player->GetInventory([formType](RE::TESBoundObject& obj) {
-            return obj.GetFormType() == formType;
+            return obj.GetFormType() == formType ||
+                   (obj.GetFormType() == RE::FormType::LeveledItem &&
+                    obj.As<RE::TESLevItem>() &&
+                    ResolveLeveledItemType(obj.As<RE::TESLevItem>()) == formType);
         });
 
         nlohmann::json result = nlohmann::json::array();
