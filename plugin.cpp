@@ -150,7 +150,9 @@ SKSEPluginLoad(const SKSE::LoadInterface* skse)
 
             // Install the ConsoleLog::VPrint hook so the "console" WS command
             // can capture output from any console command.
+            logger::info("[plugin] Installing ConsoleHook...");
             ConsoleHook::Install();
+            logger::info("[plugin] ConsoleHook::Install() returned");
 
             std::string iniPath = GetIniPath();
 
