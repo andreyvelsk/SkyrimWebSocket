@@ -37,23 +37,34 @@ namespace GameCommands
     // Must be called on the game thread.
     CommandResult DropItem(RE::FormID formId, int count);
 
-    // Produce a base64 PNG preview of an item's inventory icon. Supports every
-    // item type that carries a 2D inventory icon (weapons, apparel, potions,
-    // food, ingredients, books, ammo, misc, keys, soul gems). Also accepts
-    // location (BGSLocation) and map-marker reference (TESObjectREFR) form IDs
-    // and resolves the marker-type icon. The PNG has a transparent background.
-    // Returns:
-    //   { "mimeType": "image/png", "width": int, "height": int, "imageBase64": string }
-    // Fails for item types that carry no inventory icon (e.g. scrolls).
-    // Must be called on the game thread.
-    CommandResult GetItemPreview(RE::FormID formId);
+    // Resolves the DDS texture path for a preview without reading or converting
+    // the texture. Accepts an item, location (BGSLocation), or map-marker
+    // reference (TESObjectREFR) form ID. Must be called on the game thread.
+    // On success `path` is a Data-relative DDS path suitable for
+    // GetTexturePreview (which may run on any non-game thread).
+    struct PreviewPathResult
+    {
+        bool        success = false;
+        std::string error;   // empty on success
+        std::string path;    // DDS path on success
+    };
+    PreviewPathResult ResolvePreviewPath(RE::FormID formId);
 
     // Produce a base64 PNG preview of a raw DDS texture path (relative to the
     // game Data folder, e.g. "textures/interface/icons/weapons/ironsword.dds").
     // This is the generic primitive for any texture asset — item icons, map
-    // marker icons, book art, etc. Returns the same data shape as
-    // GetItemPreview. Must be called on the game thread.
+    // marker icons, book art, etc. Returns:
+    //   { "mimeType": "image/png", "width": int, "height": int, "imageBase64": string }
+    // Heavy (file read + DDS decode + PNG encode + base64): call from the
+    // io_context thread, NOT the game thread, to avoid freezing the game.
     CommandResult GetTexturePreview(const std::string& path);
+
+    // Read an arbitrary file from the game's virtual filesystem (BSA + loose
+    // files) and return it as base64. `path` is relative to the game Data
+    // folder. Returns:
+    //   { "mimeType": string, "size": int, "dataBase64": string }
+    // Heavy (file read + base64): call from the io_context thread.
+    CommandResult GetFileDownload(const std::string& path);
 
     // Toggle favorite status on an item.
     // Must be called on the game thread.

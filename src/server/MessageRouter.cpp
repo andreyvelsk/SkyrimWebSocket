@@ -257,10 +257,65 @@ namespace MessageRouter
                 return;
             }
             const std::string path = msg["path"].get<std::string>();
-            SKSE::GetTaskInterface()->AddTask([session, cmdId, path]() {
-                auto        result = GameCommands::GetTexturePreview(path);
-                std::string json   = BuildCommandResultJson(cmdId, result);
-                asio::post(session->ioc(), [session, json] { session->send(json); });
+            // Decode + PNG encode + base64 are heavy: run them on the
+            // io_context thread, not the game thread, to avoid freezing the game.
+            asio::post(session->ioc(), [session, cmdId, path]() {
+                auto result = GameCommands::GetTexturePreview(path);
+                session->send(BuildCommandResultJson(cmdId, result));
+            });
+            return;
+        }
+
+        if (command == "file_download") {
+            if (!msg.contains("path") || !msg["path"].is_string()) {
+                nlohmann::json err;
+                err["type"]    = "commandResult";
+                err["id"]      = cmdId;
+                err["success"] = false;
+                err["error"]   = "file_download requires string 'path'";
+                session->send(err.dump());
+                return;
+            }
+            const std::string path = msg["path"].get<std::string>();
+            asio::post(session->ioc(), [session, cmdId, path]() {
+                auto result = GameCommands::GetFileDownload(path);
+                session->send(BuildCommandResultJson(cmdId, result));
+            });
+            return;
+        }
+
+        if (command == "item_preview") {
+            if (!msg.contains("formId") || !msg["formId"].is_string()) {
+                nlohmann::json err;
+                err["type"]    = "commandResult";
+                err["id"]      = cmdId;
+                err["success"] = false;
+                err["error"]   = "item_preview requires string 'formId'";
+                session->send(err.dump());
+                return;
+            }
+            const std::string formIdStr = msg["formId"].get<std::string>();
+            const auto        parsed    = ParseFormId(formIdStr);
+            if (!parsed) {
+                nlohmann::json err;
+                err["type"]    = "commandResult";
+                err["id"]      = cmdId;
+                err["success"] = false;
+                err["error"]   = "Invalid formId: '" + formIdStr + "'";
+                session->send(err.dump());
+                return;
+            }
+            const RE::FormID formId = *parsed;
+            // 1) Resolve the DDS path on the game thread (fast, no file I/O).
+            SKSE::GetTaskInterface()->AddTask([session, cmdId, formId]() {
+                auto pathResult = GameCommands::ResolvePreviewPath(formId);
+                // 2) Convert + send on the io_context thread (heavy).
+                asio::post(session->ioc(), [session, cmdId, pathResult = std::move(pathResult)]() {
+                    if (!pathResult.success)
+                        session->send(BuildCommandResultJson(cmdId, { false, pathResult.error }));
+                    else
+                        session->send(BuildCommandResultJson(cmdId, GameCommands::GetTexturePreview(pathResult.path)));
+                });
             });
             return;
         }
@@ -304,8 +359,6 @@ namespace MessageRouter
                 result = GameCommands::DropItem(formId, count);
             else if (command == "favorite")
                 result = GameCommands::FavoriteItem(formId);
-            else if (command == "item_preview")
-                result = GameCommands::GetItemPreview(formId);
             else if (command == "equip_spell")
                 result = GameCommands::EquipSpell(formId, hand);
             else if (command == "unequip_spell")

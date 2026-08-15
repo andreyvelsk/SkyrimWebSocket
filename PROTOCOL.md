@@ -137,7 +137,9 @@ below.
 | `read_book` | Open and read a book from inventory. | [↓](#read_book) |
 | `drop` | Drop one or more inventory items onto the ground. | [↓](#drop) |
 | `favorite` | Toggle the favorite flag on an inventory item. | [↓](#favorite) |
-| `item_preview` | Produce a base64 PNG preview of an item's inventory icon. | [↓](#item_preview) |
+| `item_preview` | Produce a base64 PNG preview of an item / location / map-marker icon. | [↓](#item_preview) |
+| `texture_preview` | Produce a base64 PNG preview from a raw DDS texture path. | [↓](#texture_preview) |
+| `file_download` | Download an arbitrary file (BSA / loose) as base64. | [↓](#file_download) |
 | `equip_spell` | Equip a known spell to a hand. | [↓](#equip_spell) |
 | `unequip_spell` | Unequip a spell from a hand. | [↓](#unequip_spell) |
 | `favorite_spell` | Toggle the favorite flag on a known spell or power. | [↓](#favorite_spell) |
@@ -290,15 +292,17 @@ Toggles the favorite flag on an inventory item.
 
 #### `item_preview`
 
-Produces a base64-encoded PNG preview of an item's inventory icon. The image
-has a **transparent background** and can be shown directly in a web client via
-`<img src="data:image/png;base64,...">`.
+Produces a base64-encoded PNG preview of an item's inventory icon (or a
+location / map-marker icon). The image has a **transparent background** and can
+be shown directly in a web client via `<img src="data:image/png;base64,...">`.
 
 | Field | Required | Default | Description |
 |---|---|---|---|
-| `formId` | **yes** | — | Hex form ID of the item. Must resolve to an item form that carries a 2D inventory icon. |
+| `formId` | **yes** | — | Hex form ID of the item, location (`BGSLocation`), or map-marker reference (`TESObjectREFR`). |
 
-**Applies to:** Weapons, Apparel, Potions, Food, Ingredients, Books, Ammo, Misc, Keys, Soul Gems.
+**Applies to:** Weapons, Apparel, Potions, Food, Ingredients, Books, Ammo, Misc, Keys, Soul Gems, and map markers / locations.
+
+> The conversion runs off the game thread, so the game does not freeze.
 
 **Response** — the `data` object of `commandResult`:
 
@@ -329,6 +333,81 @@ has a **transparent background** and can be shown directly in a web client via
     "width": 64,
     "height": 64,
     "imageBase64": "iVBORw0KGgo..."
+  }
+}
+```
+
+---
+
+#### `texture_preview`
+
+Produces a base64-encoded PNG preview from a raw DDS texture path. This is the
+generic primitive for any texture asset (item icons, map marker icons, book
+art, etc.) and is also useful for testing the DDS→PNG pipeline.
+
+| Field | Required | Default | Description |
+|---|---|---|---|
+| `path` | **yes** | — | DDS path relative to the game `Data` folder, e.g. `"textures/interface/icons/weapons/ironsword.dds"`. Backslashes are accepted. |
+
+**Response** — the same `data` shape as `item_preview`:
+
+| Field | Type | Description |
+|---|---|---|
+| `mimeType` | string | Always `"image/png"`. |
+| `width` | integer | Image width in pixels. |
+| `height` | integer | Image height in pixels. |
+| `imageBase64` | string | Base64-encoded PNG bytes (no `data:` URI prefix). |
+
+> The conversion runs off the game thread.
+
+```json
+{
+  "type": "command",
+  "id": "t1",
+  "command": "texture_preview",
+  "path": "textures/interface/icons/weapons/ironsword.dds"
+}
+```
+
+---
+
+#### `file_download`
+
+Downloads an arbitrary file from the game's virtual filesystem (BSA archives
+and loose files) and returns it as base64. Useful for any non-texture asset:
+`.txt`, `.swf`, `.nif`, `.pex`, etc.
+
+| Field | Required | Default | Description |
+|---|---|---|---|
+| `path` | **yes** | — | File path relative to the game `Data` folder, e.g. `"interface/skyui/skyui.swf"` or `"textures/interface/icons/weapons/ironsword.dds"`. Backslashes are accepted. |
+
+**Response** — the `data` object of `commandResult`:
+
+| Field | Type | Description |
+|---|---|---|
+| `mimeType` | string | MIME type guessed from the file extension (e.g. `"application/x-shockwave-flash"` for `.swf`, `"text/plain"` for `.txt`). |
+| `size` | integer | File size in bytes. |
+| `dataBase64` | string | Base64-encoded raw file bytes. |
+
+```json
+{
+  "type": "command",
+  "id": "f1",
+  "command": "file_download",
+  "path": "interface/skyui/skyui.swf"
+}
+```
+
+```jsonc
+// Success response:
+{
+  "type": "commandResult",
+  "id": "f1",
+  "success": true,
+  "data": {
+    "mimeType": "application/x-shockwave-flash",
+    "size": 51234,
+    "dataBase64": "..."
   }
 }
 ```

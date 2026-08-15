@@ -7,9 +7,13 @@
 
 #include <algorithm>
 #include <array>
+#include <cctype>
+#include <cstdint>
 #include <format>
 #include <optional>
+#include <unordered_map>
 #include <utility>
+#include <vector>
 
 // Windows wingdi.h defines GetObject as GetObjectW/GetObjectA;
 // conflict with RE::BGSDefaultObjectManager::GetObject.
@@ -597,11 +601,14 @@ namespace GameCommands
         return { true, "", std::move(data) };
     }
 
-    CommandResult GetItemPreview(RE::FormID formId)
+    PreviewPathResult ResolvePreviewPath(RE::FormID formId)
     {
-        auto* form = RE::TESForm::LookupByID(formId);
-        if (!form)
-            return { false, "Form not found" };
+        PreviewPathResult out;
+        auto*             form = RE::TESForm::LookupByID(formId);
+        if (!form) {
+            out.error = "Form not found";
+            return out;
+        }
 
         logger::debug("item_preview 0x{:08X} ('{}') formType={}",
                       formId,
@@ -613,30 +620,39 @@ namespace GameCommands
             auto pathOpt = ResolveMarkerIconPath(form);
             if (!pathOpt) {
                 logger::debug("item_preview 0x{:08X}: location has no map marker data", formId);
-                return { false, "Location has no map marker icon" };
+                out.error = "Location has no map marker icon";
+                return out;
             }
             logger::debug("item_preview 0x{:08X}: marker icon path='{}'", formId, *pathOpt);
-            return BuildPreviewResult(*pathOpt);
+            out.success = true;
+            out.path    = std::move(*pathOpt);
+            return out;
         }
         if (auto* ref = form->As<RE::TESObjectREFR>()) {
             auto pathOpt = ResolveMarkerIconPath(form);
             if (!pathOpt) {
                 logger::debug("item_preview 0x{:08X}: reference is not a map marker", formId);
-                return { false, "Reference is not a map marker" };
+                out.error = "Reference is not a map marker";
+                return out;
             }
             logger::debug("item_preview 0x{:08X}: marker icon path='{}'", formId, *pathOpt);
-            return BuildPreviewResult(*pathOpt);
+            out.success = true;
+            out.path    = std::move(*pathOpt);
+            return out;
         }
 
         // ── Item inventory icon ────────────────────────────────────────
         auto* item = form->As<RE::TESBoundObject>();
-        if (!item)
-            return { false, "Form is not an item, location, or map marker" };
+        if (!item) {
+            out.error = "Form is not an item, location, or map marker";
+            return out;
+        }
 
         const RE::TESIcon* icon = GetInventoryIcon(item);
         if (!icon) {
             logger::debug("item_preview 0x{:08X}: form type carries no 2D inventory icon", formId);
-            return { false, "Item has no inventory icon" };
+            out.error = "Item has no inventory icon";
+            return out;
         }
 
         RE::BSString pathBuf;
@@ -646,16 +662,105 @@ namespace GameCommands
                       icon->textureName.c_str(),
                       (iconPath && iconPath[0]) ? iconPath : "<empty>");
 
-        if (!iconPath || iconPath[0] == '\0')
-            return { false, "Item has no inventory icon (empty ICON subrecord)" };
+        if (!iconPath || iconPath[0] == '\0') {
+            out.error = "Item has no inventory icon (empty ICON subrecord)";
+            return out;
+        }
 
-        return BuildPreviewResult(iconPath);
+        out.success = true;
+        out.path    = iconPath;
+        return out;
     }
 
     CommandResult GetTexturePreview(const std::string& path)
     {
         logger::debug("texture_preview path='{}'", path);
         return BuildPreviewResult(path);
+    }
+
+    // ─── Base64 (duplicated from TextureConverter.cpp for local use) ──────
+
+    static constexpr char kBase64Chars[] = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+
+    static std::string Base64Encode(const std::uint8_t* data, std::size_t len)
+    {
+        std::string out;
+        out.reserve(((len + 2) / 3) * 4);
+        for (std::size_t i = 0; i < len; i += 3) {
+            const std::uint32_t n = (data[i] << 16) |
+                                    ((i + 1 < len) ? (data[i + 1] << 8) : 0) |
+                                    ((i + 2 < len) ? data[i + 2] : 0);
+            out.push_back(kBase64Chars[(n >> 18) & 63]);
+            out.push_back(kBase64Chars[(n >> 12) & 63]);
+            out.push_back((i + 1 < len) ? kBase64Chars[(n >> 6) & 63] : '=');
+            out.push_back((i + 2 < len) ? kBase64Chars[n & 63] : '=');
+        }
+        return out;
+    }
+
+    // ─── MIME type from file extension ────────────────────────────────────
+
+    static std::string MimeTypeFromPath(const std::string& path)
+    {
+        // clang-format off
+        static const std::unordered_map<std::string, std::string> kMap = {
+            {".txt",  "text/plain"},
+            {".ini",  "text/plain"},
+            {".log",  "text/plain"},
+            {".swf",  "application/x-shockwave-flash"},
+            {".dds",  "application/octet-stream"},
+            {".png",  "image/png"},
+            {".jpg",  "image/jpeg"},
+            {".jpeg", "image/jpeg"},
+            {".xml",  "application/xml"},
+            {".json", "application/json"},
+            {".html", "text/html"},
+            {".htm",  "text/html"},
+            {".css",  "text/css"},
+            {".js",   "application/javascript"},
+            {".nif",  "application/octet-stream"},
+            {".pex",  "application/octet-stream"},
+            {".hkx",  "application/octet-stream"},
+        };
+        // clang-format on
+        const auto dot = path.rfind('.');
+        if (dot == std::string::npos)
+            return "application/octet-stream";
+        std::string ext = path.substr(dot);
+        std::transform(ext.begin(), ext.end(), ext.begin(),
+                       [](unsigned char c) { return static_cast<char>(::tolower(c)); });
+        auto it = kMap.find(ext);
+        return it != kMap.end() ? it->second : "application/octet-stream";
+    }
+
+    CommandResult GetFileDownload(const std::string& path)
+    {
+        logger::debug("file_download path='{}'", path);
+
+        std::string normalized = path;
+        std::replace(normalized.begin(), normalized.end(), '\\', '/');
+
+        RE::BSResourceNiBinaryStream stream(normalized);
+        if (!stream.good())
+            return { false, "Failed to open file: " + path };
+
+        std::vector<std::uint8_t> data;
+        std::uint8_t              chunk[65536];
+        const std::uint32_t       chunkSize = static_cast<std::uint32_t>(sizeof(chunk));
+        while (stream.read(chunk, chunkSize))
+            data.insert(data.end(), chunk, chunk + chunkSize);
+        // Handle the last partial chunk (if any) one byte at a time.
+        while (stream.read(chunk, 1))
+            data.push_back(chunk[0]);
+
+        if (data.empty())
+            return { false, "File is empty: " + path };
+
+        nlohmann::json resp;
+        resp["mimeType"]   = MimeTypeFromPath(path);
+        resp["size"]       = data.size();
+        resp["dataBase64"] = Base64Encode(data.data(), data.size());
+        return { true, "", std::move(resp) };
     }
 
     CommandResult FavoriteItem(RE::FormID formId)
