@@ -747,11 +747,17 @@ namespace GameCommands
         std::vector<std::uint8_t> data;
         std::uint8_t              chunk[65536];
         const std::uint32_t       chunkSize = static_cast<std::uint32_t>(sizeof(chunk));
-        while (stream.read(chunk, chunkSize))
-            data.insert(data.end(), chunk, chunk + chunkSize);
-        // Handle the last partial chunk (if any) one byte at a time.
-        while (stream.read(chunk, 1))
-            data.push_back(chunk[0]);
+        while (stream.good()) {
+            const std::uint32_t posBefore = stream.tell();
+            const bool          ok = stream.read(chunk, chunkSize);
+            const std::uint32_t posAfter  = stream.tell();
+            const std::uint32_t bytesRead = posAfter - posBefore;
+            if (bytesRead == 0)
+                break;
+            data.insert(data.end(), chunk, chunk + bytesRead);
+            if (!ok)
+                break; // partial read at EOF — all remaining bytes captured via tell()
+        }
 
         if (data.empty())
             return { false, "File is empty: " + path };
