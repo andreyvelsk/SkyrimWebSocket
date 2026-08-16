@@ -6,11 +6,9 @@
 #include "QuestReader.h"
 
 #include <algorithm>
-#include <array>
 #include <cctype>
 #include <cstdint>
 #include <format>
-#include <optional>
 #include <unordered_map>
 #include <utility>
 #include <vector>
@@ -453,139 +451,6 @@ namespace GameCommands
         return {true, ""};
     }
 
-    // Returns the inventory (ICON) texture for any item form that carries one.
-    // Most item types inherit RE::TESIcon directly (weapon, potion, ingredient,
-    // book, ammo, misc/key/soul gem); armor instead stores two (male/female)
-    // icons in TESBipedModelForm::inventoryIcons.
-    static const RE::TESIcon* GetInventoryIcon(RE::TESBoundObject* item)
-    {
-        switch (item->GetFormType()) {
-            case RE::FormType::Weapon:
-                return static_cast<const RE::TESIcon*>(item->As<RE::TESObjectWEAP>());
-            case RE::FormType::Armor:
-                return &item->As<RE::TESObjectARMO>()->inventoryIcons[RE::TESBipedModelForm::Sexes::kMale];
-            case RE::FormType::AlchemyItem:
-                return static_cast<const RE::TESIcon*>(item->As<RE::AlchemyItem>());
-            case RE::FormType::Ingredient:
-                return static_cast<const RE::TESIcon*>(item->As<RE::IngredientItem>());
-            case RE::FormType::Book:
-                return static_cast<const RE::TESIcon*>(item->As<RE::TESObjectBOOK>());
-            case RE::FormType::Ammo:
-                return static_cast<const RE::TESIcon*>(item->As<RE::TESAmmo>());
-            case RE::FormType::Misc:
-            case RE::FormType::KeyMaster:
-            case RE::FormType::SoulGem:
-                return static_cast<const RE::TESIcon*>(item->As<RE::TESObjectMISC>());
-            default:
-                return nullptr;
-        }
-    }
-
-    // Maps a MARKER_TYPE (0..65) to the icon DDS filename (without path prefix).
-    // Returns nullptr for types that have no distinct icon.
-    static const char* MarkerIconFileName(std::uint32_t typeId)
-    {
-        // clang-format off
-        static constexpr std::array<const char*, 66> kFiles = {
-            "",                       //  0 None
-            "City.dds",               //  1
-            "Town.dds",               //  2
-            "Settlement.dds",         //  3
-            "Cave.dds",               //  4
-            "Camp.dds",               //  5
-            "Fort.dds",               //  6
-            "NordicRuin.dds",         //  7
-            "DwemerRuin.dds",         //  8
-            "Shipwreck.dds",          //  9
-            "Grove.dds",              // 10
-            "Landmark.dds",           // 11
-            "DragonLair.dds",         // 12
-            "Farm.dds",               // 13
-            "WoodMill.dds",           // 14
-            "Mine.dds",               // 15
-            "ImperialCamp.dds",       // 16
-            "StormcloakCamp.dds",     // 17
-            "Doomstone.dds",          // 18
-            "WheatMill.dds",          // 19
-            "Smelter.dds",            // 20
-            "Stable.dds",             // 21
-            "ImperialTower.dds",      // 22
-            "Clearing.dds",           // 23
-            "Pass.dds",               // 24
-            "Altar.dds",              // 25
-            "Rock.dds",               // 26
-            "Lighthouse.dds",         // 27
-            "OrcStronghold.dds",      // 28
-            "GiantCamp.dds",          // 29
-            "Shack.dds",              // 30
-            "NordicTower.dds",        // 31
-            "NordicDwelling.dds",     // 32
-            "Docks.dds",              // 33
-            "Shrine.dds",             // 34
-            "RiftenCastle.dds",       // 35
-            "RiftenCapitol.dds",      // 36
-            "WindhelmCastle.dds",     // 37
-            "WindhelmCapitol.dds",    // 38
-            "WhiterunCastle.dds",     // 39
-            "WhiterunCapitol.dds",    // 40
-            "SolitudeCastle.dds",     // 41
-            "SolitudeCapitol.dds",    // 42
-            "MarkarthCastle.dds",     // 43
-            "MarkarthCapitol.dds",    // 44
-            "WinterholdCastle.dds",   // 45
-            "WinterholdCapitol.dds",  // 46
-            "MorthalCastle.dds",      // 47
-            "MorthalCapitol.dds",     // 48
-            "FalkreathCastle.dds",    // 49
-            "FalkreathCapitol.dds",   // 50
-            "DawnstarCastle.dds",     // 51
-            "DawnstarCapitol.dds",    // 52
-            "DLC02MiraakTemple.dds",  // 53
-            "DLC02RavenRock.dds",     // 54
-            "DLC02BeastStone.dds",    // 55
-            "DLC02TelMithryn.dds",    // 56
-            "DLC02ToSkyrim.dds",      // 57
-            "DLC02StalhrimSource.dds",// 58
-            "DLC02CastleKarstaag.dds",// 59
-            "",                       // 60 Unknown sentinel
-            "",                       // 61 Door
-            "",                       // 62 QuestTarget
-            "",                       // 63 Unknown
-            "",                       // 64 PlayerSet
-            "",                       // 65 YouAreHere
-        };
-        // clang-format on
-        if (typeId >= kFiles.size())
-            return nullptr;
-        const char* f = kFiles[typeId];
-        return (f && f[0]) ? f : nullptr;
-    }
-
-    // Resolves the map-marker icon DDS path for a location or marker reference.
-    // Returns an empty optional when the form has no map marker data.
-    static std::optional<std::string> ResolveMarkerIconPath(RE::TESForm* form)
-    {
-        RE::TESObjectREFR* ref = nullptr;
-        if (auto* loc = form->As<RE::BGSLocation>()) {
-            ref = loc->worldLocMarker.get().get();
-        } else if (auto* r = form->As<RE::TESObjectREFR>()) {
-            ref = r;
-        }
-        if (!ref)
-            return std::nullopt;
-
-        auto* extra = ref->extraList.GetByType<RE::ExtraMapMarker>();
-        if (!extra || !extra->mapData)
-            return std::nullopt;
-
-        const auto typeId = static_cast<std::uint32_t>(extra->mapData->type.underlying());
-        const char* fileName = MarkerIconFileName(typeId);
-        if (!fileName)
-            return std::nullopt;
-
-        return std::string("Textures/Interface/Map/") + fileName;
-    }
-
     // Shared helper: runs TextureConverter and builds the JSON response.
     static CommandResult BuildPreviewResult(const std::string& ddsPath)
     {
@@ -599,77 +464,6 @@ namespace GameCommands
         data["height"]      = preview.height;
         data["imageBase64"] = preview.imageBase64;
         return { true, "", std::move(data) };
-    }
-
-    PreviewPathResult ResolvePreviewPath(RE::FormID formId)
-    {
-        PreviewPathResult out;
-        auto*             form = RE::TESForm::LookupByID(formId);
-        if (!form) {
-            out.error = "Form not found";
-            return out;
-        }
-
-        logger::debug("item_preview 0x{:08X} ('{}') formType={}",
-                      formId,
-                      form->GetName() ? form->GetName() : "<unnamed>",
-                      static_cast<int>(form->GetFormType()));
-
-        // ── Location / map-marker icon ─────────────────────────────────
-        if (auto* loc = form->As<RE::BGSLocation>()) {
-            auto pathOpt = ResolveMarkerIconPath(form);
-            if (!pathOpt) {
-                logger::debug("item_preview 0x{:08X}: location has no map marker data", formId);
-                out.error = "Location has no map marker icon";
-                return out;
-            }
-            logger::debug("item_preview 0x{:08X}: marker icon path='{}'", formId, *pathOpt);
-            out.success = true;
-            out.path    = std::move(*pathOpt);
-            return out;
-        }
-        if (auto* ref = form->As<RE::TESObjectREFR>()) {
-            auto pathOpt = ResolveMarkerIconPath(form);
-            if (!pathOpt) {
-                logger::debug("item_preview 0x{:08X}: reference is not a map marker", formId);
-                out.error = "Reference is not a map marker";
-                return out;
-            }
-            logger::debug("item_preview 0x{:08X}: marker icon path='{}'", formId, *pathOpt);
-            out.success = true;
-            out.path    = std::move(*pathOpt);
-            return out;
-        }
-
-        // ── Item inventory icon ────────────────────────────────────────
-        auto* item = form->As<RE::TESBoundObject>();
-        if (!item) {
-            out.error = "Form is not an item, location, or map marker";
-            return out;
-        }
-
-        const RE::TESIcon* icon = GetInventoryIcon(item);
-        if (!icon) {
-            logger::debug("item_preview 0x{:08X}: form type carries no 2D inventory icon", formId);
-            out.error = "Item has no inventory icon";
-            return out;
-        }
-
-        RE::BSString pathBuf;
-        const char*  iconPath = icon->GetAsNormalFile(pathBuf);
-        logger::debug("item_preview 0x{:08X}: textureName='{}' resolvedPath='{}'",
-                      formId,
-                      icon->textureName.c_str(),
-                      (iconPath && iconPath[0]) ? iconPath : "<empty>");
-
-        if (!iconPath || iconPath[0] == '\0') {
-            out.error = "Item has no inventory icon (empty ICON subrecord)";
-            return out;
-        }
-
-        out.success = true;
-        out.path    = iconPath;
-        return out;
     }
 
     CommandResult GetTexturePreview(const std::string& path)

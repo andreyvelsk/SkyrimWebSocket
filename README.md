@@ -88,13 +88,11 @@ The plugin reads an optional INI file placed next to the DLL:
 Data/SKSE/Plugins/SkyrimWebSocket.ini
 ```
 
-If the file is absent, the plugin binds to `127.0.0.1` plus every
-automatically detected IPv4 address of the local network interfaces, on port
-`8765`, so devices on the local subnets can connect by default.
+If the file is absent, the plugin uses safe defaults (`127.0.0.1:8765`).
 
 | Key | Default | Description |
 |---|---|---|
-| `[Server] ListenAddress` | *(auto)* | Bind address. Leave empty (default) to listen on `127.0.0.1` and every local interface address. Set a single explicit address to override, e.g. `127.0.0.1` (localhost only) or `0.0.0.0` (any interface). |
+| `[Server] ListenAddress` | `127.0.0.1` | Bind address. Use `0.0.0.0` to accept remote connections (e.g. for debugging). |
 | `[Server] Port` | `8765` | TCP port the WebSocket server listens on. |
 | `[Debug] LogLevel` | `off` | Log verbosity: `off`, `info`, `debug`, `trace`. |
 

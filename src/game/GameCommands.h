@@ -37,19 +37,6 @@ namespace GameCommands
     // Must be called on the game thread.
     CommandResult DropItem(RE::FormID formId, int count);
 
-    // Resolves the DDS texture path for a preview without reading or converting
-    // the texture. Accepts an item, location (BGSLocation), or map-marker
-    // reference (TESObjectREFR) form ID. Must be called on the game thread.
-    // On success `path` is a Data-relative DDS path suitable for
-    // GetTexturePreview (which may run on any non-game thread).
-    struct PreviewPathResult
-    {
-        bool        success = false;
-        std::string error;   // empty on success
-        std::string path;    // DDS path on success
-    };
-    PreviewPathResult ResolvePreviewPath(RE::FormID formId);
-
     // Produce a base64 PNG preview of a raw DDS texture path (relative to the
     // game Data folder, e.g. "textures/interface/icons/weapons/ironsword.dds").
     // This is the generic primitive for any texture asset — item icons, map

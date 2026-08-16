@@ -1,9 +1,7 @@
 # WebSocket Protocol — SkyrimWebSocket Plugin
 
-The plugin starts a WebSocket server. By default it listens on `ws://127.0.0.1:8765`
-plus every automatically detected local interface address, so devices on the
-local subnets can connect. The address and port can be changed via an INI
-configuration file (see the [Configuration](#configuration) section).
+The plugin starts a WebSocket server. By default it binds to `ws://127.0.0.1:8765`.
+The address and port can be changed via an INI configuration file (see the [Configuration](#configuration) section).
 
 After the connection is established the client drives all behaviour: it declares
 which fields it wants, how often they should be delivered, and can query data
@@ -137,7 +135,6 @@ below.
 | `read_book` | Open and read a book from inventory. | [↓](#read_book) |
 | `drop` | Drop one or more inventory items onto the ground. | [↓](#drop) |
 | `favorite` | Toggle the favorite flag on an inventory item. | [↓](#favorite) |
-| `item_preview` | Produce a base64 PNG preview of an item / location / map-marker icon. | [↓](#item_preview) |
 | `texture_preview` | Produce a base64 PNG preview from a raw DDS texture path. | [↓](#texture_preview) |
 | `file_download` | Download an arbitrary file (BSA / loose) as base64. | [↓](#file_download) |
 | `equip_spell` | Equip a known spell to a hand. | [↓](#equip_spell) |
@@ -290,53 +287,6 @@ Toggles the favorite flag on an inventory item.
 
 ---
 
-#### `item_preview`
-
-Produces a base64-encoded PNG preview of an item's inventory icon (or a
-location / map-marker icon). The image has a **transparent background** and can
-be shown directly in a web client via `<img src="data:image/png;base64,...">`.
-
-| Field | Required | Default | Description |
-|---|---|---|---|
-| `formId` | **yes** | — | Hex form ID of the item, location (`BGSLocation`), or map-marker reference (`TESObjectREFR`). |
-
-**Applies to:** Weapons, Apparel, Potions, Food, Ingredients, Books, Ammo, Misc, Keys, Soul Gems, and map markers / locations.
-
-> The conversion runs off the game thread, so the game does not freeze.
-
-**Response** — the `data` object of `commandResult`:
-
-| Field | Type | Description |
-|---|---|---|
-| `mimeType` | string | Always `"image/png"`. |
-| `width` | integer | Image width in pixels. |
-| `height` | integer | Image height in pixels. |
-| `imageBase64` | string | Base64-encoded PNG bytes (no `data:` URI prefix). |
-
-```json
-{
-  "type": "command",
-  "id": "prev-sword",
-  "command": "item_preview",
-  "formId": "0x00012EB7"
-}
-```
-
-```jsonc
-// Success response:
-{
-  "type": "commandResult",
-  "id": "prev-sword",
-  "success": true,
-  "data": {
-    "mimeType": "image/png",
-    "width": 64,
-    "height": 64,
-    "imageBase64": "iVBORw0KGgo..."
-  }
-}
-```
-
 ---
 
 #### `texture_preview`
@@ -349,7 +299,7 @@ art, etc.) and is also useful for testing the DDS→PNG pipeline.
 |---|---|---|---|
 | `path` | **yes** | — | DDS path relative to the game `Data` folder, e.g. `"textures/interface/icons/weapons/ironsword.dds"`. Backslashes are accepted. |
 
-**Response** — the same `data` shape as `item_preview`:
+**Response** — the `data` object of `commandResult`:
 
 | Field | Type | Description |
 |---|---|---|
@@ -1076,12 +1026,9 @@ If the file does not exist, the defaults shown below are used.
 ```ini
 [Server]
 ; Address the WebSocket server binds to.
-; Leave empty (default) to bind to 127.0.0.1 plus every automatically
-; detected IPv4 address of the local network interfaces, so devices on the
-; local subnets can connect without opening 0.0.0.0.
-;
-; Set a single explicit address to override, e.g. 127.0.0.1 or 0.0.0.0.
-ListenAddress=
+; Use 127.0.0.1 (default) to accept connections from localhost only.
+; Use 0.0.0.0 to accept connections from any network interface (useful for debugging from a remote client).
+ListenAddress=127.0.0.1
 
 ; TCP port the WebSocket server listens on.
 ; Default: 8765

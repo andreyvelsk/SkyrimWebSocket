@@ -40,7 +40,6 @@ find_package(Boost REQUIRED COMPONENTS system)
 find_package(nlohmann_json CONFIG REQUIRED)
 add_commonlibsse_plugin(${PROJECT_NAME} SOURCES
     plugin.cpp
-    src/Network.cpp
     src/game/Common.cpp
     src/game/EventBus.cpp
     src/game/FieldRegistry.cpp
@@ -63,7 +62,7 @@ add_commonlibsse_plugin(${PROJECT_NAME} SOURCES
 ) # <--- specifies all source files
 target_compile_features(${PROJECT_NAME} PRIVATE cxx_std_23) # <--- use C++23 standard
 target_precompile_headers(${PROJECT_NAME} PRIVATE PCH.h) # <--- PCH.h is required!
-target_link_libraries(${PROJECT_NAME} PRIVATE Boost::system nlohmann_json::nlohmann_json dbghelp iphlpapi)
+target_link_libraries(${PROJECT_NAME} PRIVATE Boost::system nlohmann_json::nlohmann_json dbghelp)
 
 # When your SKSE .dll is compiled, this will automatically copy the .dll into your mods folder.
 # Only works if you configure DEPLOY_ROOT above (or set the SKYRIM_MODS_FOLDER environment variable)
