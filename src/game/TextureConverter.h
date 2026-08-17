@@ -23,7 +23,10 @@ namespace TextureConverter
     //
     // `path` is a game data path such as
     // "textures/interface/icons/weapons/ironsword.dds". Backslashes are
-    // accepted and normalised. Must be called on the game thread.
+    // accepted and normalised.
+    //
+    // Heavy (file read + DDS decode + PNG encode + base64): call from the
+    // io_context thread, NOT the game thread, to avoid freezing the game.
     //
     // This is the single reusable entry point for any texture asset: item
     // inventory icons, map marker icons, book art, etc. New commands only need

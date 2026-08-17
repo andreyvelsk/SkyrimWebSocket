@@ -3,6 +3,7 @@
 #include <RE/Skyrim.h>
 
 #include <cctype>
+#include <cstdint>
 #include <nlohmann/json.hpp>
 #include <string>
 #include <string_view>
@@ -40,4 +41,7 @@ namespace Common
 
     // Trim leading/trailing ASCII whitespace from a string_view.
     std::string_view TrimAscii(std::string_view value);
+
+    // Encode raw bytes to a base64 string (RFC 4648, standard alphabet).
+    std::string Base64Encode(const std::uint8_t* data, std::size_t len);
 }

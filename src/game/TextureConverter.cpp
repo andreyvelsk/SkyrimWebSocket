@@ -1,4 +1,5 @@
 #include "TextureConverter.h"
+#include "Common.h"
 
 #include <algorithm>
 #include <array>
@@ -165,26 +166,6 @@ namespace
         }
     }
 
-    // ─── Base64 ────────────────────────────────────────────────────────────
-
-    constexpr char kBase64Alphabet[] = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
-
-    std::string Base64Encode(const std::uint8_t* data, std::size_t len)
-    {
-        std::string out;
-        out.reserve(((len + 2) / 3) * 4);
-        for (std::size_t i = 0; i < len; i += 3) {
-            const std::uint32_t n = (data[i] << 16) |
-                                    ((i + 1 < len) ? (data[i + 1] << 8) : 0) |
-                                    ((i + 2 < len) ? data[i + 2] : 0);
-            out.push_back(kBase64Alphabet[(n >> 18) & 63]);
-            out.push_back(kBase64Alphabet[(n >> 12) & 63]);
-            out.push_back((i + 1 < len) ? kBase64Alphabet[(n >> 6) & 63] : '=');
-            out.push_back((i + 2 < len) ? kBase64Alphabet[n & 63] : '=');
-        }
-        return out;
-    }
-
     // ─── DDS format description ────────────────────────────────────────────
 
     enum class DdsFormat
@@ -251,6 +232,100 @@ namespace
                 return 0;
         }
     }
+
+    // ─── DDS → RGBA decoding pipeline ──────────────────────────────────────
+
+    // Reads and validates the DDS header + mip-0 pixel data from the stream.
+    // On failure, fills result.error and returns false.
+    static bool ReadDdsData(RE::BSResourceNiBinaryStream& stream, const std::string& path,
+                            DdsInfo& info, std::vector<std::uint8_t>& block,
+                            TextureConverter::Preview& result)
+    {
+        std::array<std::uint8_t, 128> header{};
+        if (!stream.read(header.data(), static_cast<std::uint32_t>(header.size()))) {
+            result.error = "Failed to read DDS header: " + path;
+            return false;
+        }
+        if (ReadU32(header.data()) != kDdsMagic) {
+            result.error = "Not a DDS texture: " + path;
+            return false;
+        }
+
+        info = ParseHeader(header.data());
+        if (info.format == DdsFormat::kUnsupported) {
+            result.error = "Unsupported DDS pixel format: " + path;
+            return false;
+        }
+
+        const std::size_t mipSize = Mip0Size(info);
+        if (mipSize == 0) {
+            result.error = "Invalid DDS dimensions: " + path;
+            return false;
+        }
+
+        block.resize(mipSize);
+        if (!stream.read(block.data(), static_cast<std::uint32_t>(mipSize))) {
+            result.error = "Failed to read DDS pixel data: " + path;
+            return false;
+        }
+        return true;
+    }
+
+    // Decodes DDS compressed/uncompressed blocks to an RGBA8 pixel array.
+    static void DecodeDdsToRGBA(const DdsInfo& info, const std::vector<std::uint8_t>& block,
+                                std::vector<RGBA>& rgba)
+    {
+        const std::uint32_t bw = (info.width + 3) / 4;
+        const std::uint32_t bh = (info.height + 3) / 4;
+
+        for (std::uint32_t by = 0; by < bh; ++by) {
+            for (std::uint32_t bx = 0; bx < bw; ++bx) {
+                RGBA decoded[16]{};
+                switch (info.format) {
+                    case DdsFormat::kDxt1:
+                        DecodeDxt1Block(block.data() + (by * bw + bx) * 8, decoded);
+                        break;
+                    case DdsFormat::kDxt3:
+                        DecodeDxt3Block(block.data() + (by * bw + bx) * 16, decoded);
+                        break;
+                    case DdsFormat::kDxt5:
+                        DecodeDxt5Block(block.data() + (by * bw + bx) * 16, decoded);
+                        break;
+                    default: break;
+                }
+
+                for (std::uint32_t py = 0; py < 4; ++py) {
+                    const std::uint32_t y = by * 4 + py;
+                    if (y >= info.height) break;
+                    for (std::uint32_t px = 0; px < 4; ++px) {
+                        const std::uint32_t x = bx * 4 + px;
+                        if (x >= info.width) break;
+                        rgba[y * info.width + x] = decoded[py * 4 + px];
+                    }
+                }
+            }
+        }
+
+        if (info.format == DdsFormat::kUncompressed) {
+            DecodeUncompressedBlock(block.data(), info.bytesPerPixel, info.rMask,
+                                    info.gMask, info.bMask, info.aMask,
+                                    info.width * info.height, rgba.data());
+        }
+    }
+
+    // Encodes RGBA8 pixels to an in-memory PNG via stb_image_write.
+    // Returns the PNG bytes; caller must free with STBIW_FREE.
+    static unsigned char* EncodePng(const std::vector<RGBA>& rgba,
+                                    std::uint32_t width, std::uint32_t height, int& outLen)
+    {
+        return stbi_write_png_to_mem(
+            reinterpret_cast<const unsigned char*>(rgba.data()),
+            static_cast<int>(width * 4),
+            static_cast<int>(width),
+            static_cast<int>(height),
+            4,
+            &outLen);
+    }
 }
 
 namespace TextureConverter
@@ -272,78 +347,16 @@ namespace TextureConverter
             return result;
         }
 
-        std::array<std::uint8_t, 128> header{};
-        if (!stream.read(header.data(), static_cast<std::uint32_t>(header.size()))) {
-            result.error = "Failed to read DDS header: " + path;
+        DdsInfo info;
+        std::vector<std::uint8_t> block;
+        if (!ReadDdsData(stream, path, info, block, result))
             return result;
-        }
-        if (ReadU32(header.data()) != kDdsMagic) {
-            result.error = "Not a DDS texture: " + path;
-            return result;
-        }
 
-        const DdsInfo info = ParseHeader(header.data());
-        if (info.format == DdsFormat::kUnsupported) {
-            result.error = "Unsupported DDS pixel format: " + path;
-            return result;
-        }
+        std::vector<RGBA> rgba(info.width * info.height);
+        DecodeDdsToRGBA(info, block, rgba);
 
-        const std::size_t mipSize = Mip0Size(info);
-        if (mipSize == 0) {
-            result.error = "Invalid DDS dimensions: " + path;
-            return result;
-        }
-
-        std::vector<std::uint8_t> block(mipSize);
-        if (!stream.read(block.data(), static_cast<std::uint32_t>(mipSize))) {
-            result.error = "Failed to read DDS pixel data: " + path;
-            return result;
-        }
-
-        // Decode to RGBA8, row-major, top-left origin.
-        const std::uint32_t pixelCount = info.width * info.height;
-        std::vector<RGBA>    rgba(pixelCount);
-
-        const std::uint32_t bw = (info.width + 3) / 4;
-        const std::uint32_t bh = (info.height + 3) / 4;
-
-        for (std::uint32_t by = 0; by < bh; ++by) {
-            for (std::uint32_t bx = 0; bx < bw; ++bx) {
-                RGBA decoded[16]{};
-                switch (info.format) {
-                    case DdsFormat::kDxt1: DecodeDxt1Block(block.data() + (by * bw + bx) * 8, decoded); break;
-                    case DdsFormat::kDxt3: DecodeDxt3Block(block.data() + (by * bw + bx) * 16, decoded); break;
-                    case DdsFormat::kDxt5: DecodeDxt5Block(block.data() + (by * bw + bx) * 16, decoded); break;
-                    default: break;
-                }
-
-                for (std::uint32_t py = 0; py < 4; ++py) {
-                    const std::uint32_t y = by * 4 + py;
-                    if (y >= info.height)
-                        break;
-                    for (std::uint32_t px = 0; px < 4; ++px) {
-                        const std::uint32_t x = bx * 4 + px;
-                        if (x >= info.width)
-                            break;
-                        rgba[y * info.width + x] = decoded[py * 4 + px];
-                    }
-                }
-            }
-        }
-
-        if (info.format == DdsFormat::kUncompressed) {
-            DecodeUncompressedBlock(block.data(), info.bytesPerPixel, info.rMask, info.gMask,
-                                    info.bMask, info.aMask, pixelCount, rgba.data());
-        }
-
-        int                pngLen = 0;
-        unsigned char*     png    = stbi_write_png_to_mem(
-            reinterpret_cast<const unsigned char*>(rgba.data()),
-            static_cast<int>(info.width * 4),
-            static_cast<int>(info.width),
-            static_cast<int>(info.height),
-            4,
-            &pngLen);
+        int            pngLen = 0;
+        unsigned char* png    = EncodePng(rgba, info.width, info.height, pngLen);
         if (!png || pngLen <= 0) {
             result.error = "Failed to encode PNG: " + path;
             return result;
@@ -353,7 +366,7 @@ namespace TextureConverter
         result.mimeType    = "image/png";
         result.width       = info.width;
         result.height      = info.height;
-        result.imageBase64 = Base64Encode(png, static_cast<std::size_t>(pngLen));
+        result.imageBase64 = Common::Base64Encode(png, static_cast<std::size_t>(pngLen));
         STBIW_FREE(png);
         return result;
     }

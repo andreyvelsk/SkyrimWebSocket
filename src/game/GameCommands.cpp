@@ -1,5 +1,6 @@
 #include "GameCommands.h"
 #include "TextureConverter.h"
+#include "Common.h"
 #include "MapMarkers.h"
 #include "../Utils.h"
 #include "PlayerPosition.h"
@@ -472,26 +473,6 @@ namespace GameCommands
         return BuildPreviewResult(path);
     }
 
-    // ─── Base64 (duplicated from TextureConverter.cpp for local use) ──────
-
-    static constexpr char kBase64Chars[] = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
-
-    static std::string Base64Encode(const std::uint8_t* data, std::size_t len)
-    {
-        std::string out;
-        out.reserve(((len + 2) / 3) * 4);
-        for (std::size_t i = 0; i < len; i += 3) {
-            const std::uint32_t n = (data[i] << 16) |
-                                    ((i + 1 < len) ? (data[i + 1] << 8) : 0) |
-                                    ((i + 2 < len) ? data[i + 2] : 0);
-            out.push_back(kBase64Chars[(n >> 18) & 63]);
-            out.push_back(kBase64Chars[(n >> 12) & 63]);
-            out.push_back((i + 1 < len) ? kBase64Chars[(n >> 6) & 63] : '=');
-            out.push_back((i + 2 < len) ? kBase64Chars[n & 63] : '=');
-        }
-        return out;
-    }
-
     // ─── MIME type from file extension ────────────────────────────────────
 
     static std::string MimeTypeFromPath(const std::string& path)
@@ -559,7 +540,7 @@ namespace GameCommands
         nlohmann::json resp;
         resp["mimeType"]   = MimeTypeFromPath(path);
         resp["size"]       = data.size();
-        resp["dataBase64"] = Base64Encode(data.data(), data.size());
+        resp["dataBase64"] = Common::Base64Encode(data.data(), data.size());
         return { true, "", std::move(resp) };
     }
 
