@@ -77,7 +77,7 @@ namespace MapMarkers
             "DLC02BeastStone",    // 55
             "DLC02TelMithryn",    // 56
             "DLC02ToSkyrim",      // 57
-            "DLC02StalhrimSource",// 58
+            "DLC02ToSolstheim",   // 58
             "DLC02CastleKarstaag",// 59
             "Unknown",            // 60  (kTotalLocationTypes sentinel)
             "Door",               // 61

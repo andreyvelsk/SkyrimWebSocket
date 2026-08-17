@@ -99,7 +99,7 @@ object describing one location.
 | 55 | `DLC02BeastStone` | DLC: Dragonborn — Beast Stone |
 | 56 | `DLC02TelMithryn` | DLC: Dragonborn — Tel Mithryn |
 | 57 | `DLC02ToSkyrim` | DLC: Dragonborn — passage to Skyrim |
-| 58 | `DLC02StalhrimSource` | DLC: Dragonborn — Stalhrim source |
+| 58 | `DLC02ToSolstheim` | DLC: Dragonborn — Stalhrim source |
 | 59 | `DLC02CastleKarstaag` | DLC: Dragonborn — Castle Karstaag |
 | 60 | `Unknown` | Internal sentinel (`kTotalLocationTypes`) |
 | 61 | `Door` | Door / interior entrance marker |
