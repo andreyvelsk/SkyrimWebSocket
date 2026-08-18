@@ -287,8 +287,6 @@ Toggles the favorite flag on an inventory item.
 
 ---
 
----
-
 #### `texture_preview`
 
 Produces a base64-encoded PNG preview from a raw DDS texture path. This is the
