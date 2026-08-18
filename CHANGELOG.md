@@ -2,6 +2,19 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+## [1.16.0](https://github.com/andreyvelsk/SkyrimWebSocket/compare/v1.15.1...v1.16.0) (2026-08-18)
+
+
+### 🐛 Bug Fixes
+
+* **cicd:** release ([8a62a90](https://github.com/andreyvelsk/SkyrimWebSocket/commits/8a62a905d4d4b01ec60a8e367b7e78d7f9177c07))
+* **quest:** handle quest with counter ([#54](https://github.com/andreyvelsk/SkyrimWebSocket/issues/54)) ([f1f416d](https://github.com/andreyvelsk/SkyrimWebSocket/commits/f1f416dbebd8d8091c06b375dff8ec9e421f7af1))
+
+
+### ✨ Features
+
+* **cicd:** use prebuilt lib ([#56](https://github.com/andreyvelsk/SkyrimWebSocket/issues/56)) ([e2c57ee](https://github.com/andreyvelsk/SkyrimWebSocket/commits/e2c57eece366366e33928893010b9ae99b22955d))
+
 ### [1.15.1](https://github.com/andreyvelsk/SkyrimWebSocket/compare/v1.15.0...v1.15.1) (2026-07-27)
 
 
