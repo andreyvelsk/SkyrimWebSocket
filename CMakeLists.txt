@@ -43,7 +43,12 @@ add_commonlibsse_plugin(${PROJECT_NAME} SOURCES
     src/game/Common.cpp
     src/game/EventBus.cpp
     src/game/FieldRegistry.cpp
-    src/game/GameCommands.cpp
+    src/game/FileCommands.cpp
+    src/game/HotkeyCommands.cpp
+    src/game/InventoryCommands.cpp
+    src/game/MagicCommands.cpp
+    src/game/MapCommands.cpp
+    src/game/QuestCommands.cpp
     src/game/GameReader.cpp
     src/game/GameStatus.cpp
     src/game/HotkeyReader.cpp
@@ -55,6 +60,7 @@ add_commonlibsse_plugin(${PROJECT_NAME} SOURCES
     src/game/QuestMarkers.cpp
     src/game/QuestReader.cpp
     src/game/QuestText.cpp
+    src/game/TextureConverter.cpp
     src/server/MessageRouter.cpp
     src/server/WsSession.cpp
     src/server/WsServer.cpp
