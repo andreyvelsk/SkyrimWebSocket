@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+### [1.16.1](https://github.com/andreyvelsk/SkyrimWebSocket/compare/v1.16.0...v1.16.1) (2026-08-24)
+
+
+### 🐛 Bug Fixes
+
+* **magic:** crash on magic hotkey calculation ([#57](https://github.com/andreyvelsk/SkyrimWebSocket/issues/57)) ([5de7a73](https://github.com/andreyvelsk/SkyrimWebSocket/commits/5de7a731a390bbc8ba0980db1301b67a785a3322))
+
 ## [1.16.0](https://github.com/andreyvelsk/SkyrimWebSocket/compare/v1.15.1...v1.16.0) (2026-08-18)
 
 
