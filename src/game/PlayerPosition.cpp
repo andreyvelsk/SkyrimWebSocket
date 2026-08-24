@@ -1,8 +1,6 @@
 #include "PlayerPosition.h"
 #include "Common.h"
 
-#include "../../logger.h"
-
 namespace PlayerPosition
 {
     RE::TESWorldSpace* ResolvePlayerWorldspace()
@@ -26,21 +24,12 @@ namespace PlayerPosition
         if (!cell)
             return nullptr;
 
-        // A - cell's own worldSpace (may be set for some interiors).
+        // Cell's own worldSpace (may be set for some attached interiors).
         world = cell->GetRuntimeData().worldSpace;
         if (world)
             return world;
 
-        // B - ExtraPersistentCell on the player.
-        if (auto* xPersist = player->extraList.GetByType<RE::ExtraPersistentCell>()) {
-            if (xPersist->persistentCell) {
-                world = xPersist->persistentCell->GetRuntimeData().worldSpace;
-                if (world)
-                    return world;
-            }
-        }
-
-        // C - walk the location hierarchy via worldLocMarker.
+        // Walk the location hierarchy via worldLocMarker.
         RE::BGSLocation* loc = cell->GetLocation();
         while (loc) {
             auto* markerRef = loc->worldLocMarker.get().get();
@@ -50,41 +39,6 @@ namespace PlayerPosition
                     return world;
             }
             loc = loc->parentLoc;
-        }
-
-        // D - TES::worldSpace (the game's own tracked current worldspace).
-        if (auto* tes = RE::TES::GetSingleton()) {
-            world = tes->GetRuntimeData2().worldSpace;
-            if (world)
-                return world;
-        }
-
-        // E - brute-force scan of all worldspaces.
-        if (auto* dh = RE::TESDataHandler::GetSingleton()) {
-            const auto& worlds = dh->GetFormArray<RE::TESWorldSpace>();
-
-            // E1 - match by ExtraPersistentCell::persistentCell pointer.
-            if (auto* xPersist = player->extraList.GetByType<RE::ExtraPersistentCell>()) {
-                if (xPersist->persistentCell) {
-                    for (auto* ws : worlds) {
-                        if (ws && ws->persistentCell == xPersist->persistentCell) {
-                            return ws;
-                        }
-                    }
-                }
-            }
-
-            // E2 - match by location in worldspace's locationMap.
-            for (auto* curLoc = cell->GetLocation(); curLoc; curLoc = curLoc->parentLoc) {
-                const RE::FormID locId = curLoc->GetFormID();
-                if (!locId)
-                    continue;
-                for (auto* ws : worlds) {
-                    if (ws && ws->locationMap.contains(locId)) {
-                        return ws;
-                    }
-                }
-            }
         }
 
         return nullptr;
