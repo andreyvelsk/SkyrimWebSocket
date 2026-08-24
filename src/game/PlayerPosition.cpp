@@ -151,7 +151,23 @@ namespace PlayerPosition
             return out;
         }
 
-        // Player is in an interior cell or a city sub-worldspace.
+        // Player is in an interior cell — use the game's own cached
+        // last-exterior position (the same data the engine uses to render
+        // the player token on the world map while indoors).
+        if (cell && cell->IsInteriorCell()) {
+            auto& rt = player->GetPlayerRuntimeData();
+            if (rt.cachedWorldSpace) {
+                out["x"] = rt.exteriorPosition.x;
+                out["y"] = rt.exteriorPosition.y;
+                out["z"] = rt.exteriorPosition.z;
+                Common::BuildWorldspaceFields(out, rt.cachedWorldSpace);
+                return out;
+            }
+            // No cached exterior position yet (e.g. spawned straight into
+            // an interior via coc) — fall through to the marker heuristic.
+        }
+
+        // Player is in a city sub-worldspace or an interior without cache.
         // Resolve the BGSLocation's world-map marker reference.
         RE::BGSLocation*   loc       = cell ? cell->GetLocation() : nullptr;
         RE::TESObjectREFR* markerRef = nullptr;
