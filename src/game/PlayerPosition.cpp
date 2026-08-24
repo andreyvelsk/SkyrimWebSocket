@@ -15,6 +15,13 @@ namespace PlayerPosition
         if (world)
             return world;
 
+        // The game's own cached last-exterior worldspace. Populated from the
+        // save on load, so it is reliable even right after loading a game
+        // straight into an interior cell.
+        world = player->GetPlayerRuntimeData().cachedWorldSpace;
+        if (world)
+            return world;
+
         auto* cell = player->GetParentCell();
         if (!cell)
             return nullptr;
