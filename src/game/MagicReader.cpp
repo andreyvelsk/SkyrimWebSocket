@@ -315,11 +315,17 @@ namespace MagicReader
             spell->GetFormID(), j["isActive"].get<bool>());
 
         // Hotkeys: collect all number-key slot indices (0-7) for this spell.
+        // favorites->hotkeys is a BSTArray<TESForm*> indexed by slot number, NOT a
+        // fixed C array of 8. At new-game start (before favorites are loaded) the
+        // array can be empty, so a hardcoded `i < 8` loop reads out of bounds and
+        // crashes. Bound the loop by the actual array size instead.
         logger::trace("[BuildSpellEntry] 0x{:08X} building hotkeys favorites=0x{:016X}",
             spell->GetFormID(), reinterpret_cast<std::uintptr_t>(favorites));
         nlohmann::json hotkeys = nlohmann::json::array();
         if (favorites) {
-            for (int i = 0; i < 8; ++i) {
+            logger::trace("[BuildSpellEntry] 0x{:08X} hotkeys.size()={}",
+                spell->GetFormID(), favorites->hotkeys.size());
+            for (std::uint32_t i = 0; i < favorites->hotkeys.size(); ++i) {
                 if (favorites->hotkeys[i] == spell)
                     hotkeys.push_back(i);
             }
