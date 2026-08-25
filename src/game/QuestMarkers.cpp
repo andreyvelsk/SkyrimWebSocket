@@ -556,12 +556,16 @@ namespace QuestMarkers
                 return nullptr;
 
             RE::TESObjectREFR* found = nullptr;
-            cell->ForEachReference([&](RE::TESObjectREFR& candidate) {
-                auto* teleport = candidate.extraList.GetByType<RE::ExtraTeleport>();
-                if (!teleport)
+            cell->ForEachReference([&](RE::TESObjectREFR* candidate) {
+                if (!candidate)
                     return RE::BSContainer::ForEachResult::kContinue;
 
-                auto linked = teleport->linkedDoor.get();
+                auto* teleport = candidate->extraList.GetByType<RE::ExtraTeleport>();
+                const auto* tpData = teleport ? teleport->teleportData : nullptr;
+                if (!tpData)
+                    return RE::BSContainer::ForEachResult::kContinue;
+
+                auto linked = tpData->linkedDoor.get();
                 auto* linkedRef = linked.get();
                 if (linkedRef && HasGlobalMapCoordinates(linkedRef)) {
                     found = linkedRef;
