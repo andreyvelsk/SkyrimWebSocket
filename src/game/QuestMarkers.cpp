@@ -545,6 +545,33 @@ namespace QuestMarkers
             return HasGlobalMapCoordinates(ref);
         }
 
+        // Finds a map-facing reference for an interior target by following
+        // the cell's exit doors (ExtraTeleport -> linkedDoor). This projects
+        // interior quest targets onto the world map even when the location
+        // hierarchy has no usable map marker.
+        RE::TESObjectREFR* FindMapFacingExitDoorRef(RE::TESObjectREFR* targetRef)
+        {
+            auto* cell = targetRef ? targetRef->GetParentCell() : nullptr;
+            if (!cell || !cell->IsInteriorCell())
+                return nullptr;
+
+            RE::TESObjectREFR* found = nullptr;
+            cell->ForEachReference([&](RE::TESObjectREFR& candidate) {
+                auto* teleport = candidate.extraList.GetByType<RE::ExtraTeleport>();
+                if (!teleport)
+                    return RE::BSContainer::ForEachResult::kContinue;
+
+                auto linked = teleport->linkedDoor.get();
+                auto* linkedRef = linked.get();
+                if (linkedRef && HasGlobalMapCoordinates(linkedRef)) {
+                    found = linkedRef;
+                    return RE::BSContainer::ForEachResult::kStop;
+                }
+                return RE::BSContainer::ForEachResult::kContinue;
+            });
+            return found;
+        }
+
         static void BuildPersistentRefCache()
         {
             s_persistentCache.byFormId.clear();
@@ -805,6 +832,15 @@ namespace QuestMarkers
                                 ? "BGSLocation::specialRefs.globalRef"
                                 : "BGSLocation::parentLoc.specialRefs.globalRef");
                 }
+            }
+
+            // Interior target whose location hierarchy has no usable map
+            // marker — project onto the world map through the cell's exit
+            // door (linked teleport destination).
+            if (auto* exitRef = FindMapFacingExitDoorRef(targetRef)) {
+                out.ref    = exitRef;
+                out.source = "linkedTeleportDoor.exit";
+                return out;
             }
 
             if (out.location && out.ref)
