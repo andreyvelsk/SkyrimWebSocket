@@ -382,12 +382,10 @@ set, `Map::Markers::Quests` includes/excludes Miscellaneous targets accordingly.
   (`_root.ToggleShowMiscObjectives`) via the movie view, so the native toggle,
   the TitleList checkbox and the tracked-target list all update exactly like a
   real user click (`miscObjectivesVisibilitySource = "command:nativeCallback"`).
-* **Journal closed** — the desired value is stored as an override that the
-  filter applies immediately; it is cleared on the next save load
-  (`miscObjectivesVisibilitySource = "command"`).
-
-The reader continuously follows the in-game switcher: whenever the journal menu
-opens/closes, the current `unk30` state is captured and used for filtering.
+* **Journal closed** — there is no live switcher object to move. The server-side
+  filter applies immediately (`miscObjectivesVisibilitySource = "command"`),
+  and the desired value is queued: at the next journal open it is pushed into
+  the game through the same native callback, keeping both sides in sync.
 
 | Field | Type | Description |
 |---|---|---|

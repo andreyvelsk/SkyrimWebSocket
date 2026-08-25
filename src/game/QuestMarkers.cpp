@@ -47,6 +47,33 @@ namespace QuestMarkers
         bool g_miscVisible = true;
         const char* g_miscSource = "cached misc objectives visibility";
 
+        // Set when misc_objectives_set ran while the journal was closed: the
+        // desired value is applied to the game through the native Scaleform
+        // callback at the next journal open.
+        bool g_miscPendingOverride = false;
+
+        // Drives the journal's own Scaleform callback until the native master
+        // toggle matches `visible`. Returns false when the journal is closed
+        // or the callback could not be delivered.
+        bool ApplyNativeMiscToggle(bool visible)
+        {
+            auto* ui = RE::UI::GetSingleton();
+            if (!ui)
+                return false;
+            auto journal = ui->GetMenu<RE::JournalMenu>();
+            if (!journal)
+                return false;
+
+            auto& tab = journal->GetRuntimeData().questsTab;
+            RE::GFxMovieView* movie = tab.view
+                                          ? tab.view.get()
+                                          : ui->GetMovieView(RE::JournalMenu::MENU_NAME).get();
+            for (int i = 0; movie && i < 4 && tab.unk30 != visible; ++i) {
+                movie->Invoke("_root.ToggleShowMiscObjectives", nullptr, nullptr, 0);
+            }
+            return tab.unk30 == visible;
+        }
+
         std::string_view QuestTypeName(RE::QUEST_DATA::Type t)
         {
             using T = RE::QUEST_DATA::Type;
@@ -73,18 +100,12 @@ namespace QuestMarkers
             state.cachedKnown = g_miscKnown;
             state.cachedVisible = g_miscVisible;
 
-            // A command override wins until the next save load.
-            if (g_miscKnown && std::string_view(g_miscSource) == "command") {
-                state.visible = g_miscVisible;
-                state.known = true;
-                state.source = g_miscSource;
-                return state;
-            }
-
             if (auto* ui = RE::UI::GetSingleton()) {
                 if (auto journal = ui->GetMenu<RE::JournalMenu>()) {
                     state.journalOpen = true;
-                    // Native master toggle on the journal's quests tab.
+                    // While the journal is open the native master toggle is
+                    // authoritative — a manual switcher change must win over
+                    // any cached command override.
                     const bool native = journal->GetRuntimeData().questsTab.unk30;
                     state.nativeKnown = true;
                     state.nativeVisible = native;
@@ -490,18 +511,31 @@ namespace QuestMarkers
     void CaptureQuestJournalState()
     {
         // Called by the EventBus whenever the journal menu opens or closes.
-        // Snapshot the native master toggle so the filter keeps following the
-        // in-game switcher while the journal is closed.
         auto* ui = RE::UI::GetSingleton();
         if (!ui)
             return;
-        if (auto journal = ui->GetMenu<RE::JournalMenu>()) {
-            const bool native = journal->GetRuntimeData().questsTab.unk30;
-            g_miscKnown = true;
-            g_miscVisible = native;
-            g_miscSource = "Journal_QuestsTab::unk30";
-            logger::debug("[Map::Markers::Quests] captured misc toggle={} from journal", native);
+        auto journal = ui->GetMenu<RE::JournalMenu>();
+        if (!journal)
+            return;
+
+        // A queued command override is pushed into the game first, through
+        // the same native Scaleform callback a real user click uses.
+        if (g_miscPendingOverride) {
+            if (ApplyNativeMiscToggle(g_miscVisible)) {
+                g_miscPendingOverride = false;
+                g_miscSource = "command:nativeCallback";
+                logger::info("[Map::Markers::Quests] applied queued misc toggle={} on journal open",
+                             g_miscVisible);
+            }
         }
+
+        // Snapshot the native master toggle so the filter keeps following the
+        // in-game switcher while the journal is closed.
+        const bool native = journal->GetRuntimeData().questsTab.unk30;
+        g_miscKnown = true;
+        g_miscVisible = native;
+        g_miscSource = "Journal_QuestsTab::unk30";
+        logger::debug("[Map::Markers::Quests] captured misc toggle={} from journal", native);
     }
 
     void ResetQuestJournalState()
@@ -509,42 +543,29 @@ namespace QuestMarkers
         g_miscKnown = false;
         g_miscVisible = true;
         g_miscSource = "cached misc objectives visibility";
+        g_miscPendingOverride = false;
     }
 
     void SetMiscObjectivesVisible(bool visible)
     {
-        // Preferred path: drive the journal's own Scaleform callback
-        // (ToggleShowMiscObjectives) while the journal is open. It updates
-        // the native master toggle, the TitleList checkbox and the tracked
-        // target list exactly like a real user click.
-        bool appliedNatively = false;
-        if (auto* ui = RE::UI::GetSingleton()) {
-            if (auto journal = ui->GetMenu<RE::JournalMenu>()) {
-                auto& tab = journal->GetRuntimeData().questsTab;
-                RE::GFxMovieView* movie = tab.view
-                                              ? tab.view.get()
-                                              : ui->GetMovieView(RE::JournalMenu::MENU_NAME).get();
-                for (int i = 0; movie && i < 4 && tab.unk30 != visible; ++i) {
-                    movie->Invoke("_root.ToggleShowMiscObjectives", nullptr, nullptr, 0);
-                }
-                appliedNatively = tab.unk30 == visible;
-            }
-        }
-
+        // Realtime for the server output — the filter value is updated
+        // unconditionally, right now.
         g_miscKnown = true;
         g_miscVisible = visible;
 
-        if (!appliedNatively) {
-            // Journal closed — persist the intent as an override so the
-            // filter applies immediately; ResetQuestJournalState clears it
-            // on the next save load.
-            g_miscSource = "command";
-            if (auto* ui = RE::UI::GetSingleton()) {
-                if (auto journal = ui->GetMenu<RE::JournalMenu>())
-                    journal->GetRuntimeData().questsTab.unk30 = visible;
-            }
-        } else {
+        // Realtime for the game when the journal is open: drive its own
+        // Scaleform callback so the native toggle, the TitleList checkbox and
+        // the tracked-target list update exactly like a real user click.
+        if (ApplyNativeMiscToggle(visible)) {
+            g_miscPendingOverride = false;
             g_miscSource = "command:nativeCallback";
+        } else {
+            // Journal closed — there is no live switcher object to move. The
+            // filter above is already in effect; the desired value is queued
+            // and pushed into the game through the same native callback at
+            // the next journal open.
+            g_miscSource = "command";
+            g_miscPendingOverride = true;
         }
 
         logger::info("[Map::Markers::Quests] misc objectives visibility set to {} ({})",
