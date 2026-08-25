@@ -489,8 +489,19 @@ namespace QuestMarkers
 
     void CaptureQuestJournalState()
     {
-        // Live state is picked up by GetMiscObjectivesVisibility whenever the
-        // journal menu is open; nothing extra to capture here.
+        // Called by the EventBus whenever the journal menu opens or closes.
+        // Snapshot the native master toggle so the filter keeps following the
+        // in-game switcher while the journal is closed.
+        auto* ui = RE::UI::GetSingleton();
+        if (!ui)
+            return;
+        if (auto journal = ui->GetMenu<RE::JournalMenu>()) {
+            const bool native = journal->GetRuntimeData().questsTab.unk30;
+            g_miscKnown = true;
+            g_miscVisible = native;
+            g_miscSource = "Journal_QuestsTab::unk30";
+            logger::debug("[Map::Markers::Quests] captured misc toggle={} from journal", native);
+        }
     }
 
     void ResetQuestJournalState()
@@ -502,21 +513,41 @@ namespace QuestMarkers
 
     void SetMiscObjectivesVisible(bool visible)
     {
+        // Preferred path: drive the journal's own Scaleform callback
+        // (ToggleShowMiscObjectives) while the journal is open. It updates
+        // the native master toggle, the TitleList checkbox and the tracked
+        // target list exactly like a real user click.
+        bool appliedNatively = false;
+        if (auto* ui = RE::UI::GetSingleton()) {
+            if (auto journal = ui->GetMenu<RE::JournalMenu>()) {
+                auto& tab = journal->GetRuntimeData().questsTab;
+                auto* movie = tab.view ? tab.view.get()
+                                       : ui->GetMovieView(RE::JournalMenu::MENU_NAME);
+                for (int i = 0; movie && i < 4 && tab.unk30 != visible; ++i) {
+                    movie->Invoke("_root.ToggleShowMiscObjectives", nullptr, nullptr, 0);
+                }
+                appliedNatively = tab.unk30 == visible;
+            }
+        }
+
         g_miscKnown = true;
         g_miscVisible = visible;
-        g_miscSource = "command";
-        // Apply to the live journal menu when it is open.
-        //
-        // Limitation: this writes the native master-toggle field directly.
-        // The engine's ToggleShowMiscObjectives is a Scaleform-registered
-        // callback and cannot be invoked from SKSE, so the journal's
-        // TitleList checkbox does not visually refresh until the journal is
-        // reopened. The filter itself takes effect immediately.
-        if (auto* ui = RE::UI::GetSingleton()) {
-            if (auto journal = ui->GetMenu<RE::JournalMenu>())
-                journal->GetRuntimeData().questsTab.unk30 = visible;
+
+        if (!appliedNatively) {
+            // Journal closed — persist the intent as an override so the
+            // filter applies immediately; ResetQuestJournalState clears it
+            // on the next save load.
+            g_miscSource = "command";
+            if (auto* ui = RE::UI::GetSingleton()) {
+                if (auto journal = ui->GetMenu<RE::JournalMenu>())
+                    journal->GetRuntimeData().questsTab.unk30 = visible;
+            }
+        } else {
+            g_miscSource = "command:nativeCallback";
         }
-        logger::info("[Map::Markers::Quests] misc objectives visibility set to {} by command", visible);
+
+        logger::info("[Map::Markers::Quests] misc objectives visibility set to {} ({})",
+                     visible, g_miscSource);
     }
 
     nlohmann::json ReadQuestMarkers()

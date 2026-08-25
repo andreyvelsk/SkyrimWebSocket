@@ -376,14 +376,18 @@ stable native event.
 
 Overrides the journal's master **Miscellaneous-objectives toggle** — the same
 switch the native `ToggleShowMiscObjectives` journal callback controls. While
-set, `Map::Markers::Quests` includes/excludes Miscellaneous targets accordingly
-(the override wins over the live journal state until the next save load).
+set, `Map::Markers::Quests` includes/excludes Miscellaneous targets accordingly.
 
-> **Note:** the toggle is applied by writing the native
-> `Journal_QuestsTab::unk30` field directly — `ToggleShowMiscObjectives` is a
-> Scaleform-registered callback and cannot be invoked from SKSE. The filter
-> takes effect immediately, but if the journal menu is open at that moment its
-> checkbox only visually refreshes after the journal is reopened.
+* **Journal open** — the command drives the journal's own Scaleform callback
+  (`_root.ToggleShowMiscObjectives`) via the movie view, so the native toggle,
+  the TitleList checkbox and the tracked-target list all update exactly like a
+  real user click (`miscObjectivesVisibilitySource = "command:nativeCallback"`).
+* **Journal closed** — the desired value is stored as an override that the
+  filter applies immediately; it is cleared on the next save load
+  (`miscObjectivesVisibilitySource = "command"`).
+
+The reader continuously follows the in-game switcher: whenever the journal menu
+opens/closes, the current `unk30` state is captured and used for filtering.
 
 | Field | Type | Description |
 |---|---|---|
