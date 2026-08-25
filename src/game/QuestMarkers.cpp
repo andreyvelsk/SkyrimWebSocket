@@ -639,6 +639,8 @@ namespace QuestMarkers
             };
         }
 
+        static void EnsurePersistentRefCache();
+
         // Fallback for targets in an exterior child-worldspace (city streets,
         // etc.) whose location hierarchy yields no map-facing marker:
         // approximate with a persistent map marker whose name matches the
