@@ -967,6 +967,68 @@ namespace QuestMarkers
             return out;
         }
 
+        // Native-first coordinate resolution for a quest target: consults the
+        // engine's own tracking ref and TeleportPath (the same data the game
+        // uses to draw quest markers) before falling back to heuristics.
+        QuestMarkerCoordinates ResolveQuestMarkerCoordinatesForTarget(
+            RE::TESQuest* quest, RE::TESQuestTarget* target, RE::TESObjectREFR* targetRef)
+        {
+            auto out = ResolveQuestMarkerCoordinates(targetRef);
+            if (out.ref && HasGlobalMapCoordinates(out.ref))
+                return out;
+
+            if (!quest || !target)
+                return out;
+
+            // 1. The engine's own tracking ref for this target.
+            RE::ObjectRefHandle trackingHandle;
+            target->GetTrackingRef(trackingHandle, quest);
+            if (auto* trackingRef = trackingHandle.get().get();
+                trackingRef && trackingRef->GetFormID() &&
+                HasGlobalMapCoordinates(trackingRef)) {
+                out.ref    = trackingRef;
+                out.source = "nativeTrackingRef";
+                return out;
+            }
+
+            // 2. The engine's native TeleportPath: when either end of the
+            // door chain lies directly in a top-level worldspace, that
+            // endpoint is a map-facing position.
+            const auto& path = target->teleportPath;
+            if (path.spaces.empty() ||
+                path.spaces.size() > 16 ||
+                path.teleportRefs.size() > 16)
+                return out;
+
+            auto endsAtTopLevelWorld = [](const RE::TeleportPath::ParentSpaceNode& node) {
+                if (!node.isWorldspace || !node.worldspace || !node.worldspace->GetFormID())
+                    return false;
+                auto* root = node.worldspace;
+                while (root->parentWorld)
+                    root = root->parentWorld;
+                return root == node.worldspace;
+            };
+
+            if (endsAtTopLevelWorld(path.spaces.front())) {
+                out.hasCoordinateOverride = true;
+                out.overridePos           = path.start;
+                out.source                = "teleportPath.start";
+                if (!path.teleportRefs.empty() && path.teleportRefs.front().ref)
+                    out.ref = path.teleportRefs.front().ref;
+                return out;
+            }
+            if (endsAtTopLevelWorld(path.spaces.back())) {
+                out.hasCoordinateOverride = true;
+                out.overridePos           = path.end;
+                out.source                = "teleportPath.end";
+                if (!path.teleportRefs.empty() && path.teleportRefs.back().ref)
+                    out.ref = path.teleportRefs.back().ref;
+                return out;
+            }
+
+            return out;
+        }
+
         struct ReferenceSpatialJsonKeys
         {
             const char* x;
@@ -1298,11 +1360,19 @@ namespace QuestMarkers
             j["spaceCount"]     = path.spaces.size();
             j["teleportRefCount"] = path.teleportRefs.size();
 
+            // The engine only populates TeleportPath for actively tracked
+            // targets; stale/uninitialised paths can hold garbage pointers.
+            // Never dereference suspicious data.
+            if (path.spaces.size() > 16 || path.teleportRefs.size() > 16) {
+                j["suspicious"] = true;
+                return j;
+            }
+
             j["spaces"] = nlohmann::json::array();
             for (const auto& space : path.spaces) {
                 nlohmann::json sj;
                 sj["isWorldspace"] = space.isWorldspace;
-                if (space.isWorldspace && space.worldspace) {
+                if (space.isWorldspace && space.worldspace && space.worldspace->GetFormID()) {
                     const char* edid = space.worldspace->GetFormEditorID();
                     sj["worldspace"]       = edid ? std::string(edid) : std::string();
                     sj["worldspaceFormId"] = Common::FormIdToString(space.worldspace->GetFormID());
@@ -1328,7 +1398,7 @@ namespace QuestMarkers
             j["teleportRefs"] = nlohmann::json::array();
             for (const auto& link : path.teleportRefs) {
                 nlohmann::json lj;
-                if (link.ref) {
+                if (link.ref && link.ref->GetFormID()) {
                     lj["refId"]   = Common::FormIdToString(link.ref->GetFormID());
                     lj["refName"] = RefDisplayName(link.ref);
                     lj["position"] = {
@@ -1731,7 +1801,8 @@ namespace QuestMarkers
                 return false;
 
             const bool refIsDeleted = ref->IsDeleted();
-            const auto coordinates = ResolveQuestMarkerCoordinates(ref);
+            const auto coordinates =
+                ResolveQuestMarkerCoordinatesForTarget(quest, target, ref);
             auto* coordinateRef = coordinates.ref;
 
             if (!seenDestinations.insert(makeDestinationKey(quest, objective, coordinateRef)).second)
