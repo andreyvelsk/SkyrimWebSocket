@@ -205,23 +205,16 @@ journal UI. `questTargets` by itself is broader and can contain displayed but
 untracked objectives, especially Miscellaneous objectives. VR currently uses a
 best-effort static fallback because its quest-target runtime layout is different.
 
-For coordinate troubleshooting, query `Debug::Map::Markers::Quests` and inspect
-`questTargets[].targets[].coordinateDiagnostics`. It lists the selected map
-coordinate plus alternative candidates such as the raw target reference,
-`TESObjectREFR::GetEditorLocation(out)`, resolved or parent location markers,
-location `specialRefs`, persistent-cell `ExtraMapMarker` refs, linked teleport
-doors, and random teleport markers.
+For coordinate troubleshooting, query `Debug::Map::Markers::Quests` (full
+snapshot) or use the `debug_quest_marker` command with a specific quest form ID.
+Both dump each tracked target's **native** `TESQuestTarget::teleportPath`
+(spaces, teleport refs, start/end) alongside the currently published map
+coordinates.
 
-Miscellaneous has two layers of tracking in Skyrim's journal: each individual
-Misc objective can be active, and the top-level Miscellaneous row has its own
-master toggle controlled by the native `ToggleShowMiscObjectives` callback. The
-reader observes the top-level Miscellaneous row in the journal Scaleform list
-(`Journal_QuestsTab::unk18` first, then `TitleList.entryList` paths, using the
-row with `formID == 0`) while the journal menu is open and caches the latest
-value after the menu closes. If that UI list is not available, it falls back to
-`Journal_QuestsTab::unk30`. Until that UI state has been observed in the current
-plugin session, the reader defaults to visible so it does not hide valid Misc
-targets unexpectedly.
+The Miscellaneous master toggle is read directly from the native
+`Journal_QuestsTab::unk30` field while the journal menu is open; until it has
+been observed in the current plugin session, the reader defaults to visible so
+it does not hide valid Misc targets unexpectedly.
 
 Targets that resolve to non-ref aliases (location aliases, data aliases) or
 to unfilled refs are skipped. References flagged as deleted are still returned
@@ -231,21 +224,23 @@ those runtime targets for active quest markers.
 `refId` and `name` describe the actual quest target reference (NPC, item, door,
 container, etc.). `localX` / `localY` / `localZ` preserve that reference's raw
 coordinates inside its current worldspace or interior cell. The spatial fields
-(`x`, `y`, `z`, `worldspace`, `cell`, ...) describe where the quest marker
-should be drawn on the world map. When the target belongs to a `BGSLocation`,
-the reader walks that location's parent hierarchy and first uses a usable
-`BGSLocation::worldLocMarker`; if that handle cannot be resolved or is not a
-map-facing exterior ref, it resolves the location's `specialRefs` and scans
-worldspace persistent cells for the same `ExtraMapMarker` refs returned by
-`Map::Markers::Locations` / `Map::Markers::All`. Interior targets whose location
-hierarchy has no usable map marker are projected onto the world map through
-their cell's exit door (`linkedTeleportDoor.exit`). When that entrance opens
-into an exterior child-worldspace, the pointer targets the cell's entrance door
-with its position translated into the parent world's coordinate space via the
-sub-worldspace's ONAM data (`cellEntrance.subWorldspaceTransform`). If no global/map-facing
-coordinate exists for an interior or child-worldspace target, the public spatial
-fields are `null` instead of leaking local coordinates such as an NPC's position
-inside a house or city worldspace.
+(`x`, `y`, `z`, `worldspace`, ...) describe where the quest marker should be
+drawn on the world map. Coordinates are resolved **native-first**, mirroring
+how the engine itself routes quest markers:
+
+1. `targetRef:global` — the target already lives in a top-level worldspace;
+2. `nativeTrackingRef` — `TESQuestTarget::GetTrackingRef()`, the reference the
+   engine actually tracks;
+3. `teleportPath.start` / `teleportPath.end` — the engine's own door chain
+   (`TESQuestTarget::teleportPath`); when either end of the chain lies directly
+   in a top-level worldspace, its endpoint is a ready-to-use global position;
+4. `BGSLocation::worldLocMarker` — nearest ancestor location with a map-facing
+   marker;
+5. `linkedTeleportDoor.exit` — the interior cell's exit door when it opens into
+   a top-level worldspace.
+
+Targets with no resolvable global position are **omitted** from the result
+instead of being published with local interior coordinates.
 
 ### Entry shape
 
@@ -267,12 +262,9 @@ inside a house or city worldspace.
 | `refId` | `string` | Hex form ID of the resolved reference (NPC, door, container, etc.). |
 | `isDeleted` | `bool` | `true` when the resolved reference has the form deleted flag set. Some vanilla quest targets still use such refs and are kept if Skyrim exposes them through `questTargets`. |
 | `name` | `string` | Display name of the reference. Empty if unnamed. |
-| `coordinateSource` | `string` | Source used for `x`/`y`/`z`: `nativeTrackingRef`, `teleportPath.start`, `teleportPath.end`, `BGSLocation::worldLocMarker`, `BGSLocation::parentLoc.worldLocMarker`, `BGSLocation::specialRefs.mapMarker`, `BGSLocation::parentLoc.specialRefs.mapMarker`, `persistentCell.ExtraMapMarker.location`, `persistentCell.parentLoc.ExtraMapMarker.location`, `BGSLocation::specialRefs.globalRef`, `BGSLocation::parentLoc.specialRefs.globalRef`, `linkedTeleportDoor.exit`, `cellEntrance.subWorldspaceTransform`, `subWorldspace.nameMarker`, `targetRef:global`, `targetRef:global:noLocationMarker`, or `unresolved:noGlobalLocationMarker`. |
-| `coordinateRefId` | `string \| null` | Hex form ID of the reference used for the spatial fields. For interior or child-worldspace targets this should be a map-facing location/entrance ref; `null` means no global coordinate could be resolved. |
+| `coordinateSource` | `string` | Source used for `x`/`y`/`z`: `targetRef:global`, `nativeTrackingRef`, `teleportPath.start`, `teleportPath.end`, `BGSLocation::worldLocMarker`, or `linkedTeleportDoor.exit`. |
+| `coordinateRefId` | `string \| null` | Hex form ID of the reference used for the spatial fields; `null` for engine-computed positions (`teleportPath.*`). |
 | `coordinateRefName` | `string` | Display name of `coordinateRefId`, when available. |
-| `locationFormId` | `string \| null` | Hex form ID of the `BGSLocation` considered for map-marker projection, or `null` when no location was resolved. |
-| `locationEditorId` | `string \| null` | Editor ID of that `BGSLocation`, or `null`. |
-| `locationName` | `string \| null` | Localised name of that `BGSLocation`, or `null`. |
 | `localX` | `float` | Raw X coordinate of the actual quest target reference. For interior targets this is local to the interior cell. |
 | `localY` | `float` | Raw Y coordinate of the actual quest target reference. |
 | `localZ` | `float` | Raw Z coordinate of the actual quest target reference. |
@@ -295,11 +287,10 @@ inside a house or city worldspace.
 | `isInterior` | `bool` | `true` if the coordinate reference's parent cell is an interior. |
 
 Use `parentWorldspace` to plot quest markers on a global Tamriel/Solstheim map.
-When `coordinateSource` names a `BGSLocation`, `specialRefs`, or
-`persistentCell.ExtraMapMarker` source, the coordinates already point at a
-location marker / entrance on the world map. `targetRef:global` means the target
-reference itself was already in a top-level exterior worldspace. `unresolved:*` means the
-reader refused to publish local interior coordinates as global coordinates.
+All published coordinates are either in a top-level worldspace (`targetRef:global`,
+`nativeTrackingRef`, `linkedTeleportDoor.exit`) or computed by the engine for
+the global map (`teleportPath.start` / `teleportPath.end`). Targets that cannot
+be projected onto the global map are omitted entirely.
 
 ### Example — query active quest markers
 
@@ -333,12 +324,9 @@ reader refused to publish local interior coordinates as global coordinates.
         "aliasId": 0,
         "refId": "0x0001A696",
         "name": "Jarl Balgruuf the Greater",
-        "coordinateSource": "BGSLocation::worldLocMarker",
-        "coordinateRefId": "0x00018A56",
-        "coordinateRefName": "Whiterun",
-        "locationFormId": "0x00018A4A",
-        "locationEditorId": "WhiterunLocation",
-        "locationName": "Whiterun",
+        "coordinateSource": "nativeTrackingRef",
+        "coordinateRefId": null,
+        "coordinateRefName": "",
         "localX": 128.0, "localY": -512.0, "localZ": 64.0,
         "localWorldspace": null,
         "localWorldspaceFormId": null,
@@ -384,6 +372,34 @@ stable native event.
 
 ## Commands
 
+### `misc_objectives_set`
+
+Overrides the journal's master **Miscellaneous-objectives toggle** — the same
+switch the native `ToggleShowMiscObjectives` journal callback controls. While
+set, `Map::Markers::Quests` includes/excludes Miscellaneous targets accordingly
+(the override wins over the live journal state until the next save load).
+
+> **Note:** the toggle is applied by writing the native
+> `Journal_QuestsTab::unk30` field directly — `ToggleShowMiscObjectives` is a
+> Scaleform-registered callback and cannot be invoked from SKSE. The filter
+> takes effect immediately, but if the journal menu is open at that moment its
+> checkbox only visually refreshes after the journal is reopened.
+
+| Field | Type | Description |
+|---|---|---|
+| `visible` | `bool` | `true` to show Miscellaneous objectives, `false` to hide them. |
+
+#### Request
+
+```json
+{
+  "type": "command",
+  "id": "mo-1",
+  "command": "misc_objectives_set",
+  "visible": false
+}
+```
+
 ### `debug_quest_marker`
 
 Returns per-quest diagnostics for a single quest form ID. Useful for
@@ -395,15 +411,13 @@ investigating wrong/missing quest-marker positions.
 
 The reply `data` contains:
 
-* `quest` — form/editor IDs, name, type;
-* `isRunning` / `isCompleted` / `isActive`;
+* `quest` — form/editor IDs, name, type, running/completed/active flags;
 * `objectives[]` — every objective with its targets; each target includes:
   * `teleportPath` — the engine's **native** door-chain structure (`spaces`,
-    `teleportRefs`, `start`, `end`) used to route quest markers across
-    cells/worldspaces, including ONAM offset data per sub-worldspace;
-  * `ref` — resolved target reference and its raw position;
-  * `mapCoordinates` — what `Map::Markers::Quests` currently publishes;
-  * `coordinateDiagnostics` — alternative coordinate candidates;
+    `teleportRefs`, `start`, `end`). Guarded: dumped only for running quests
+    with sane array sizes; otherwise marked `"skipped": true`;
+  * `refId` / `name` — resolved target reference;
+  * `localX/localY/localZ` and spatial fields — raw vs published coordinates;
 * `player` — current player position plus cached exterior position/worldspace.
 
 #### Request

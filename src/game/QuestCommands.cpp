@@ -1,5 +1,6 @@
 #include "QuestCommands.h"
 #include "Common.h"
+#include "QuestMarkers.h"
 #include "QuestReader.h"
 #include "../Utils.h"
 
@@ -38,6 +39,17 @@ namespace QuestCommands
                                  formId,
                                  active ? "tracked" : "untracked",
                                  name && *name ? name : "unnamed"));
+        return result;
+    }
+
+    CommandResult SetMiscObjectivesVisible(bool visible)
+    {
+        QuestMarkers::SetMiscObjectivesVisible(visible);
+        CommandResult result;
+        result.success = true;
+        result.data = { { "miscObjectivesVisible", visible } };
+        PrintConsole(std::format("[WS] Misc objectives {}",
+                                 visible ? "shown" : "hidden"));
         return result;
     }
 }

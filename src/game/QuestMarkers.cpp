@@ -73,6 +73,14 @@ namespace QuestMarkers
             state.cachedKnown = g_miscKnown;
             state.cachedVisible = g_miscVisible;
 
+            // A command override wins until the next save load.
+            if (g_miscKnown && std::string_view(g_miscSource) == "command") {
+                state.visible = g_miscVisible;
+                state.known = true;
+                state.source = g_miscSource;
+                return state;
+            }
+
             if (auto* ui = RE::UI::GetSingleton()) {
                 if (auto journal = ui->GetMenu<RE::JournalMenu>()) {
                     state.journalOpen = true;
@@ -490,6 +498,25 @@ namespace QuestMarkers
         g_miscKnown = false;
         g_miscVisible = true;
         g_miscSource = "cached misc objectives visibility";
+    }
+
+    void SetMiscObjectivesVisible(bool visible)
+    {
+        g_miscKnown = true;
+        g_miscVisible = visible;
+        g_miscSource = "command";
+        // Apply to the live journal menu when it is open.
+        //
+        // Limitation: this writes the native master-toggle field directly.
+        // The engine's ToggleShowMiscObjectives is a Scaleform-registered
+        // callback and cannot be invoked from SKSE, so the journal's
+        // TitleList checkbox does not visually refresh until the journal is
+        // reopened. The filter itself takes effect immediately.
+        if (auto* ui = RE::UI::GetSingleton()) {
+            if (auto journal = ui->GetMenu<RE::JournalMenu>())
+                journal->GetRuntimeData().questsTab.unk30 = visible;
+        }
+        logger::info("[Map::Markers::Quests] misc objectives visibility set to {} by command", visible);
     }
 
     nlohmann::json ReadQuestMarkers()

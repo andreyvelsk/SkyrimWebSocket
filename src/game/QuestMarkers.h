@@ -27,4 +27,9 @@ namespace QuestMarkers
     // Clears cached quest-journal UI state after loading a different save.
     // Must be called on the game thread.
     void ResetQuestJournalState();
+
+    // Overrides the journal's master Miscellaneous-objectives toggle until
+    // the next save load. Also applies to the live journal menu when open.
+    // Must be called on the game thread.
+    void SetMiscObjectivesVisible(bool visible);
 }
