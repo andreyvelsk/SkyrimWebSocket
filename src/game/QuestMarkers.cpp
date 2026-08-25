@@ -1285,6 +1285,88 @@ namespace QuestMarkers
             return out;
         }
 
+        // Dumps the engine's own TeleportPath for a quest target — the native
+        // door-chain structure the game uses to route quest markers across
+        // cells/worldspaces (spaces, teleport refs, start/end points).
+        nlohmann::json QuestTargetTeleportPathJson(const RE::TESQuestTarget* target)
+        {
+            if (!target)
+                return nullptr;
+
+            const auto& path = target->teleportPath;
+            nlohmann::json j   = nlohmann::json::object();
+            j["spaceCount"]     = path.spaces.size();
+            j["teleportRefCount"] = path.teleportRefs.size();
+
+            j["spaces"] = nlohmann::json::array();
+            for (const auto& space : path.spaces) {
+                nlohmann::json sj;
+                sj["isWorldspace"] = space.isWorldspace;
+                if (space.isWorldspace && space.worldspace) {
+                    const char* edid = space.worldspace->GetFormEditorID();
+                    sj["worldspace"]       = edid ? std::string(edid) : std::string();
+                    sj["worldspaceFormId"] = Common::FormIdToString(space.worldspace->GetFormID());
+                    if (auto* parent = space.worldspace->parentWorld) {
+                        const char* pedid = parent->GetFormEditorID();
+                        sj["parentWorldspace"] = pedid ? std::string(pedid) : std::string();
+                        const auto& off = space.worldspace->worldMapOffsetData;
+                        sj["onam"] = {
+                            { "mapScale", off.mapScale },
+                            { "mapOffsetX", off.mapOffsetX },
+                            { "mapOffsetY", off.mapOffsetY },
+                            { "mapOffsetZ", off.mapOffsetZ }
+                        };
+                    }
+                } else if (space.interiorCell) {
+                    const char* cedid = space.interiorCell->GetFormEditorID();
+                    sj["interiorCell"]       = cedid ? std::string(cedid) : std::string();
+                    sj["interiorCellFormId"] = Common::FormIdToString(space.interiorCell->GetFormID());
+                }
+                j["spaces"].push_back(std::move(sj));
+            }
+
+            j["teleportRefs"] = nlohmann::json::array();
+            for (const auto& link : path.teleportRefs) {
+                nlohmann::json lj;
+                if (link.ref) {
+                    lj["refId"]   = Common::FormIdToString(link.ref->GetFormID());
+                    lj["refName"] = RefDisplayName(link.ref);
+                    lj["position"] = {
+                        { "x", link.ref->GetPositionX() },
+                        { "y", link.ref->GetPositionY() },
+                        { "z", link.ref->GetPositionZ() }
+                    };
+                    if (auto* world = link.ref->GetWorldspace()) {
+                        const char* edid = world->GetFormEditorID();
+                        lj["worldspace"]  = edid ? std::string(edid) : std::string();
+                        lj["isTopLevelWorld"] = !world->parentWorld;
+                    }
+                    if (auto* cell = link.ref->GetParentCell())
+                        lj["isInteriorCell"] = cell->IsInteriorCell();
+                } else {
+                    lj["refId"] = nullptr;
+                }
+                lj["teleportLocation"] = {
+                    { "x", link.teleportLocation.x },
+                    { "y", link.teleportLocation.y },
+                    { "z", link.teleportLocation.z }
+                };
+                j["teleportRefs"].push_back(std::move(lj));
+            }
+
+            j["start"] = {
+                { "x", path.start.x },
+                { "y", path.start.y },
+                { "z", path.start.z }
+            };
+            j["end"] = {
+                { "x", path.end.x },
+                { "y", path.end.y },
+                { "z", path.end.z }
+            };
+            return j;
+        }
+
         nlohmann::json QuestTargetDebugJson(RE::TESQuest* quest,
                                             RE::BGSQuestObjective* objective,
                                             RE::TESQuestTarget* target,
@@ -1299,6 +1381,7 @@ namespace QuestMarkers
             out["aliasId"]       = target->alias;
             out["hasConditions"] = static_cast<bool>(target->conditions);
             out["flags"]         = static_cast<std::uint8_t>(target->flags.underlying());
+            out["teleportPath"]  = QuestTargetTeleportPathJson(target);
 
             if (quest)
                 out["quest"] = QuestDebugJson(quest);
@@ -1931,6 +2014,68 @@ namespace QuestMarkers
             { "staticDisplayedObjectives", out["staticDisplayedObjectives"].size() },
             { "markers", out["markers"].size() }
         };
+        return out;
+    }
+
+    // Per-quest diagnostics for a single quest form ID: objectives, targets,
+    // the engine's native TeleportPath per target, coordinate resolution and
+    // the player's current global-map position for reference.
+    nlohmann::json DebugQuestMarker(RE::FormID questFormId)
+    {
+        nlohmann::json out = nlohmann::json::object();
+
+        auto* quest = RE::TESForm::LookupByID<RE::TESQuest>(questFormId);
+        if (!quest) {
+            out["error"] = std::format("No TESQuest with formId 0x{:08X}", questFormId);
+            return out;
+        }
+
+        out["quest"] = QuestDebugJson(quest);
+        out["isRunning"]  = quest->IsRunning();
+        out["isCompleted"] = quest->IsCompleted();
+        out["isActive"]   = quest->IsActive();
+
+        out["objectives"] = nlohmann::json::array();
+        for (auto* objective : quest->objectives) {
+            if (!objective)
+                continue;
+
+            nlohmann::json oj = ObjectiveDebugJson(objective, quest->currentInstanceID);
+            oj["targets"] = nlohmann::json::array();
+            for (std::uint32_t i = 0; objective->targets && i < objective->numTargets; ++i) {
+                auto* target = objective->targets[i];
+                auto tj = QuestTargetDebugJson(quest, objective, target,
+                                               quest->currentInstanceID,
+                                               /*includeCoordinateDiagnostics=*/true);
+                oj["targets"].push_back(std::move(tj));
+            }
+            out["objectives"].push_back(std::move(oj));
+        }
+
+        // Player's current global-map position for reference.
+        if (auto* player = RE::PlayerCharacter::GetSingleton()) {
+            auto* cell = player->GetParentCell();
+            out["player"] = {
+                { "x", player->GetPositionX() },
+                { "y", player->GetPositionY() },
+                { "z", player->GetPositionZ() }
+            };
+            if (cell) {
+                const char* cedid = cell->GetFormEditorID();
+                out["player"]["cell"]       = cedid ? std::string(cedid) : std::string();
+                out["player"]["isInterior"] = cell->IsInteriorCell();
+            }
+            if (auto& rt = player->GetPlayerRuntimeData(); rt.cachedWorldSpace) {
+                const char* edid = rt.cachedWorldSpace->GetFormEditorID();
+                out["player"]["cachedWorldspace"] = edid ? std::string(edid) : std::string();
+                out["player"]["exteriorPosition"] = {
+                    { "x", rt.exteriorPosition.x },
+                    { "y", rt.exteriorPosition.y },
+                    { "z", rt.exteriorPosition.z }
+                };
+            }
+        }
+
         return out;
     }
 }

@@ -384,6 +384,39 @@ stable native event.
 
 ## Commands
 
+### `debug_quest_marker`
+
+Returns per-quest diagnostics for a single quest form ID. Useful for
+investigating wrong/missing quest-marker positions.
+
+| Field | Type | Description |
+|---|---|---|
+| `formId` | `string` | Hex form ID of the quest (e.g. `"0x0003372B"`). |
+
+The reply `data` contains:
+
+* `quest` — form/editor IDs, name, type;
+* `isRunning` / `isCompleted` / `isActive`;
+* `objectives[]` — every objective with its targets; each target includes:
+  * `teleportPath` — the engine's **native** door-chain structure (`spaces`,
+    `teleportRefs`, `start`, `end`) used to route quest markers across
+    cells/worldspaces, including ONAM offset data per sub-worldspace;
+  * `ref` — resolved target reference and its raw position;
+  * `mapCoordinates` — what `Map::Markers::Quests` currently publishes;
+  * `coordinateDiagnostics` — alternative coordinate candidates;
+* `player` — current player position plus cached exterior position/worldspace.
+
+#### Request
+
+```json
+{
+  "type": "command",
+  "id": "dq-1",
+  "command": "debug_quest_marker",
+  "formId": "0x0003372B"
+}
+```
+
 ### `fast_travel`
 
 Triggers a real, vanilla-style fast travel to a map-marker reference.

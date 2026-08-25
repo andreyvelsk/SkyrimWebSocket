@@ -10,6 +10,7 @@
 #include "../game/MagicCommands.h"
 #include "../game/MapCommands.h"
 #include "../game/QuestCommands.h"
+#include "../game/QuestMarkers.h"
 #include "../Utils.h"
 
 #include <chrono>
@@ -345,6 +346,8 @@ namespace MessageRouter
                 result = MagicCommands::FavoriteShout(formId);
             else if (command == "fast_travel")
                 result = MapCommands::FastTravelToMarker(formId);
+            else if (command == "debug_quest_marker")
+                result = { true, QuestMarkers::DebugQuestMarker(formId) };
             else
                 result = {false, "Unknown command: '" + command + "'"};
 

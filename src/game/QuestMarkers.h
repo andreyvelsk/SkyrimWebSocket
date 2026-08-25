@@ -1,5 +1,6 @@
 #pragma once
 
+#include <RE/Skyrim.h>
 #include <nlohmann/json.hpp>
 
 namespace QuestMarkers
@@ -12,6 +13,11 @@ namespace QuestMarkers
     // Debug snapshot for diagnosing quest marker sources.
     // Must be called on the game thread.
     nlohmann::json ReadQuestMarkersDebug();
+
+    // Per-quest diagnostics for a single quest form ID (objectives, targets,
+    // native TeleportPath per target, coordinate resolution, player context).
+    // Must be called on the game thread.
+    nlohmann::json DebugQuestMarker(RE::FormID questFormId);
 
     // Captures live quest-journal UI state that is not otherwise exposed in
     // quest/runtime data (currently the master Miscellaneous objective toggle).
