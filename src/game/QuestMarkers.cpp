@@ -521,8 +521,9 @@ namespace QuestMarkers
         if (auto* ui = RE::UI::GetSingleton()) {
             if (auto journal = ui->GetMenu<RE::JournalMenu>()) {
                 auto& tab = journal->GetRuntimeData().questsTab;
-                auto* movie = tab.view ? tab.view.get()
-                                       : ui->GetMovieView(RE::JournalMenu::MENU_NAME);
+                RE::GFxMovieView* movie = tab.view
+                                              ? tab.view.get()
+                                              : ui->GetMovieView(RE::JournalMenu::MENU_NAME).get();
                 for (int i = 0; movie && i < 4 && tab.unk30 != visible; ++i) {
                     movie->Invoke("_root.ToggleShowMiscObjectives", nullptr, nullptr, 0);
                 }
