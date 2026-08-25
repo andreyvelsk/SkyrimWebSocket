@@ -12,4 +12,9 @@ namespace QuestCommands
     // the same command response.
     // Must be called on the game thread.
     CommandResult SetQuestActive(RE::FormID formId, bool active);
+
+    // Overrides the journal's master Miscellaneous-objectives toggle until
+    // the next save load (delegates the state change to QuestMarkers).
+    // Must be called on the game thread.
+    CommandResult SetMiscObjectivesVisible(bool visible);
 }

@@ -10,6 +10,7 @@
 #include "../game/MagicCommands.h"
 #include "../game/MapCommands.h"
 #include "../game/QuestCommands.h"
+#include "../game/QuestMarkers.h"
 #include "../Utils.h"
 
 #include <chrono>
@@ -208,6 +209,21 @@ namespace MessageRouter
             return;
         }
 
+        // Miscellaneous-objectives master toggle takes a boolean argument.
+        if (command == "misc_objectives_set") {
+            if (!msg.contains("visible") || !msg["visible"].is_boolean()) {
+                session->send(BuildCommandResultJson(cmdId, {false, "misc_objectives_set requires boolean 'visible'"}));
+                return;
+            }
+            const bool visible = msg["visible"].get<bool>();
+            SKSE::GetTaskInterface()->AddTask([session, cmdId, visible]() {
+                const auto result = QuestCommands::SetMiscObjectivesVisible(visible);
+                const std::string json = BuildCommandResultJson(cmdId, result);
+                asio::post(session->ioc(), [session, json] { session->send(json); });
+            });
+            return;
+        }
+
         // Quest commands use boolean arguments,
         // so parse them before the generic formId-required item/spell/map-marker command path.
         if (command == "quest_set_active") {
@@ -345,6 +361,8 @@ namespace MessageRouter
                 result = MagicCommands::FavoriteShout(formId);
             else if (command == "fast_travel")
                 result = MapCommands::FastTravelToMarker(formId);
+            else if (command == "debug_quest_marker")
+                result = { true, QuestMarkers::DebugQuestMarker(formId) };
             else
                 result = {false, "Unknown command: '" + command + "'"};
 
