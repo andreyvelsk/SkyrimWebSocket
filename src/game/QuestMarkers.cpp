@@ -520,6 +520,11 @@ namespace QuestMarkers
             RE::BGSLocation*                location = nullptr;
             RE::NiPointer<RE::TESObjectREFR> locationMarkerRef;
             const char*                     source = "unresolved:noGlobalCoordinates";
+
+            // When set, x/y/z come from this translated position instead of
+            // ref->GetPosition() (used for sub-worldspace transforms).
+            bool            hasCoordinateOverride = false;
+            RE::NiPoint3    overridePos{};
         };
 
         bool IsMapMarkerRef(RE::TESObjectREFR* ref)
@@ -545,35 +550,117 @@ namespace QuestMarkers
             return HasGlobalMapCoordinates(ref);
         }
 
-        // Finds a map-facing reference for an interior target by following
-        // the cell's exit doors (ExtraTeleport -> linkedDoor). This projects
-        // interior quest targets onto the world map even when the location
-        // hierarchy has no usable map marker.
-        RE::TESObjectREFR* FindMapFacingExitDoorRef(RE::TESObjectREFR* targetRef)
+        struct ExitDoorSearchResult
         {
-            auto* cell = targetRef ? targetRef->GetParentCell() : nullptr;
-            if (!cell || !cell->IsInteriorCell())
+            // A door whose linked ref is in a top-level worldspace.
+            RE::TESObjectREFR* globalExit = nullptr;
+
+            // The exterior-side door of the cell entrance when it opens into
+            // an exterior child-worldspace (city streets etc.). Its position
+            // can be translated into parent-world coordinates via the
+            // sub-worldspace's worldMapOffsetData (ONAM).
+            RE::TESObjectREFR* subWorldEntrance = nullptr;
+        };
+
+        // Finds a map-facing reference for an interior target by following
+        // exit doors (ExtraTeleport -> linkedDoor) transitively through
+        // connected interior cells. This projects interior quest targets
+        // onto the world map even when the location hierarchy has no usable
+        // map marker (e.g. tamriel -> subworld -> interior chains).
+        ExitDoorSearchResult FindMapFacingExitDoorRef(RE::TESObjectREFR* targetRef)
+        {
+            ExitDoorSearchResult result;
+
+            auto* startCell = targetRef ? targetRef->GetParentCell() : nullptr;
+            if (!startCell || !startCell->IsInteriorCell())
+                return result;
+
+            constexpr std::size_t kMaxCells = 8;
+            std::unordered_set<RE::FormID> visitedCells{ startCell->GetFormID() };
+            std::vector<RE::TESObjectCELL*> pendingCells{ startCell };
+
+            for (std::size_t i = 0; i < pendingCells.size() && i < kMaxCells; ++i) {
+                pendingCells[i]->ForEachReference([&](RE::TESObjectREFR* candidate) {
+                    if (result.globalExit)
+                        return RE::BSContainer::ForEachResult::kStop;
+                    if (!candidate)
+                        return RE::BSContainer::ForEachResult::kContinue;
+
+                    auto* teleport = candidate->extraList.GetByType<RE::ExtraTeleport>();
+                    const auto* tpData = teleport ? teleport->teleportData : nullptr;
+                    if (!tpData)
+                        return RE::BSContainer::ForEachResult::kContinue;
+
+                    auto linked = tpData->linkedDoor.get();
+                    auto* linkedRef = linked.get();
+                    if (!linkedRef)
+                        return RE::BSContainer::ForEachResult::kContinue;
+
+                    if (HasGlobalMapCoordinates(linkedRef)) {
+                        result.globalExit = linkedRef;
+                        return RE::BSContainer::ForEachResult::kStop;
+                    }
+
+                    // Remember the first exterior door in a child worldspace —
+                    // that is the cell's entrance seen from the sub-world.
+                    if (!result.subWorldEntrance) {
+                        if (auto* ws = linkedRef->GetWorldspace(); ws && ws->parentWorld) {
+                            result.subWorldEntrance = linkedRef;
+                        }
+                    }
+
+                    // Door leads to another cell — queue it for the next hop.
+                    if (auto* nextCell = linkedRef->GetParentCell();
+                        nextCell && nextCell->IsInteriorCell() &&
+                        visitedCells.insert(nextCell->GetFormID()).second) {
+                        pendingCells.push_back(nextCell);
+                    }
+                    return RE::BSContainer::ForEachResult::kContinue;
+                });
+
+                if (result.globalExit)
+                    break;
+            }
+
+            return result;
+        }
+
+        // Translates a child-worldspace position into its parent world's
+        // coordinate space using the sub-worldspace's ONAM data
+        // (worldMapOffsetData: scale + offset).
+        RE::NiPoint3 TranslateSubWorldspaceToParent(RE::TESWorldSpace* subWorld,
+                                                    const RE::NiPoint3& pos)
+        {
+            const auto& off = subWorld->worldMapOffsetData;
+            return RE::NiPoint3{
+                pos.x * off.mapScale + off.mapOffsetX,
+                pos.y * off.mapScale + off.mapOffsetY,
+                pos.z * off.mapScale + off.mapOffsetZ
+            };
+        }
+
+        // Fallback for targets in an exterior child-worldspace (city streets,
+        // etc.) whose location hierarchy yields no map-facing marker:
+        // approximate with a persistent map marker whose name matches the
+        // sub-worldspace's own name (e.g. WhiterunWorld -> "Whiterun").
+        RE::TESObjectREFR* FindSubWorldspaceNameMarker(RE::TESObjectREFR* targetRef)
+        {
+            auto* world = targetRef ? targetRef->GetWorldspace() : nullptr;
+            if (!world || !world->parentWorld)
                 return nullptr;
 
-            RE::TESObjectREFR* found = nullptr;
-            cell->ForEachReference([&](RE::TESObjectREFR* candidate) {
-                if (!candidate)
-                    return RE::BSContainer::ForEachResult::kContinue;
+            const char* worldName = world->GetName();
+            if (!worldName || !*worldName)
+                return nullptr;
 
-                auto* teleport = candidate->extraList.GetByType<RE::ExtraTeleport>();
-                const auto* tpData = teleport ? teleport->teleportData : nullptr;
-                if (!tpData)
-                    return RE::BSContainer::ForEachResult::kContinue;
+            EnsurePersistentRefCache();
 
-                auto linked = tpData->linkedDoor.get();
-                auto* linkedRef = linked.get();
-                if (linkedRef && HasGlobalMapCoordinates(linkedRef)) {
-                    found = linkedRef;
-                    return RE::BSContainer::ForEachResult::kStop;
-                }
-                return RE::BSContainer::ForEachResult::kContinue;
-            });
-            return found;
+            std::string key(worldName);
+            for (auto& c : key)
+                c = static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
+
+            const auto it = s_persistentCache.markerByName.find(key);
+            return it != s_persistentCache.markerByName.end() ? it->second : nullptr;
         }
 
         static void BuildPersistentRefCache()
@@ -840,10 +927,34 @@ namespace QuestMarkers
 
             // Interior target whose location hierarchy has no usable map
             // marker — project onto the world map through the cell's exit
-            // door (linked teleport destination).
-            if (auto* exitRef = FindMapFacingExitDoorRef(targetRef)) {
-                out.ref    = exitRef;
+            // door (linked teleport destination, followed transitively).
+            const auto exitSearch = FindMapFacingExitDoorRef(targetRef);
+            if (exitSearch.globalExit) {
+                out.ref    = exitSearch.globalExit;
                 out.source = "linkedTeleportDoor.exit";
+                return out;
+            }
+
+            // The cell entrance opens into an exterior child-worldspace —
+            // point at that entrance, translating its position into the
+            // parent world's coordinate space via ONAM data.
+            if (auto* entrance = exitSearch.subWorldEntrance) {
+                if (auto* ws = entrance->GetWorldspace(); ws && ws->parentWorld) {
+                    out.ref                   = entrance;
+                    out.hasCoordinateOverride = true;
+                    out.overridePos           = TranslateSubWorldspaceToParent(
+                        ws, entrance->GetPosition());
+                    out.source = "cellEntrance.subWorldspaceTransform";
+                    return out;
+                }
+            }
+
+            // Exterior child-worldspace target without a resolvable location
+            // marker — approximate with a persistent map marker matching the
+            // sub-worldspace's own name.
+            if (auto* worldMarker = FindSubWorldspaceNameMarker(targetRef)) {
+                out.ref    = worldMarker;
+                out.source = "subWorldspace.nameMarker";
                 return out;
             }
 
@@ -1591,7 +1702,30 @@ namespace QuestMarkers
             }
 
             WriteReferenceLocalSpatialJson(entry, ref);
-            WriteReferenceSpatialJson(entry, coordinateRef);
+
+            if (coordinates.hasCoordinateOverride) {
+                // Translated sub-worldspace position — write the override
+                // coordinates but keep the coordinate ref's worldspace/cell
+                // context (resolved to the parent world root).
+                entry["x"] = coordinates.overridePos.x;
+                entry["y"] = coordinates.overridePos.y;
+                entry["z"] = coordinates.overridePos.z;
+                auto* entranceWorld = coordinateRef ? coordinateRef->GetWorldspace() : nullptr;
+                Common::BuildWorldspaceFields(
+                    entry, Common::ResolveWorldspaceRoot(entranceWorld));
+                if (auto* entranceCell = coordinateRef ? coordinateRef->GetParentCell() : nullptr) {
+                    const char* cedid = entranceCell->GetFormEditorID();
+                    entry["cell"]       = cedid ? std::string(cedid) : std::string();
+                    entry["cellFormId"] = Common::FormIdToString(entranceCell->GetFormID());
+                    entry["isInterior"] = entranceCell->IsInteriorCell();
+                } else {
+                    entry["cell"]       = nullptr;
+                    entry["cellFormId"] = nullptr;
+                    entry["isInterior"] = false;
+                }
+            } else {
+                WriteReferenceSpatialJson(entry, coordinateRef);
+            }
 
             result.push_back(std::move(entry));
             return true;

@@ -239,7 +239,10 @@ map-facing exterior ref, it resolves the location's `specialRefs` and scans
 worldspace persistent cells for the same `ExtraMapMarker` refs returned by
 `Map::Markers::Locations` / `Map::Markers::All`. Interior targets whose location
 hierarchy has no usable map marker are projected onto the world map through
-their cell's exit door (`linkedTeleportDoor.exit`). If no global/map-facing
+their cell's exit door (`linkedTeleportDoor.exit`). When that entrance opens
+into an exterior child-worldspace, the pointer targets the cell's entrance door
+with its position translated into the parent world's coordinate space via the
+sub-worldspace's ONAM data (`cellEntrance.subWorldspaceTransform`). If no global/map-facing
 coordinate exists for an interior or child-worldspace target, the public spatial
 fields are `null` instead of leaking local coordinates such as an NPC's position
 inside a house or city worldspace.
@@ -264,7 +267,7 @@ inside a house or city worldspace.
 | `refId` | `string` | Hex form ID of the resolved reference (NPC, door, container, etc.). |
 | `isDeleted` | `bool` | `true` when the resolved reference has the form deleted flag set. Some vanilla quest targets still use such refs and are kept if Skyrim exposes them through `questTargets`. |
 | `name` | `string` | Display name of the reference. Empty if unnamed. |
-| `coordinateSource` | `string` | Source used for `x`/`y`/`z`: `BGSLocation::worldLocMarker`, `BGSLocation::parentLoc.worldLocMarker`, `BGSLocation::specialRefs.mapMarker`, `BGSLocation::parentLoc.specialRefs.mapMarker`, `persistentCell.ExtraMapMarker.location`, `persistentCell.parentLoc.ExtraMapMarker.location`, `BGSLocation::specialRefs.globalRef`, `BGSLocation::parentLoc.specialRefs.globalRef`, `linkedTeleportDoor.exit`, `targetRef:global`, `targetRef:global:noLocationMarker`, or `unresolved:noGlobalLocationMarker`. |
+| `coordinateSource` | `string` | Source used for `x`/`y`/`z`: `BGSLocation::worldLocMarker`, `BGSLocation::parentLoc.worldLocMarker`, `BGSLocation::specialRefs.mapMarker`, `BGSLocation::parentLoc.specialRefs.mapMarker`, `persistentCell.ExtraMapMarker.location`, `persistentCell.parentLoc.ExtraMapMarker.location`, `BGSLocation::specialRefs.globalRef`, `BGSLocation::parentLoc.specialRefs.globalRef`, `linkedTeleportDoor.exit`, `cellEntrance.subWorldspaceTransform`, `subWorldspace.nameMarker`, `targetRef:global`, `targetRef:global:noLocationMarker`, or `unresolved:noGlobalLocationMarker`. |
 | `coordinateRefId` | `string \| null` | Hex form ID of the reference used for the spatial fields. For interior or child-worldspace targets this should be a map-facing location/entrance ref; `null` means no global coordinate could be resolved. |
 | `coordinateRefName` | `string` | Display name of `coordinateRefId`, when available. |
 | `locationFormId` | `string \| null` | Hex form ID of the `BGSLocation` considered for map-marker projection, or `null` when no location was resolved. |
