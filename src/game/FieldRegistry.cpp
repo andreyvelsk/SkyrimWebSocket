@@ -322,7 +322,7 @@ namespace FieldRegistry
         // Last known exterior position (for placing the player on the global
         // map while inside an interior or a city sub-worldspace)
         { "Player::ExteriorPosition",
-          { "Last known exterior position cached by the game: { x, y, z, worldspace, worldspaceFormId, parentWorldspace, parentWorldspaceFormId }. Updated whenever the player is in an exterior cell; remains valid while in interiors. Useful for showing the player on a global (parent) worldspace map.", "object",
+          { "Global-map position of the player: { x, y, z, worldspace, worldspaceFormId, parentWorldspace, parentWorldspaceFormId }. In a top-level exterior worldspace returns live coordinates; in interiors returns the game's cached last-exterior position (same data the engine uses for the world-map token), falling back to the location's map marker; in city sub-worldspaces returns the location marker.", "object",
             &PlayerPosition::ReadExteriorPosition } },
 
         // Player quest journal
