@@ -134,4 +134,15 @@ namespace Common
 
     // Returns true if the player currently knows the given spell/shout/power.
     bool PlayerKnowsSpell(RE::PlayerCharacter* player, RE::SpellItem* spell);
+
+    // ─── Effect helpers ────────────────────────────────────────────────────────
+
+    // Build a JSON object for a single magic effect using native game data.
+    // Uses MagicSystem::GetMagicItemDescription for the resolved description
+    // (same path the in-game UI uses). Magnitude is formatted to match the
+    // vanilla inventory display: integer when whole, one decimal place otherwise.
+    nlohmann::json BuildEffectJson(const RE::Effect* eff);
+
+    // Build a JSON array of effects for a MagicItem (spell, enchantment, potion, scroll, etc.).
+    nlohmann::json BuildEffectsArray(const RE::MagicItem* magic);
 }

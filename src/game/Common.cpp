@@ -172,4 +172,63 @@ namespace Common
         }
         return false;
     }
+
+    // ─── Effect helpers ────────────────────────────────────────────────────────
+
+    // Format a float: show as integer when there is no fractional part, otherwise
+    // keep one decimal place (matches vanilla inventory display convention).
+    static std::string FormatMagnitude(float v)
+    {
+        float intpart;
+        if (std::modf(v, &intpart) == 0.f)
+            return std::to_string(static_cast<int>(intpart));
+        return std::format("{:.1f}", v);
+    }
+
+    // Build a JSON object for a single magic effect using native game data.
+    // Uses MagicSystem::GetMagicItemDescription for the resolved description
+    // (same path the in-game UI uses). Magnitude is formatted to match the
+    // vanilla inventory display: integer when whole, one decimal place otherwise.
+    nlohmann::json BuildEffectJson(const RE::Effect* eff)
+    {
+        nlohmann::json j;
+        if (!eff || !eff->baseEffect) {
+            j["name"]                = "";
+            j["magnitude"]           = 0.f;
+            j["duration"]            = 0u;
+            j["descriptionTemplate"] = "";
+            j["description"]         = "";
+            return j;
+        }
+
+        j["name"]      = eff->baseEffect->GetName();
+        j["magnitude"] = eff->effectItem.magnitude;
+        j["duration"]  = eff->effectItem.duration;
+
+        // Use the native GetMagicItemDescription to get the resolved description
+        // This is the same path the in-game UI uses, ensuring maximum fidelity
+        BSString desc;
+        RE::MagicSystem::GetMagicItemDescription(desc, eff->baseEffect, "<mag>", "<dur>");
+        j["descriptionTemplate"] = std::string(desc);
+
+        // The GetMagicItemDescription already substitutes <mag> and <dur>,
+        // so we just use the resolved description directly
+        j["description"] = std::string(desc);
+
+        return j;
+    }
+
+    // Build a JSON array of effects for a MagicItem (spell, enchantment, potion, scroll, etc.).
+    nlohmann::json BuildEffectsArray(const RE::MagicItem* magic)
+    {
+        nlohmann::json effects = nlohmann::json::array();
+        if (magic) {
+            for (const auto* eff : magic->effects) {
+                if (!eff || !eff->baseEffect)
+                    continue;
+                effects.push_back(BuildEffectJson(eff));
+            }
+        }
+        return effects;
+    }
 }

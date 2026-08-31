@@ -139,70 +139,9 @@ namespace MagicReader
         return fallback;
     }
 
-    static void ReplaceAll(std::string& str, const std::string_view from, const std::string& to)
-    {
-        for (std::size_t pos = 0; (pos = str.find(from, pos)) != std::string::npos; pos += to.size())
-            str.replace(pos, from.size(), to);
-    }
-
-    // Format a float: integer when no fractional part, otherwise one decimal place.
-    // Matches vanilla Skyrim inventory display convention.
-    static std::string FormatMagnitude(float v)
-    {
-        float intpart;
-        if (std::modf(v, &intpart) == 0.f)
-            return std::to_string(static_cast<int>(intpart));
-        return std::format("{:.1f}", v);
-    }
-
-    static nlohmann::json BuildEffectJson(const RE::Effect* eff)
-    {
-        nlohmann::json j;
-        if (!eff || !eff->baseEffect) {
-            j["name"]                = "";
-            j["magnitude"]           = 0.f;
-            j["duration"]            = 0u;
-            j["descriptionTemplate"] = "";
-            j["description"]         = "";
-            return j;
-        }
-
-        j["name"]      = eff->baseEffect->GetName();
-        j["magnitude"] = eff->effectItem.magnitude;
-        j["duration"]  = eff->effectItem.duration;
-
-        // EffectSetting stores the localized description in magicItemDescription (DNAM).
-        const auto& desc = eff->baseEffect->magicItemDescription;
-        std::string tmpl = desc.empty() ? "" : std::string(desc.c_str());
-        j["descriptionTemplate"] = tmpl;
-
-        std::string resolved = tmpl;
-        ReplaceAll(resolved, "<mag>", FormatMagnitude(eff->effectItem.magnitude));
-        ReplaceAll(resolved, "<dur>", std::to_string(eff->effectItem.duration));
-        j["description"] = std::move(resolved);
-
-        return j;
-    }
-
-    static nlohmann::json BuildEffectsArray(const RE::MagicItem* magic)
-    {
-        nlohmann::json effects = nlohmann::json::array();
-        if (magic) {
-            logger::trace("[BuildEffectsArray] magic=0x{:016X} effects.size()={}",
-                reinterpret_cast<std::uintptr_t>(magic), magic->effects.size());
-            for (std::uint32_t i = 0; i < magic->effects.size(); ++i) {
-                const auto* eff = magic->effects[i];
-                logger::trace("[BuildEffectsArray] effect[{}] eff=0x{:016X} baseEffect=0x{:016X}",
-                    i,
-                    reinterpret_cast<std::uintptr_t>(eff),
-                    eff ? reinterpret_cast<std::uintptr_t>(eff->baseEffect) : 0uLL);
-                if (!eff || !eff->baseEffect)
-                    continue;
-                effects.push_back(BuildEffectJson(eff));
-            }
-        }
-        return effects;
-    }
+    // Use the native effect helpers from Common.h
+    using Common::BuildEffectJson;
+    using Common::BuildEffectsArray;
 
     static const char* CastingTypeToString(RE::MagicSystem::CastingType type)
     {

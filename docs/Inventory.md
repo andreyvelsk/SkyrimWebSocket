@@ -254,10 +254,8 @@ Used by Potions, Food, Scrolls, and within Enchantment objects.
 }
 ```
 
-- `name` — Localized effect name from the game
-- `magnitude` — Effect magnitude/strength
-- `duration` — Effect duration in seconds (0 = instant)
-- `descriptionTemplate` — Localized description template from the EffectSetting DNAM field
-  - May contain placeholders: `<mag>` (magnitude), `<dur>` (duration)
-- `description` — Ready-to-display string with placeholders replaced
-  - Integers when no fractional part, otherwise one decimal place
+- `name` — Localized effect name from `EffectSetting::GetName()`
+- `magnitude` — Effect magnitude/strength (raw `float` from `Effect::effectItem.magnitude`; matches the in-game display: integer when whole, one decimal place otherwise)
+- `duration` — Effect duration in seconds (raw `std::uint32_t` from `Effect::effectItem.duration`; 0 = instant)
+- `descriptionTemplate` — Localized description template from the `EffectSetting::magicItemDescription` (`DNAM` subrecord) field; may contain placeholders: `<mag>` (magnitude), `<dur>` (duration)
+- `description` — Ready-to-display string with `<mag>` and `<dur>` placeholders substituted, formatted by the engine's `MagicSystem::GetMagicItemDescription` to match in-game UI

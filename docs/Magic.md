@@ -112,11 +112,11 @@ Each spell effect includes:
 }
 \`\`\`
 
-- \`name\` — Effect display name (e.g. "Fire Damage", "Paralyze")
-- \`magnitude\` — Effect magnitude/intensity (formatted as integer when whole number, otherwise one decimal place)
-- \`duration\` — Effect duration in seconds (0 = instant)
-- \`descriptionTemplate\` — Template text with placeholders like \`<mag>\` and \`<dur>\` (raw from GMST)
-- \`description\` — Resolved description with template values substituted (e.g. \`"40 points of Fire damage"\`)
+- `name` — Effect display name (e.g. "Fire Damage", "Paralyze"), obtained from `EffectSetting::GetName()`
+- `magnitude` — Effect magnitude/intensity (raw `float` from `Effect::effectItem.magnitude`; matches the in-game display: integer when whole, one decimal place otherwise)
+- `duration` — Effect duration in seconds (raw `std::uint32_t` from `Effect::effectItem.duration`; 0 = instant)
+- `descriptionTemplate` — Localized template string with placeholders like `<mag>` and `<dur>`, obtained from `EffectSetting::magicItemDescription` (the `DNAM` subrecord field)
+- `description` — Ready-to-display string with `<mag>` and `<dur>` placeholders substituted, formatted by the engine's `MagicSystem::GetMagicItemDescription` to match in-game UI
 
 ---
 
