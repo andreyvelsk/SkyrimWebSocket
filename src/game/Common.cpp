@@ -2,6 +2,10 @@
 
 #include "../../logger.h"
 
+#include <array>
+#include <utility>
+
+#include "RE/A/ActorValueList.h"
 #include "RE/M/MagicSystem.h"
 
 namespace Common
@@ -177,6 +181,31 @@ namespace Common
 
     // ─── Effect helpers ────────────────────────────────────────────────────────
 
+    // Magnitude exactly as the vanilla UI displays it:
+    //  - Effect::GetMagnitude() (native; returns 0 when the effect has the
+    //    kNoMagnitude flag)
+    //  - ×100 when the effect's associated actor value is flagged
+    //    kDisplayedEffectMagnitudeTimesOneHundred — percent-style AVs
+    //    (Resist Frost, Resist Fire, ...) store magnitude as 0.1 while the
+    //    UI shows "10%".
+    static float GetDisplayMagnitude(const RE::Effect* eff)
+    {
+        if (!eff || !eff->baseEffect)
+            return 0.f;
+
+        float mag = eff->GetMagnitude();
+        const auto& data = eff->baseEffect->data;
+
+        for (auto av : { data.resistVariable, data.primaryAV, data.secondaryAV }) {
+            auto* avi = RE::ActorValueList::GetActorValueInfo(av);
+            if (avi && avi->flags.all(RE::ActorValueInfo::ActorValueFlag::kDisplayedEffectMagnitudeTimesOneHundred)) {
+                mag *= 100.f;
+                break;
+            }
+        }
+        return mag;
+    }
+
     // Build a JSON object for a single magic effect using native game data only.
     //  - name:                EffectSetting::GetName()
     //  - magnitude/duration:  Effect::effectItem, rounded the same way the
@@ -201,8 +230,10 @@ namespace Common
         j["name"] = base->GetName();
 
         // The vanilla UI displays magnitude/duration as integers — round the
-        // raw float the same way instead of exposing engine-internal precision.
-        j["magnitude"] = static_cast<std::int32_t>(std::lround(eff->effectItem.magnitude));
+        // display magnitude the same way instead of exposing engine-internal
+        // precision.
+        const std::int32_t displayMag = static_cast<std::int32_t>(std::lround(GetDisplayMagnitude(eff)));
+        j["magnitude"] = displayMag;
         j["duration"]  = eff->effectItem.duration;
 
         // Localized description template from the EffectSetting's DNAM field
@@ -212,7 +243,7 @@ namespace Common
         // Resolve the description by substituting <mag> and <dur> placeholders
         std::string resolved = j["descriptionTemplate"].get<std::string>();
         std::size_t pos = 0;
-        std::string magStr = std::to_string(j["magnitude"].get<std::int32_t>());
+        std::string magStr = std::to_string(displayMag);
         std::string durStr = std::to_string(eff->effectItem.duration);
         while ((pos = resolved.find("<mag>", pos)) != std::string::npos) {
             resolved.replace(pos, 5, magStr);
@@ -252,12 +283,25 @@ namespace Common
         if (!magic)
             return "";
 
-        RE::BSString out;
-        RE::MagicSystem::GetMagicItemDescription(out, const_cast<RE::MagicItem*>(magic), "<mag>", "</mag>");
-        std::string desc = std::string(out.c_str());
+        // The engine function takes begin/end tag formats; try the plausible
+        // variants and keep the first result with all tags resolved.
+        static constexpr std::array<std::pair<const char*, const char*>, 3> kTagFormats{ {
+            { "<mag>", "</mag>" },
+            { "<%s>", "</%s>" },
+            { "<mag", ">" },
+        } };
 
-        if (desc.find("<mag") == std::string::npos && desc.find("<dur") == std::string::npos)
-            return desc;
+        for (const auto& [beginTag, endTag] : kTagFormats) {
+            RE::BSString out;
+            RE::MagicSystem::GetMagicItemDescription(out, const_cast<RE::MagicItem*>(magic), beginTag, endTag);
+            std::string desc(out.c_str());
+            if (!desc.empty() &&
+                desc.find("<mag") == std::string::npos &&
+                desc.find("<dur") == std::string::npos &&
+                desc.find("%s") == std::string::npos) {
+                return desc;
+            }
+        }
 
         // Fallback: join per-effect descriptions (already resolved).
         std::string joined;

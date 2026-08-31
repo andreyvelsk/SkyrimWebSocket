@@ -255,7 +255,7 @@ Used by Potions, Food, Scrolls, and within Enchantment objects.
 ```
 
 - `name` — Localized effect name from `EffectSetting::GetName()`
-- `magnitude` — Effect magnitude/strength, rounded to an integer exactly as the vanilla UI displays it (raw `float` from `Effect::effectItem.magnitude` is never exposed)
+- `magnitude` — Effect magnitude/strength, rounded to an integer exactly as the vanilla UI displays it: native `Effect::GetMagnitude()`, multiplied by 100 when the effect's associated actor value is flagged `kDisplayedEffectMagnitudeTimesOneHundred` (percent-style values like Resist Frost store 0.1 while the UI shows "10%")
 - `duration` — Effect duration in seconds (`std::uint32_t` from `Effect::effectItem.duration`; 0 = instant)
 - `descriptionTemplate` — Localized description template from the `EffectSetting::magicItemDescription` (`DNAM` subrecord) field; may contain placeholders: `<mag>` (magnitude), `<dur>` (duration)
 - `description` — Ready-to-display string with `<mag>` and `<dur>` placeholders substituted with the UI-rounded magnitude and duration
