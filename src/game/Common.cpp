@@ -1,7 +1,5 @@
 #include "Common.h"
 
-#include <RE/B/BSFixedString.h>
-
 #include "../../logger.h"
 
 namespace Common
@@ -207,15 +205,26 @@ namespace Common
         j["magnitude"] = eff->effectItem.magnitude;
         j["duration"]  = eff->effectItem.duration;
 
-        // Use the native GetMagicItemDescription to get the resolved description
-        // This is the same path the in-game UI uses, ensuring maximum fidelity
-        RE::BSString desc;
-        RE::MagicSystem::GetMagicItemDescription(desc, eff->baseEffect, "<mag>", "<dur>");
-        j["descriptionTemplate"] = std::string(desc);
+        // Get the raw template from the EffectSetting's DNAM field (native data source)
+        const auto& descField = eff->baseEffect->magicItemDescription;
+        std::string tmpl = descField.empty() ? "" : std::string(descField.c_str());
+        j["descriptionTemplate"] = tmpl;
 
-        // The GetMagicItemDescription already substitutes <mag> and <dur>,
-        // so we just use the resolved description directly
-        j["description"] = std::string(desc);
+        // Resolve the description by substituting <mag> and <dur> placeholders
+        std::string resolved = tmpl;
+        std::size_t pos = 0;
+        std::string magStr = FormatMagnitude(eff->effectItem.magnitude);
+        std::string durStr = std::to_string(eff->effectItem.duration);
+        while ((pos = resolved.find("<mag>", pos)) != std::string::npos) {
+            resolved.replace(pos, 5, magStr);
+            pos += magStr.length();
+        }
+        pos = 0;
+        while ((pos = resolved.find("<dur>", pos)) != std::string::npos) {
+            resolved.replace(pos, 5, durStr);
+            pos += durStr.length();
+        }
+        j["description"] = resolved;
 
         return j;
     }
