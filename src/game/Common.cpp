@@ -1,5 +1,7 @@
 #include "Common.h"
 
+#include <RE/B/BSString.h>
+
 #include "../../logger.h"
 
 namespace Common
