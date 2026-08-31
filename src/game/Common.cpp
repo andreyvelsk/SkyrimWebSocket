@@ -1,6 +1,6 @@
 #include "Common.h"
 
-#include <RE/B/BSString.h>
+#include <RE/B/BSFixedString.h>
 
 #include "../../logger.h"
 
@@ -209,7 +209,7 @@ namespace Common
 
         // Use the native GetMagicItemDescription to get the resolved description
         // This is the same path the in-game UI uses, ensuring maximum fidelity
-        BSString desc;
+        RE::BSString desc;
         RE::MagicSystem::GetMagicItemDescription(desc, eff->baseEffect, "<mag>", "<dur>");
         j["descriptionTemplate"] = std::string(desc);
 
