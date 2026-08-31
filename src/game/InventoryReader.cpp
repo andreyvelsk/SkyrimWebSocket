@@ -98,6 +98,7 @@ namespace InventoryReader
     // Use the native effect helpers from Common.h
     using Common::BuildEffectJson;
     using Common::BuildEffectsArray;
+    using Common::BuildItemDescription;
 
     // Returns a JSON object describing the enchantment on an item stack, or
     // JSON null when the item carries no enchantment.
@@ -125,8 +126,9 @@ namespace InventoryReader
             return nullptr;
 
         nlohmann::json details;
-        details["name"]    = ench->GetName();
-        details["effects"] = BuildEffectsArray(ench);
+        details["name"]        = ench->GetName();
+        details["description"] = BuildItemDescription(ench);
+        details["effects"]     = BuildEffectsArray(ench);
         return details;
     }
 
@@ -499,6 +501,7 @@ namespace InventoryReader
             auto j           = BuildBaseEntry(item, data);
             j["categoryType"] = "Potion";
             const auto* alch = item->As<RE::AlchemyItem>();
+            j["description"] = BuildItemDescription(alch);
             j["effects"]     = BuildEffectsArray(alch);
             result.push_back(std::move(j));
         }
@@ -586,6 +589,7 @@ namespace InventoryReader
             j["categoryType"] = "Scroll";
             // Scrolls are MagicItems — build effects from game data (no hardcoded strings).
             const auto* magic = item->As<RE::MagicItem>();
+            j["description"]  = BuildItemDescription(magic);
             j["effects"]      = BuildEffectsArray(magic);
             result.push_back(std::move(j));
         }
@@ -613,6 +617,7 @@ namespace InventoryReader
             auto j           = BuildBaseEntry(item, data);
             j["categoryType"] = "Food";
             const auto* alch = item->As<RE::AlchemyItem>();
+            j["description"] = BuildItemDescription(alch);
             j["effects"]     = BuildEffectsArray(alch);
             result.push_back(std::move(j));
         }

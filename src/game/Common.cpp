@@ -2,8 +2,7 @@
 
 #include "../../logger.h"
 
-#include "RE/B/BSString.h"
-#include "RE/T/TESDescription.h"
+#include "RE/M/MagicSystem.h"
 
 namespace Common
 {
@@ -182,9 +181,8 @@ namespace Common
     //  - name:                EffectSetting::GetName()
     //  - magnitude/duration:  Effect::effectItem, rounded the same way the
     //                         vanilla UI displays them (integers)
-    //  - descriptionTemplate: TESDescription::GetDescription() — the exact
-    //                         localized source the in-game UI reads (resolves
-    //                         string files), with unresolved <mag>/<dur> tags
+    //  - descriptionTemplate: EffectSetting::magicItemDescription (DNAM),
+    //                         with unresolved <mag>/<dur> tags
     //  - description:         template with <mag>/<dur> substituted
     nlohmann::json BuildEffectJson(const RE::Effect* eff)
     {
@@ -207,17 +205,12 @@ namespace Common
         j["magnitude"] = static_cast<std::int32_t>(std::lround(eff->effectItem.magnitude));
         j["duration"]  = eff->effectItem.duration;
 
-        // Localized description template via the engine's own description
-        // pipeline (TESDescription::GetDescription resolves the strings files,
-        // exactly what the UI reads). Fall back to the raw DNAM field only if
-        // the engine returns nothing.
-        RE::BSString desc;
-        base->GetDescription(desc, base);
-        std::string tmpl = desc.empty() ? std::string(base->magicItemDescription.c_str()) : std::string(desc.c_str());
-        j["descriptionTemplate"] = tmpl;
+        // Localized description template from the EffectSetting's DNAM field
+        // (native data source, same text the in-game UI reads).
+        j["descriptionTemplate"] = std::string(base->magicItemDescription.c_str());
 
         // Resolve the description by substituting <mag> and <dur> placeholders
-        std::string resolved = tmpl;
+        std::string resolved = j["descriptionTemplate"].get<std::string>();
         std::size_t pos = 0;
         std::string magStr = std::to_string(j["magnitude"].get<std::int32_t>());
         std::string durStr = std::to_string(eff->effectItem.duration);
@@ -247,5 +240,35 @@ namespace Common
             }
         }
         return effects;
+    }
+
+    // Item-level description built by the engine itself — the exact same call
+    // the in-game UI uses (MagicSystem::GetMagicItemDescription). Substitutes
+    // <mag>/<dur> for every effect and concatenates them. If the engine returns
+    // text with unresolved tags, fall back to joining the per-effect resolved
+    // descriptions.
+    std::string BuildItemDescription(const RE::MagicItem* magic)
+    {
+        if (!magic)
+            return "";
+
+        RE::BSString out;
+        RE::MagicSystem::GetMagicItemDescription(out, const_cast<RE::MagicItem*>(magic), "<mag>", "</mag>");
+        std::string desc = std::string(out.c_str());
+
+        if (desc.find("<mag") == std::string::npos && desc.find("<dur") == std::string::npos)
+            return desc;
+
+        // Fallback: join per-effect descriptions (already resolved).
+        std::string joined;
+        for (const auto* eff : magic->effects) {
+            if (!eff || !eff->baseEffect)
+                continue;
+            nlohmann::json j = BuildEffectJson(eff);
+            if (!joined.empty())
+                joined += "\n";
+            joined += j["description"].get<std::string>();
+        }
+        return joined;
     }
 }

@@ -105,7 +105,7 @@ Each spell effect includes:
 \`\`\`jsonc
 {
   "name": "Fire Damage",
-  "magnitude": 40.0,
+  "magnitude": 40,
   "duration": 0,
   "descriptionTemplate": "<mag> points of Fire damage",
   "description": "40 points of Fire damage"
@@ -115,8 +115,10 @@ Each spell effect includes:
 - `name` — Effect display name (e.g. "Fire Damage", "Paralyze"), obtained from `EffectSetting::GetName()`
 - `magnitude` — Effect magnitude/intensity, rounded to an integer exactly as the vanilla UI displays it (raw `float` from `Effect::effectItem.magnitude` is never exposed)
 - `duration` — Effect duration in seconds (`std::uint32_t` from `Effect::effectItem.duration`; 0 = instant)
-- `descriptionTemplate` — Localized template string with placeholders like `<mag>` and `<dur>`, obtained via the engine's `TESDescription::GetDescription()` (resolves string files — the exact source the in-game UI reads)
+- `descriptionTemplate` — Localized template string with placeholders like `<mag>` and `<dur>`, obtained from `EffectSetting::magicItemDescription` (the `DNAM` subrecord field)
 - `description` — Ready-to-display string with `<mag>` and `<dur>` placeholders substituted with the UI-rounded magnitude and duration
+
+Each spell entry also carries an item-level `description` field — the full spell description exactly as the in-game UI renders it, built by the engine itself via `MagicSystem::GetMagicItemDescription` (all effect descriptions concatenated with `<mag>`/`<dur>` already substituted).
 
 ---
 

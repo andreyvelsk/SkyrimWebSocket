@@ -138,11 +138,15 @@ namespace Common
     // ─── Effect helpers ────────────────────────────────────────────────────────
 
     // Build a JSON object for a single magic effect using native game data only.
-    // Description template comes from TESDescription::GetDescription() (the
-    // localized source the in-game UI reads). Magnitude/duration are rounded
-    // to integers the same way the vanilla UI displays them.
+    // Description template comes from EffectSetting::magicItemDescription (DNAM).
+    // Magnitude/duration are rounded to integers the same way the vanilla UI
+    // displays them.
     nlohmann::json BuildEffectJson(const RE::Effect* eff);
 
     // Build a JSON array of effects for a MagicItem (spell, enchantment, potion, scroll, etc.).
     nlohmann::json BuildEffectsArray(const RE::MagicItem* magic);
+
+    // Item-level description built by the engine itself via
+    // MagicSystem::GetMagicItemDescription (the exact call the in-game UI uses).
+    std::string BuildItemDescription(const RE::MagicItem* magic);
 }

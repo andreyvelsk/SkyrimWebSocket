@@ -247,7 +247,7 @@ Used by Potions, Food, Scrolls, and within Enchantment objects.
 ```jsonc
 {
   "name": "Restore Health",
-  "magnitude": 50.0,
+  "magnitude": 50,
   "duration": 0,
   "descriptionTemplate": "Restore <mag> points of Health.",
   "description": "Restore 50 points of Health."
@@ -257,5 +257,7 @@ Used by Potions, Food, Scrolls, and within Enchantment objects.
 - `name` — Localized effect name from `EffectSetting::GetName()`
 - `magnitude` — Effect magnitude/strength, rounded to an integer exactly as the vanilla UI displays it (raw `float` from `Effect::effectItem.magnitude` is never exposed)
 - `duration` — Effect duration in seconds (`std::uint32_t` from `Effect::effectItem.duration`; 0 = instant)
-- `descriptionTemplate` — Localized description template obtained via the engine's `TESDescription::GetDescription()` (resolves string files — the exact source the in-game UI reads); may contain placeholders: `<mag>` (magnitude), `<dur>` (duration)
+- `descriptionTemplate` — Localized description template from the `EffectSetting::magicItemDescription` (`DNAM` subrecord) field; may contain placeholders: `<mag>` (magnitude), `<dur>` (duration)
 - `description` — Ready-to-display string with `<mag>` and `<dur>` placeholders substituted with the UI-rounded magnitude and duration
+
+Potion, Food, and Scroll entries (and Enchantment objects) also carry an item-level `description` field — the full item description exactly as the in-game UI renders it, built by the engine itself via `MagicSystem::GetMagicItemDescription` (all effect descriptions concatenated with `<mag>`/`<dur>` already substituted).
