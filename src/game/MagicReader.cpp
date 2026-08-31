@@ -236,8 +236,8 @@ namespace MagicReader
         j["chargeTime"]  = spell->data.chargeTime;
 
         logger::trace("[BuildSpellEntry] 0x{:08X} calling BuildEffectsArray", spell->GetFormID());
-        j["description"] = BuildItemDescription(spell);
-        j["effects"]     = BuildEffectsArray(spell);
+        j["description"] = BuildItemDescription(spell, player);
+        j["effects"]     = BuildEffectsArray(spell, player);
         logger::trace("[BuildSpellEntry] 0x{:08X} effects done count={}",
             spell->GetFormID(), j["effects"].size());
 
@@ -573,8 +573,8 @@ namespace MagicReader
         // Powers always cost 0 magicka (they may have a cost of 0 in the data, but
         // CalculateMagickaCost will reflect that).
         j["cost"]        = static_cast<int32_t>(spell->CalculateMagickaCost(player));
-        j["description"] = BuildItemDescription(spell);
-        j["effects"]     = BuildEffectsArray(spell);
+        j["description"] = BuildItemDescription(spell, player);
+        j["effects"]     = BuildEffectsArray(spell, player);
 
         // isEquipped: this power is the currently selected voice power.
         const auto& rt  = player->GetActorRuntimeData();

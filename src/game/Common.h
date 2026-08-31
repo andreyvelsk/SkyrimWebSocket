@@ -141,12 +141,14 @@ namespace Common
     // Description template comes from EffectSetting::magicItemDescription (DNAM).
     // Magnitude/duration are rounded to integers the same way the vanilla UI
     // displays them.
-    nlohmann::json BuildEffectJson(const RE::Effect* eff);
+    nlohmann::json BuildEffectJson(const RE::Effect* eff, const RE::MagicItem* magic = nullptr, RE::Actor* caster = nullptr);
 
     // Build a JSON array of effects for a MagicItem (spell, enchantment, potion, scroll, etc.).
-    nlohmann::json BuildEffectsArray(const RE::MagicItem* magic);
+    // `caster` (e.g. the player) enables native perk entry-point modifiers
+    // (kModSpellMagnitude / kModSpellDuration) — the same values the UI shows.
+    nlohmann::json BuildEffectsArray(const RE::MagicItem* magic, RE::Actor* caster = nullptr);
 
     // Item-level description built by the engine itself via
     // MagicSystem::GetMagicItemDescription (the exact call the in-game UI uses).
-    std::string BuildItemDescription(const RE::MagicItem* magic);
+    std::string BuildItemDescription(const RE::MagicItem* magic, RE::Actor* caster = nullptr);
 }
