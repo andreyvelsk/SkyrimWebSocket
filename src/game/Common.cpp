@@ -2,6 +2,9 @@
 
 #include "../../logger.h"
 
+#include "RE/B/BSString.h"
+#include "RE/T/TESDescription.h"
+
 namespace Common
 {
     std::string GetGMSTString(const char* key)
@@ -175,45 +178,48 @@ namespace Common
 
     // ─── Effect helpers ────────────────────────────────────────────────────────
 
-    // Format a float: show as integer when there is no fractional part, otherwise
-    // keep one decimal place (matches vanilla inventory display convention).
-    static std::string FormatMagnitude(float v)
-    {
-        float intpart;
-        if (std::modf(v, &intpart) == 0.f)
-            return std::to_string(static_cast<int>(intpart));
-        return std::format("{:.1f}", v);
-    }
-
-    // Build a JSON object for a single magic effect using native game data.
-    // Uses MagicSystem::GetMagicItemDescription for the resolved description
-    // (same path the in-game UI uses). Magnitude is formatted to match the
-    // vanilla inventory display: integer when whole, one decimal place otherwise.
+    // Build a JSON object for a single magic effect using native game data only.
+    //  - name:                EffectSetting::GetName()
+    //  - magnitude/duration:  Effect::effectItem, rounded the same way the
+    //                         vanilla UI displays them (integers)
+    //  - descriptionTemplate: TESDescription::GetDescription() — the exact
+    //                         localized source the in-game UI reads (resolves
+    //                         string files), with unresolved <mag>/<dur> tags
+    //  - description:         template with <mag>/<dur> substituted
     nlohmann::json BuildEffectJson(const RE::Effect* eff)
     {
         nlohmann::json j;
         if (!eff || !eff->baseEffect) {
             j["name"]                = "";
-            j["magnitude"]           = 0.f;
+            j["magnitude"]           = 0;
             j["duration"]            = 0u;
             j["descriptionTemplate"] = "";
             j["description"]         = "";
             return j;
         }
 
-        j["name"]      = eff->baseEffect->GetName();
-        j["magnitude"] = eff->effectItem.magnitude;
+        const auto* base = eff->baseEffect;
+
+        j["name"] = base->GetName();
+
+        // The vanilla UI displays magnitude/duration as integers — round the
+        // raw float the same way instead of exposing engine-internal precision.
+        j["magnitude"] = static_cast<std::int32_t>(std::lround(eff->effectItem.magnitude));
         j["duration"]  = eff->effectItem.duration;
 
-        // Get the raw template from the EffectSetting's DNAM field (native data source)
-        const auto& descField = eff->baseEffect->magicItemDescription;
-        std::string tmpl = descField.empty() ? "" : std::string(descField.c_str());
+        // Localized description template via the engine's own description
+        // pipeline (TESDescription::GetDescription resolves the strings files,
+        // exactly what the UI reads). Fall back to the raw DNAM field only if
+        // the engine returns nothing.
+        RE::BSString desc;
+        base->GetDescription(desc, base);
+        std::string tmpl = desc.empty() ? std::string(base->magicItemDescription.c_str()) : std::string(desc.c_str());
         j["descriptionTemplate"] = tmpl;
 
         // Resolve the description by substituting <mag> and <dur> placeholders
         std::string resolved = tmpl;
         std::size_t pos = 0;
-        std::string magStr = FormatMagnitude(eff->effectItem.magnitude);
+        std::string magStr = std::to_string(j["magnitude"].get<std::int32_t>());
         std::string durStr = std::to_string(eff->effectItem.duration);
         while ((pos = resolved.find("<mag>", pos)) != std::string::npos) {
             resolved.replace(pos, 5, magStr);
