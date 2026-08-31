@@ -247,17 +247,17 @@ Used by Potions, Food, Scrolls, and within Enchantment objects.
 ```jsonc
 {
   "name": "Restore Health",
-  "magnitude": 50.0,
+  "magnitude": 50,
   "duration": 0,
   "descriptionTemplate": "Restore <mag> points of Health.",
   "description": "Restore 50 points of Health."
 }
 ```
 
-- `name` — Localized effect name from the game
-- `magnitude` — Effect magnitude/strength
-- `duration` — Effect duration in seconds (0 = instant)
-- `descriptionTemplate` — Localized description template from the EffectSetting DNAM field
-  - May contain placeholders: `<mag>` (magnitude), `<dur>` (duration)
-- `description` — Ready-to-display string with placeholders replaced
-  - Integers when no fractional part, otherwise one decimal place
+- `name` — Localized effect name from `EffectSetting::GetName()`
+- `magnitude` — Effect magnitude/strength, rounded to an integer exactly as the vanilla UI displays it: native `Effect::GetMagnitude()`, multiplied by 100 when the effect's associated actor value is flagged `kDisplayedEffectMagnitudeTimesOneHundred` (percent-style values like Resist Frost store 0.1 while the UI shows "10%")
+- `duration` — Effect duration in seconds (`std::uint32_t` from `Effect::effectItem.duration` via native `Effect::GetDuration()`; 0 = instant)
+- `descriptionTemplate` — Localized description template from the `EffectSetting::magicItemDescription` (`DNAM` subrecord) field; may contain placeholders: `<mag>` (magnitude), `<dur>` (duration)
+- `description` — Ready-to-display string with `<mag>` and `<dur>` placeholders substituted with the UI-rounded magnitude and duration
+
+Potion, Food, and Scroll entries (and Enchantment objects) also carry an item-level `description` field — the full item description exactly as the in-game UI renders it, built by the engine itself via `MagicSystem::GetMagicItemDescription` (all effect descriptions concatenated with `<mag>`/`<dur>` already substituted).

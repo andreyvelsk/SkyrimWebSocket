@@ -105,18 +105,20 @@ Each spell effect includes:
 \`\`\`jsonc
 {
   "name": "Fire Damage",
-  "magnitude": 40.0,
+  "magnitude": 40,
   "duration": 0,
   "descriptionTemplate": "<mag> points of Fire damage",
   "description": "40 points of Fire damage"
 }
 \`\`\`
 
-- \`name\` — Effect display name (e.g. "Fire Damage", "Paralyze")
-- \`magnitude\` — Effect magnitude/intensity (formatted as integer when whole number, otherwise one decimal place)
-- \`duration\` — Effect duration in seconds (0 = instant)
-- \`descriptionTemplate\` — Template text with placeholders like \`<mag>\` and \`<dur>\` (raw from GMST)
-- \`description\` — Resolved description with template values substituted (e.g. \`"40 points of Fire damage"\`)
+- `name` — Effect display name (e.g. "Fire Damage", "Paralyze"), obtained from `EffectSetting::GetName()`
+- `magnitude` — Effect magnitude/intensity, rounded to an integer exactly as the vanilla UI displays it: native `Effect::GetMagnitude()`, modified by the engine's perk entry points (`kModSpellMagnitude`, applied for effects flagged `kPowerAffectsMagnitude` — the same mechanism the UI uses), then multiplied by 100 when the effect's associated actor value is flagged `kDisplayedEffectMagnitudeTimesOneHundred` (percent-style values like Resist Frost store 0.1 while the UI shows "10%")
+- `duration` — Effect duration in seconds, modified by the engine's perk entry points (`kModSpellDuration`, applied for effects flagged `kPowerAffectsDuration`); 0 = instant
+- `descriptionTemplate` — Localized template string with placeholders like `<mag>` and `<dur>`, obtained from `EffectSetting::magicItemDescription` (the `DNAM` subrecord field)
+- `description` — Ready-to-display string with `<mag>` and `<dur>` placeholders substituted with the UI-rounded magnitude and duration
+
+Each spell entry also carries an item-level `description` field — the full spell description exactly as the in-game UI renders it, built by the engine itself via `MagicSystem::GetMagicItemDescription` (all effect descriptions concatenated with `<mag>`/`<dur>` already substituted).
 
 ---
 
