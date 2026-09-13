@@ -22,7 +22,7 @@ An SKSE plugin for Skyrim that provides a WebSocket server interface for remote 
 - [CommonLibSSE NG](https://github.com/alandtse/CommonLibVR) (ng branch)
   - _included as a git submodule in `lib/commonlibsse-ng`_
 
-> This plugin supports Skyrim SSE, AE, and VR through CommonLibSSE NG.
+> This plugin supports Skyrim SSE, AE (up to 1.7.104), and VR through CommonLibSSE NG.
 
 ## What does it do?
 
