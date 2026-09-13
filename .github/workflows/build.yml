@@ -8,7 +8,7 @@ on:
   workflow_dispatch:
 
 env:
-  VCPKG_COMMIT: "77df67cfff9c12ccfdb52284e07c87c75092f723"
+  VCPKG_COMMIT: "a1cae005c39be7b18ba319fced856b68d7276271"
   VCPKG_BINARY_CACHE: ${{ github.workspace }}/.vcpkg-binary-cache
   VCPKG_BINARY_SOURCES: "clear;files,${{ github.workspace }}/.vcpkg-binary-cache,readwrite"
   VCPKG_FEATURE_FLAGS: "manifests,binarycaching"
