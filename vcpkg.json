@@ -2,12 +2,17 @@
     "$schema": "https://raw.githubusercontent.com/microsoft/vcpkg/master/scripts/vcpkg.schema.json",
     "name": "skyrim-websocket",
     "version-string": "1.16.1",
+    "builtin-baseline": "a1cae005c39be7b18ba319fced856b68d7276271",
     "dependencies": [
         "boost-beast",
         "boost-asio",
         "nlohmann-json",
         "spdlog",
         "directxtk",
-        "rapidcsv"
+        "rapidcsv",
+        {
+            "name": "fmt",
+            "version>=": "12.2.0"
+        }
     ]
 }
