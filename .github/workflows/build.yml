@@ -31,6 +31,20 @@ jobs:
         uses: actions/checkout@v4
         with:
           submodules: 'recursive'
+          
+      - name: Bump CommonLibSSE-NG to 10.0.0 (Skyrim 1.7.x support)
+        shell: bash
+        run: |
+          cd lib/commonlibsse-ng
+          git fetch --depth=1 origin d61bca4de789428aa7d98a770b1323ddf1bb855c
+          git checkout d61bca4de789428aa7d98a770b1323ddf1bb855c
+          git submodule update --init --recursive
+
+      - name: Patch quest offsets for AE 1.7.99+
+        shell: bash
+        run: |
+          sed -i -E 's/REL::Module::IsAE\(\) \? (0x5[0-9A-F]{2}) : (0x5[0-9A-F]{2});/REL::Module::IsAE() ? REL::VersionShift(\1, 0x8, SKSE::RUNTIME_SSE_1_7_99) : \2;/' src/game/QuestMarkers.cpp src/game/QuestReader.cpp src/game/QuestText.cpp
+          grep -c VersionShift src/game/QuestMarkers.cpp src/game/QuestReader.cpp src/game/QuestText.cpp
 
       - name: Setup MSVC Developer Command Prompt
         uses: ilammy/msvc-dev-cmd@v1
@@ -94,7 +108,7 @@ jobs:
         run: ccache -s
 
       - name: Configure CMake (Release)
-        run: cmake --preset release -DCMAKE_CXX_COMPILER_LAUNCHER=ccache -DCOMMONLIB_PREBUILT=ON
+        run: cmake -E env --unset=GITHUB_ACTIONS cmake --preset release -DCMAKE_CXX_COMPILER_LAUNCHER=ccache -DCOMMONLIB_PREBUILT=OFF
 
       - name: Build (Release)
         run: cmake --build build/release --config Release
