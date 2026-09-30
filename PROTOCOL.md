@@ -137,6 +137,9 @@ below.
 | `favorite` | Toggle the favorite flag on an inventory item. | [↓](#favorite) |
 | `texture_preview` | Produce a base64 PNG preview from a raw DDS texture path. | [↓](#texture_preview) |
 | `file_download` | Download an arbitrary file (BSA / loose) as base64. | [↓](#file_download) |
+| `screenshot_take` | Take an in-game screenshot with the engine's own screenshot feature. | [↓](#screenshot_take) |
+| `screenshot_list` | List screenshot files in the game folder, newest first. | [↓](#screenshot_list) |
+| `screenshot_get` | Read one screenshot, optionally scaled down to a JPEG. | [↓](#screenshot_get) |
 | `equip_spell` | Equip a known spell to a hand. | [↓](#equip_spell) |
 | `unequip_spell` | Unequip a spell from a hand. | [↓](#unequip_spell) |
 | `favorite_spell` | Toggle the favorite flag on a known spell or power. | [↓](#favorite_spell) |
@@ -360,6 +363,54 @@ and loose files) and returns it as base64. Useful for any non-texture asset:
   }
 }
 ```
+
+---
+
+#### `screenshot_take`
+
+Queues one screenshot through the engine's PrintScreen handler. Before it
+queues, the plugin sets `bAllowScreenShot:Display` to `1` for this game
+session. The engine writes the file one or two frames later, into the game
+folder, named after `sScreenShotBaseName:Display` (default `ScreenShot`).
+Feature flag: `screenshots`.
+
+No extra fields. **Response** `data`: `{ "queued": bool }`. `queued` is
+`false` when a screenshot is already pending.
+
+---
+
+#### `screenshot_list`
+
+Lists screenshot files (`.png`, `.bmp`, `.jpg`) in the game folder whose
+names start with the screenshot base name. Newest first.
+
+| Field | Required | Default | Description |
+|---|---|---|---|
+| `limit` | no | `50` | Maximum number of files (1–500). |
+
+**Response** `data`:
+
+| Field | Type | Description |
+|---|---|---|
+| `directory` | string | Game folder that was scanned. |
+| `baseName` | string | Value of `sScreenShotBaseName:Display`. |
+| `total` | integer | Number of matching files. |
+| `files` | array | `{ "name": string, "size": int, "modified": int }`; `modified` is Unix seconds. |
+
+---
+
+#### `screenshot_get`
+
+Reads one file from the `screenshot_list` result. Names that are not in that
+list are refused.
+
+| Field | Required | Default | Description |
+|---|---|---|---|
+| `name` | **yes** | — | A `name` from `screenshot_list`. |
+| `maxSize` | no | `0` | `> 0`: decode, scale so the longest side is at most `maxSize` px, return a JPEG. `0`: return the file bytes unchanged. |
+
+**Response** `data`: `{ "name", "mimeType", "width", "height", "size", "dataBase64" }`
+(`width`/`height` only when `maxSize > 0`).
 
 ---
 

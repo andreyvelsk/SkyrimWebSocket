@@ -10,8 +10,10 @@
 #include "../game/MagicCommands.h"
 #include "../game/MapCommands.h"
 #include "../game/QuestCommands.h"
+#include "../game/ScreenshotCommands.h"
 #include "../Utils.h"
 
+#include <algorithm>
 #include <chrono>
 #include <cctype>
 #include <nlohmann/json.hpp>
@@ -263,10 +265,75 @@ namespace MessageRouter
                 return;
             }
             const std::string path = msg["path"].get<std::string>();
+            // Optional: cap the longest side (thumbnails). 0 / absent = full size.
+            std::uint32_t maxSize = 0;
+            if (msg.contains("maxSize") && msg["maxSize"].is_number_integer()) {
+                const auto requested = msg["maxSize"].get<std::int64_t>();
+                if (requested > 0)
+                    maxSize = static_cast<std::uint32_t>(std::min<std::int64_t>(requested, 4096));
+            }
             // Decode + PNG encode + base64 are heavy: run them on the
             // io_context thread, not the game thread, to avoid freezing the game.
-            asio::post(session->ioc(), [session, cmdId, path]() {
-                auto result = FileCommands::GetTexturePreview(path);
+            asio::post(session->ioc(), [session, cmdId, path, maxSize]() {
+                auto result = FileCommands::GetTexturePreview(path, maxSize);
+                session->send(BuildCommandResultJson(cmdId, result));
+            });
+            return;
+        }
+
+        // ─── In-game screenshots ──────────────────────────────────────────
+        if (command == "screenshot_take") {
+            SKSE::GetTaskInterface()->AddTask([session, cmdId]() {
+                Common::CommandResult result;
+                try {
+                    result = ScreenshotCommands::TakeScreenshot();
+                } catch (const std::exception& e) {
+                    result = { false, std::string("screenshot_take failed: ") + e.what() };
+                }
+                std::string json = BuildCommandResultJson(cmdId, result);
+                asio::post(session->ioc(), [session, json] { session->send(json); });
+            });
+            return;
+        }
+
+        if (command == "screenshot_list") {
+            std::size_t limit = 50;
+            if (msg.contains("limit") && msg["limit"].is_number_integer()) {
+                const auto requested = msg["limit"].get<std::int64_t>();
+                if (requested > 0)
+                    limit = static_cast<std::size_t>(std::min<std::int64_t>(requested, 500));
+            }
+            asio::post(session->ioc(), [session, cmdId, limit]() {
+                Common::CommandResult result;
+                try {
+                    result = ScreenshotCommands::ListScreenshots(limit);
+                } catch (const std::exception& e) {
+                    result = { false, std::string("screenshot_list failed: ") + e.what() };
+                }
+                session->send(BuildCommandResultJson(cmdId, result));
+            });
+            return;
+        }
+
+        if (command == "screenshot_get") {
+            if (!msg.contains("name") || !msg["name"].is_string()) {
+                session->send(BuildCommandResultJson(cmdId, { false, "screenshot_get requires string 'name'" }));
+                return;
+            }
+            const std::string name = msg["name"].get<std::string>();
+            std::uint32_t maxSize = 0;
+            if (msg.contains("maxSize") && msg["maxSize"].is_number_integer()) {
+                const auto requested = msg["maxSize"].get<std::int64_t>();
+                if (requested > 0)
+                    maxSize = static_cast<std::uint32_t>(std::min<std::int64_t>(requested, 4096));
+            }
+            asio::post(session->ioc(), [session, cmdId, name, maxSize]() {
+                Common::CommandResult result;
+                try {
+                    result = ScreenshotCommands::GetScreenshot(name, maxSize);
+                } catch (const std::exception& e) {
+                    result = { false, std::string("screenshot_get failed: ") + e.what() };
+                }
                 session->send(BuildCommandResultJson(cmdId, result));
             });
             return;
