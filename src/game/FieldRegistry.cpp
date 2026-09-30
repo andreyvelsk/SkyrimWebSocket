@@ -8,6 +8,7 @@
 #include "QuestMarkers.h"
 #include "GameStatus.h"
 #include "QuestReader.h"
+#include "PlayerRecords.h"
 #include "../AppFeatures.h"
 
 #include <nlohmann/json.hpp>
@@ -300,6 +301,12 @@ namespace FieldRegistry
         { "Player::InventoryWeight",
           { "Total weight of all items currently in the player's inventory", "float",
             &PlayerStats::ReadInventoryWeight } },
+        { "Player::MiscStats",
+          { "Journal general stats grouped by category: { General, Quest, Combat, Magic, Crafting, Crime }, each [ { name, value } ]. Read through Game.QueryStat (asynchronous): values fill in over the first reads and refresh every few seconds.", "object",
+            &PlayerRecords::ReadMiscStats } },
+        { "Player::ActiveEffects",
+          { "Active magic effects on the player: [ { name, source, magnitude, duration, elapsed, remaining, detrimental } ]; duration 0 = permanent. Hidden and inactive effects are skipped.", "array",
+            &PlayerRecords::ReadActiveEffects } },
         { "Player::CarryWeight",
           { "Maximum carry weight (same value as ActorValue::kCarryWeight)", "float",
             &PlayerStats::ReadCarryWeight } },

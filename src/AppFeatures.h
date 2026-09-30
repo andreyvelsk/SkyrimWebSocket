@@ -22,5 +22,6 @@ inline constexpr std::array kAppFeatures = {
     std::string_view{"file_download"},
     std::string_view{"inventory.models"},          // items carry modelPath + keywords
     std::string_view{"texture_preview.maxSize"},   // texture_preview accepts maxSize
-    std::string_view{"screenshots"},               // screenshot_take / screenshot_list / screenshot_get
+    std::string_view{"screenshots"},
+    std::string_view{"player.records"},            // Player::MiscStats + Player::ActiveEffects               // screenshot_take / screenshot_list / screenshot_get
 };

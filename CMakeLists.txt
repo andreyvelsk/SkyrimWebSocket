@@ -57,6 +57,7 @@ add_commonlibsse_plugin(${PROJECT_NAME} SOURCES
     src/game/MapMarkers.cpp
     src/game/PlayerPosition.cpp
     src/game/PlayerStats.cpp
+    src/game/PlayerRecords.cpp
     src/game/QuestMarkers.cpp
     src/game/QuestReader.cpp
     src/game/QuestText.cpp
