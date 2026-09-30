@@ -69,6 +69,8 @@ All inventory items include these common fields:
   "value": 25, 
   "isFavorite": false, 
   "isStolen": false,
+  "keywords": ["WeapMaterialIron", "WeapTypeSword", "VendorItemWeapon"],
+  "modelPath": "meshes/weapons/iron/longsword.nif",
   "categoryType": "Weapon"
 }
 ```
@@ -80,6 +82,8 @@ All inventory items include these common fields:
 - `value` — Gold value per item
 - `isFavorite` — Is this item in favorites
 - `isStolen` — `true` when the item stack carries a stolen (red-hand) flag
+- `keywords` — Editor IDs of the item's keywords (e.g. `WeapMaterialDaedric`, `ArmorMaterialGlass`, `ArmorJewelry`). Empty array when the form has no keywords.
+- `modelPath` — Data-relative path of the model the game shows for the item on the ground / in the inventory preview (lower-case, forward slashes, `meshes/` prefix), usable with `file_download`. Armor uses the male world model, falling back to the female one. `null` when the form has no model.
 - `categoryType` — Item category type (see [Category Types](#category-types) below)
 
 ---

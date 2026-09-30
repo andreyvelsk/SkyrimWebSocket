@@ -296,6 +296,7 @@ art, etc.) and is also useful for testing the DDS→PNG pipeline.
 | Field | Required | Default | Description |
 |---|---|---|---|
 | `path` | **yes** | — | DDS path relative to the game `Data` folder, e.g. `"textures/interface/icons/weapons/ironsword.dds"`. Backslashes are accepted. |
+| `maxSize` | no | `0` | When > 0, the image is box-downsampled (by halves) until its longest side is ≤ `maxSize` px. Use for thumbnails; `0` keeps full resolution. Capped at 4096. |
 
 **Response** — the `data` object of `commandResult`:
 

@@ -313,6 +313,36 @@ namespace
         }
     }
 
+    // Halves the image (2x2 box filter) until the longest side is <= maxSize.
+    static void DownsampleToFit(std::vector<RGBA>& rgba, std::uint32_t& width,
+                                std::uint32_t& height, std::uint32_t maxSize)
+    {
+        if (maxSize == 0)
+            return;
+        while ((width > maxSize || height > maxSize) && width >= 2 && height >= 2) {
+            const std::uint32_t nw = width / 2;
+            const std::uint32_t nh = height / 2;
+            std::vector<RGBA>   out(static_cast<std::size_t>(nw) * nh);
+            for (std::uint32_t y = 0; y < nh; ++y) {
+                for (std::uint32_t x = 0; x < nw; ++x) {
+                    const RGBA& a = rgba[(2 * y) * width + 2 * x];
+                    const RGBA& b = rgba[(2 * y) * width + 2 * x + 1];
+                    const RGBA& c = rgba[(2 * y + 1) * width + 2 * x];
+                    const RGBA& d = rgba[(2 * y + 1) * width + 2 * x + 1];
+                    out[y * nw + x] = RGBA{
+                        static_cast<std::uint8_t>((a.r + b.r + c.r + d.r + 2) / 4),
+                        static_cast<std::uint8_t>((a.g + b.g + c.g + d.g + 2) / 4),
+                        static_cast<std::uint8_t>((a.b + b.b + c.b + d.b + 2) / 4),
+                        static_cast<std::uint8_t>((a.a + b.a + c.a + d.a + 2) / 4)
+                    };
+                }
+            }
+            rgba   = std::move(out);
+            width  = nw;
+            height = nh;
+        }
+    }
+
     // Encodes RGBA8 pixels to an in-memory PNG via stb_image_write.
     // Returns the PNG bytes; caller must free with STBIW_FREE.
     static unsigned char* EncodePng(const std::vector<RGBA>& rgba,
@@ -330,7 +360,7 @@ namespace
 
 namespace TextureConverter
 {
-    Preview DdsToPngBase64(const std::string& path)
+    Preview DdsToPngBase64(const std::string& path, std::uint32_t maxSize)
     {
         Preview result;
         if (path.empty()) {
@@ -355,8 +385,12 @@ namespace TextureConverter
         std::vector<RGBA> rgba(info.width * info.height);
         DecodeDdsToRGBA(info, block, rgba);
 
+        std::uint32_t outWidth  = info.width;
+        std::uint32_t outHeight = info.height;
+        DownsampleToFit(rgba, outWidth, outHeight, maxSize);
+
         int            pngLen = 0;
-        unsigned char* png    = EncodePng(rgba, info.width, info.height, pngLen);
+        unsigned char* png    = EncodePng(rgba, outWidth, outHeight, pngLen);
         if (!png || pngLen <= 0) {
             result.error = "Failed to encode PNG: " + path;
             return result;
@@ -364,8 +398,8 @@ namespace TextureConverter
 
         result.success     = true;
         result.mimeType    = "image/png";
-        result.width       = info.width;
-        result.height      = info.height;
+        result.width       = outWidth;
+        result.height      = outHeight;
         result.imageBase64 = Common::Base64Encode(png, static_cast<std::size_t>(pngLen));
         STBIW_FREE(png);
         return result;

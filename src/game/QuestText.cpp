@@ -271,10 +271,7 @@ namespace QuestText
         if (!player || !objective || REL::Module::IsVR())
             return 0;
 
-        const auto base = reinterpret_cast<std::uintptr_t>(player);
-        const std::size_t off = REL::Module::IsAE() ? 0x588 : 0x580;
-        const auto& instances =
-            *reinterpret_cast<const RE::BSTArray<RE::BGSInstancedQuestObjective>*>(base + off);
+        const auto& instances = player->GetPlayerRuntimeData().objectives;
 
         for (const auto& inst : instances) {
             if (inst.Objective == objective &&

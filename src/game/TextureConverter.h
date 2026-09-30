@@ -31,5 +31,8 @@ namespace TextureConverter
     // This is the single reusable entry point for any texture asset: item
     // inventory icons, map marker icons, book art, etc. New commands only need
     // to resolve their own path and call this function.
-    Preview DdsToPngBase64(const std::string& path);
+    //
+    // maxSize > 0 box-downsamples the decoded image (by powers of two) until
+    // its longest side is <= maxSize before PNG encoding.
+    Preview DdsToPngBase64(const std::string& path, std::uint32_t maxSize = 0);
 }

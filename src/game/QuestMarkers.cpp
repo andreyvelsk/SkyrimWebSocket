@@ -1357,10 +1357,8 @@ namespace QuestMarkers
             if (!player || !objective || REL::Module::IsVR())
                 return 0;
 
-            const auto base = reinterpret_cast<std::uintptr_t>(player);
-            const std::size_t off = REL::Module::IsAE() ? 0x588 : 0x580;
-            const auto& instances =
-                *reinterpret_cast<const RE::BSTArray<RE::BGSInstancedQuestObjective>*>(base + off);
+            // CommonLib accessor: correct base for SE / AE / AE 1.7.99+.
+            const auto& instances = player->GetPlayerRuntimeData().objectives;
 
             for (const auto& inst : instances) {
                 if (inst.Objective == objective &&
@@ -1561,12 +1559,7 @@ namespace QuestMarkers
         std::size_t fromStaticFallback = 0;
 
         if (!REL::Module::IsVR()) {
-            const auto base = reinterpret_cast<std::uintptr_t>(player);
-
-            const std::size_t off = REL::Module::IsAE() ? 0x5A0 : 0x598;
-            const auto&       map =
-                *reinterpret_cast<const RE::BSTHashMap<RE::TESQuest*, RE::BSTArray<RE::TESQuestTarget*>*>*>(
-                    base + off);
+            const auto& map = player->GetPlayerRuntimeData().questTargets;
 
             for (const auto& kv : map) {
                 auto* quest = kv.first;
@@ -1630,8 +1623,8 @@ namespace QuestMarkers
             { "isAE", REL::Module::IsAE() },
             { "isVR", REL::Module::IsVR() }
         };
-        out["module"]["questTargetsOffset"] = REL::Module::IsVR() ? nullptr : nlohmann::json(REL::Module::IsAE() ? "0x5A0" : "0x598");
-        out["module"]["objectivesOffset"] = REL::Module::IsVR() ? nullptr : nlohmann::json(REL::Module::IsAE() ? "0x588" : "0x580");
+        out["module"]["questTargetsOffset"] = REL::Module::IsVR() ? nullptr : nlohmann::json(std::format("0x{:X}", REL::Module::IsAE() ? REL::VersionShift(0x5A0, 0x8, SKSE::RUNTIME_SSE_1_7_99) : std::size_t{0x598}));
+        out["module"]["objectivesOffset"] = REL::Module::IsVR() ? nullptr : nlohmann::json(std::format("0x{:X}", REL::Module::IsAE() ? REL::VersionShift(0x588, 0x8, SKSE::RUNTIME_SSE_1_7_99) : std::size_t{0x580}));
         out["miscObjectivesVisibility"] = MiscObjectivesVisibilityJson(GetMiscObjectivesVisibility());
         out["notes"] = nlohmann::json::array({
             "For SE/AE, compare questTargets entries with the quest arrows visible in-game.",
@@ -1657,12 +1650,7 @@ namespace QuestMarkers
         out["staticDisplayedObjectives"] = nlohmann::json::array();
 
         if (!REL::Module::IsVR()) {
-            const auto base = reinterpret_cast<std::uintptr_t>(player);
-
-            const std::size_t questTargetsOff = REL::Module::IsAE() ? 0x5A0 : 0x598;
-            const auto&       map =
-                *reinterpret_cast<const RE::BSTHashMap<RE::TESQuest*, RE::BSTArray<RE::TESQuestTarget*>*>*>(
-                    base + questTargetsOff);
+            const auto& map = player->GetPlayerRuntimeData().questTargets;
 
             for (const auto& kv : map) {
                 auto* quest = kv.first;
@@ -1685,9 +1673,7 @@ namespace QuestMarkers
                 out["questTargets"].push_back(std::move(group));
             }
 
-            const std::size_t objectivesOff = REL::Module::IsAE() ? 0x588 : 0x580;
-            const auto&       instances =
-                *reinterpret_cast<const RE::BSTArray<RE::BGSInstancedQuestObjective>*>(base + objectivesOff);
+            const auto& instances = player->GetPlayerRuntimeData().objectives;
 
             nlohmann::json stateCounts = nlohmann::json::object();
             for (const auto& inst : instances) {

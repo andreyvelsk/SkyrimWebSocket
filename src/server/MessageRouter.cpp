@@ -31,7 +31,7 @@ namespace MessageRouter
                 nlohmann::json err;
                 err["type"]    = "error";
                 err["message"] = "Field value for '" + alias + "' must be a string";
-                session->send(err.dump());
+                session->send(err.dump(-1, ' ', false, nlohmann::json::error_handler_t::replace));
                 return false;
             }
             std::string registryKey = keyVal.get<std::string>();
@@ -39,7 +39,7 @@ namespace MessageRouter
                 nlohmann::json err;
                 err["type"]    = "error";
                 err["message"] = "Unknown field key: '" + registryKey + "'";
-                session->send(err.dump());
+                session->send(err.dump(-1, ' ', false, nlohmann::json::error_handler_t::replace));
                 return false;
             }
             out[alias] = registryKey;
@@ -81,7 +81,7 @@ namespace MessageRouter
             resp["error"] = result.error;
         if (!result.data.is_null())
             resp["data"] = result.data;
-        return resp.dump();
+        return resp.dump(-1, ' ', false, nlohmann::json::error_handler_t::replace);
     }
 
     // Dispatch a "command" message to the game thread.
@@ -117,7 +117,7 @@ namespace MessageRouter
                     err["id"]      = cmdId;
                     err["success"] = false;
                     err["error"]   = "player_marker_set requires numeric 'x' and 'y' (and optional numeric 'z')";
-                    session->send(err.dump());
+                    session->send(err.dump(-1, ' ', false, nlohmann::json::error_handler_t::replace));
                     return;
                 }
                 // 'z' is optional — defaults to 0 when omitted.
@@ -128,7 +128,7 @@ namespace MessageRouter
                         err["id"]      = cmdId;
                         err["success"] = false;
                         err["error"]   = "player_marker_set 'z' must be numeric when present";
-                        session->send(err.dump());
+                        session->send(err.dump(-1, ' ', false, nlohmann::json::error_handler_t::replace));
                         return;
                     }
                     z = msg["z"].get<float>();
@@ -162,7 +162,7 @@ namespace MessageRouter
                 err["id"]      = cmdId;
                 err["success"] = false;
                 err["error"]   = "Missing or invalid 'slot' (expected integer 1..8)";
-                session->send(err.dump());
+                session->send(err.dump(-1, ' ', false, nlohmann::json::error_handler_t::replace));
                 return;
             }
             const int slot = msg["slot"].get<int>();
@@ -175,7 +175,7 @@ namespace MessageRouter
                     err["id"]      = cmdId;
                     err["success"] = false;
                     err["error"]   = "Missing 'formId' field";
-                    session->send(err.dump());
+                    session->send(err.dump(-1, ' ', false, nlohmann::json::error_handler_t::replace));
                     return;
                 }
                 const std::string formIdStr = msg["formId"].get<std::string>();
@@ -186,7 +186,7 @@ namespace MessageRouter
                     err["id"]      = cmdId;
                     err["success"] = false;
                     err["error"]   = "Invalid formId: '" + formIdStr + "'";
-                    session->send(err.dump());
+                    session->send(err.dump(-1, ' ', false, nlohmann::json::error_handler_t::replace));
                     return;
                 }
                 formId = *parsed;
@@ -217,7 +217,7 @@ namespace MessageRouter
                 err["id"]      = cmdId;
                 err["success"] = false;
                 err["error"]   = "quest_set_active requires string 'formId'";
-                session->send(err.dump());
+                session->send(err.dump(-1, ' ', false, nlohmann::json::error_handler_t::replace));
                 return;
             }
             if (!msg.contains("active") || !msg["active"].is_boolean()) {
@@ -226,7 +226,7 @@ namespace MessageRouter
                 err["id"]      = cmdId;
                 err["success"] = false;
                 err["error"]   = "quest_set_active requires boolean 'active'";
-                session->send(err.dump());
+                session->send(err.dump(-1, ' ', false, nlohmann::json::error_handler_t::replace));
                 return;
             }
 
@@ -238,7 +238,7 @@ namespace MessageRouter
                 err["id"]      = cmdId;
                 err["success"] = false;
                 err["error"]   = "Invalid formId: '" + formIdStr + "'";
-                session->send(err.dump());
+                session->send(err.dump(-1, ' ', false, nlohmann::json::error_handler_t::replace));
                 return;
             }
 
@@ -259,7 +259,7 @@ namespace MessageRouter
                 err["id"]      = cmdId;
                 err["success"] = false;
                 err["error"]   = "texture_preview requires string 'path'";
-                session->send(err.dump());
+                session->send(err.dump(-1, ' ', false, nlohmann::json::error_handler_t::replace));
                 return;
             }
             const std::string path = msg["path"].get<std::string>();
@@ -279,7 +279,7 @@ namespace MessageRouter
                 err["id"]      = cmdId;
                 err["success"] = false;
                 err["error"]   = "file_download requires string 'path'";
-                session->send(err.dump());
+                session->send(err.dump(-1, ' ', false, nlohmann::json::error_handler_t::replace));
                 return;
             }
             const std::string path = msg["path"].get<std::string>();
@@ -309,7 +309,7 @@ namespace MessageRouter
             err["id"]      = cmdId;
             err["success"] = false;
             err["error"]   = "Invalid formId: '" + formIdStr + "'";
-            session->send(err.dump());
+            session->send(err.dump(-1, ' ', false, nlohmann::json::error_handler_t::replace));
             return;
         }
         const RE::FormID formId = *parsed;
@@ -411,7 +411,7 @@ namespace MessageRouter
             nlohmann::json resp;
             resp["type"] = "heartbeat";
             resp["ts"]   = nowMs;
-            session->send(resp.dump());
+            session->send(resp.dump(-1, ' ', false, nlohmann::json::error_handler_t::replace));
 
         } else if (type == "query") {
             if (!msg.contains("id") || !msg["id"].is_string()) {
@@ -430,7 +430,12 @@ namespace MessageRouter
                 return;
 
             SKSE::GetTaskInterface()->AddTask([session, oneShot]() mutable {
-                std::string json = GameReader::BuildSubscriptionJson(oneShot);
+                std::string json;
+                try {
+                    json = GameReader::BuildSubscriptionJson(oneShot);
+                } catch (...) {
+                    SKSE::log::error("[MessageRouter] query '{}' failed", oneShot.id);
+                }
                 asio::post(session->ioc(), [session, json] {
                     if (!json.empty())
                         session->send(json);
