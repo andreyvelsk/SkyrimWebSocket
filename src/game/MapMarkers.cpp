@@ -11,14 +11,10 @@
 
 namespace MapMarkers
 {
-    static nlohmann::json ReadMapMarkersImpl(bool visibleOnly)
+    namespace
     {
-        auto* player = RE::PlayerCharacter::GetSingleton();
-        if (!player)
-            return nlohmann::json::array();
-
         // clang-format off
-        static constexpr std::array<std::string_view, 66> kTypeNames = {
+        constexpr std::array<std::string_view, 66> kTypeNames = {
             "None",               //  0
             "City",               //  1
             "Town",               //  2
@@ -87,6 +83,19 @@ namespace MapMarkers
             "YouAreHere",         // 65
         };
         // clang-format on
+    }
+
+    std::string_view TypeName(std::uint16_t a_typeId)
+    {
+        return a_typeId < kTypeNames.size() ? kTypeNames[a_typeId] : std::string_view{ "Unknown" };
+    }
+
+    static nlohmann::json ReadMapMarkersImpl(bool visibleOnly)
+    {
+        auto* player = RE::PlayerCharacter::GetSingleton();
+        if (!player)
+            return nlohmann::json::array();
+
 
         nlohmann::json result = nlohmann::json::array();
 

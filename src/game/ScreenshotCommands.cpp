@@ -76,6 +76,18 @@ namespace ScreenshotCommands
             return "image/jpeg";
         }
 
+        // file_clock -> unix seconds without std::chrono::clock_cast.
+        // MSVC's clock_cast goes through utc_clock, which loads the time-zone
+        // database from icu.dll. Wine/Proton builds without a full icu.dll then
+        // throw "Procedure not found". MSVC's file_clock counts 100 ns ticks
+        // from 1601-01-01 (the Windows FILETIME epoch).
+        std::int64_t FileTimeToUnix(fs::file_time_type a_time)
+        {
+            constexpr std::int64_t kEpochDelta = 11644473600LL;  // 1601 -> 1970, seconds
+            const auto secs = std::chrono::duration_cast<std::chrono::seconds>(a_time.time_since_epoch()).count();
+            return static_cast<std::int64_t>(secs) - kEpochDelta;
+        }
+
         struct Entry
         {
             fs::path      path;
@@ -115,15 +127,13 @@ namespace ScreenshotCommands
 
                 Entry e;
                 e.path = de.path();
-                e.name = fs::relative(de.path(), root, fec).generic_string();
-                if (fec || e.name.empty())
-                    e.name = file;
+                // Name relative to the game folder, built by hand: fs::relative
+                // resolves real paths through calls Wine may not provide.
+                e.name = basePath.has_parent_path() ? (basePath.parent_path() / de.path().filename()).generic_string() : file;
                 e.size = de.file_size(fec);
                 const auto ftime = de.last_write_time(fec);
-                if (!fec) {
-                    const auto sys = std::chrono::clock_cast<std::chrono::system_clock>(ftime);
-                    e.modified = std::chrono::duration_cast<std::chrono::seconds>(sys.time_since_epoch()).count();
-                }
+                if (!fec)
+                    e.modified = FileTimeToUnix(ftime);
                 out.push_back(std::move(e));
             }
 

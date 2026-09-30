@@ -1,6 +1,7 @@
 #include "GameReader.h"
 #include "EventBus.h"
 #include "FieldRegistry.h"
+#include "PerfStats.h"
 
 #include <chrono>
 #include <cmath>
@@ -33,6 +34,16 @@ namespace GameReader
         {
             static std::mutex                      s_lock;
             static std::unordered_set<std::string> s_reported;
+            const auto started = std::chrono::steady_clock::now();
+            struct Timer
+            {
+                const std::string&                    key;
+                std::chrono::steady_clock::time_point started;
+                ~Timer()
+                {
+                    PerfStats::Record(key, std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - started).count());
+                }
+            } timer{ key, started };
             try {
                 return fn();
             } catch (const std::exception& e) {
@@ -52,6 +63,18 @@ namespace GameReader
     {
         if (state.fields.empty())
             return {};
+
+        // Whole push, serialisation included.
+        const auto buildStarted = std::chrono::steady_clock::now();
+        struct BuildTimer
+        {
+            const std::string&                    id;
+            std::chrono::steady_clock::time_point started;
+            ~BuildTimer()
+            {
+                PerfStats::Record("sub:" + id, std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - started).count());
+            }
+        } buildTimer{ state.id, buildStarted };
 
         const bool inGame = FieldRegistry::IsInGame();
 

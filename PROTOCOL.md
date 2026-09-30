@@ -140,6 +140,8 @@ below.
 | `screenshot_take` | Take an in-game screenshot with the engine's own screenshot feature. | [↓](#screenshot_take) |
 | `screenshot_list` | List screenshot files in the game folder, newest first. | [↓](#screenshot_list) |
 | `screenshot_get` | Read one screenshot, optionally scaled down to a JPEG. | [↓](#screenshot_get) |
+| `local_map_get` | Floor plan of the player's surroundings from the navmesh. | [↓](#local_map_get) |
+| `perf_reset` | Clear the `Debug::FieldTimings` counters. | [↓](#perf_reset) |
 | `equip_spell` | Equip a known spell to a hand. | [↓](#equip_spell) |
 | `unequip_spell` | Unequip a spell from a hand. | [↓](#unequip_spell) |
 | `favorite_spell` | Toggle the favorite flag on a known spell or power. | [↓](#favorite_spell) |
@@ -411,6 +413,40 @@ list are refused.
 
 **Response** `data`: `{ "name", "mimeType", "width", "height", "size", "dataBase64" }`
 (`width`/`height` only when `maxSize > 0`).
+
+---
+
+#### `local_map_get`
+
+Returns the walkable surface (navmesh) around the player, for drawing a local
+map. Inside: the current cell. Outside: the player's cell and its eight
+neighbours. Runs on the game thread; cost is a copy of the navmesh arrays.
+Feature flag: `map.local`.
+
+No extra fields. **Response** `data`:
+
+| Field | Type | Description |
+|---|---|---|
+| `key` | string | `c:<cell formId>` inside, `w:<worldspace formId>:<cellX>:<cellY>` outside. |
+| `isInterior` | bool | |
+| `name` | string | Cell name (inside) or worldspace name (outside). |
+| `cellFormId` | string | The player's cell. |
+| `worldspace` | string\|null | Worldspace editor ID outside, `null` inside. |
+| `minX` … `maxZ` | integer | Bounds of all vertices, world units. |
+| `vertexCount`, `triangleCount` | integer | |
+| `truncated` | bool | `true` when the 150 000-triangle cap was hit. |
+| `vertices` | base64 | Int32 little-endian `x, y, z` per vertex. |
+| `triangles` | base64 | Uint32 little-endian vertex indices `a, b, c` per triangle. |
+| `edges` | base64 | One byte per triangle. Bit `i` set: edge `i` (vertex `i` → `i+1`) has no neighbour — a wall or a drop. |
+| `doors` | array | Load doors: `{ "x", "y", "z", "name" }`; `name` is where the door leads. |
+
+Fails with `"No navmesh here"` when the area has no navmesh.
+
+---
+
+#### `perf_reset`
+
+Clears the counters behind `Debug::FieldTimings`. No extra fields.
 
 ---
 
@@ -824,6 +860,13 @@ Fields of different types can be freely mixed in a single `subscribe` or `query`
 - [docs/Game.md](docs/Game.md) — Game-level settings such as the current language
 - [docs/Magic.md](docs/Magic.md) — All Magic fields with spell information and status
 - [docs/Hotkeys.md](docs/Hotkeys.md) — Hotkey slot bindings (`Hotkey::Items`)
+
+Diagnostics and journal fields:
+
+| Key | Type | Description |
+|---|---|---|
+| `Player::Discoveries` | object | `{ seq, recent: [ { seq, name, type, worldspace, x, y } ] }`. Locations discovered since the game started (LocationDiscovery event), newest last, at most 20. `seq` only grows. |
+| `Debug::FieldTimings` | object | `{ sinceSeconds, entries: [ { key, calls, avgMs, maxMs, lastMs, slowCalls } ] }`. Game-thread time per field resolver and per subscription push (`sub:<id>`), slowest first. `slowCalls` counts calls over 4 ms. Calls over 8 ms are also logged (at most once per 30 s per key). |
 
 ---
 

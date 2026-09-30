@@ -9,6 +9,8 @@
 #include "GameStatus.h"
 #include "QuestReader.h"
 #include "PlayerRecords.h"
+#include "PerfStats.h"
+#include "Discoveries.h"
 #include "../AppFeatures.h"
 
 #include <nlohmann/json.hpp>
@@ -304,6 +306,9 @@ namespace FieldRegistry
         { "Player::MiscStats",
           { "Journal general stats grouped by category: { General, Quest, Combat, Magic, Crafting, Crime }, each [ { name, value } ]. Read through Game.QueryStat (asynchronous): values fill in over the first reads and refresh every few seconds.", "object",
             &PlayerRecords::ReadMiscStats } },
+        { "Player::Discoveries",
+          { "Locations discovered this game session (LocationDiscovery event): { seq, recent: [ { seq, name, type, worldspace, x, y } ] }, newest last, at most 20. seq only grows; compare with the last seen seq to find new entries. x/y = player position at discovery.", "object",
+            &Discoveries::Read } },
         { "Player::ActiveEffects",
           { "Active magic effects on the player: [ { name, source, magnitude, duration, elapsed, remaining, detrimental } ]; duration 0 = permanent. Hidden and inactive effects are skipped.", "array",
             &PlayerRecords::ReadActiveEffects } },
@@ -317,13 +322,16 @@ namespace FieldRegistry
             &PlayerStats::ReadLanguage, /*requiresInGame=*/false } },
 
         // Game / player runtime state
+        { "Debug::FieldTimings",
+          { "Game-thread time per field resolver and per subscription push (keys 'sub:<id>'): { sinceSeconds, entries: [ { key, calls, avgMs, maxMs, lastMs, slowCalls } ] }, slowest first. slowCalls counts calls over 4 ms. Reset with the perf_reset command.", "object",
+            &PerfStats::Read, /*requiresInGame=*/false } },
         { "Game::Status",
           { "Current game/player state flags: paused, loading, inMainMenu, inDialogue, inCombat, dead, controlsEnabled, canAct", "object",
             &GameStatus::ReadGameStatus, /*requiresInGame=*/false } },
 
         // Player position and heading
         { "Player::Position",
-          { "Player position and heading in the current worldspace/cell: { x, y, z, angle, worldspace, worldspaceFormId, parentWorldspace, parentWorldspaceFormId, cell, cellFormId, isInterior }. x/y/z are local to the current worldspace (or interior); worldspace fields are null in interiors. parentWorldspace walks up to the root world (e.g. Tamriel for city sub-worlds).", "object",
+          { "Player position and heading in the current worldspace/cell: { x, y, z, angle, worldspace, worldspaceFormId, parentWorldspace, parentWorldspaceFormId, cell, cellName, cellFormId, isInterior }. cell is the editor ID, cellName the display name. x/y/z are local to the current worldspace (or interior); worldspace fields are null in interiors. parentWorldspace walks up to the root world (e.g. Tamriel for city sub-worlds).", "object",
             &PlayerPosition::ReadPosition } },
 
         // Last known exterior position (for placing the player on the global

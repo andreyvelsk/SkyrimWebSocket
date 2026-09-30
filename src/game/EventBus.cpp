@@ -1,5 +1,6 @@
 #include "EventBus.h"
 
+#include "Discoveries.h"
 #include "QuestMarkers.h"
 
 #include "../../logger.h"
@@ -146,9 +147,11 @@ namespace EventBus
             }
 
             RE::BSEventNotifyControl ProcessEvent(
-                const RE::LocationDiscovery::Event*,
+                const RE::LocationDiscovery::Event* a_event,
                 RE::BSTEventSource<RE::LocationDiscovery::Event>*) override
             {
+                if (a_event)
+                    Discoveries::Record(*a_event);
                 BumpKeys({"Map::Markers::Locations", "Map::Markers::All"},
                          "LocationDiscovery");
                 return RE::BSEventNotifyControl::kContinue;

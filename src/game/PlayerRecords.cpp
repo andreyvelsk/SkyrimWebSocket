@@ -87,7 +87,7 @@ namespace PlayerRecords
         // clang-format on
 
         constexpr std::array<std::string_view, 6> kCategories = { "General", "Quest", "Combat", "Magic", "Crafting", "Crime" };
-        constexpr auto kRefreshInterval = std::chrono::seconds(3);
+        constexpr auto kRefreshInterval = std::chrono::milliseconds(1500);
 
         std::mutex                                   s_mutex;
         std::unordered_map<std::string, std::int32_t> s_values;
@@ -113,14 +113,22 @@ namespace PlayerRecords
             std::string name;
         };
 
-        void RefreshAsync()
+        // Dispatches the next batch of QueryStat calls. Batches keep the
+        // per-frame cost small: each call allocates a Papyrus stack, and a
+        // hundred of them in one frame is a visible hitch on slow CPUs.
+        constexpr std::size_t kBatchSize = 20;
+        std::size_t           s_nextStat = 0;
+
+        void RefreshBatch()
         {
             auto* vm = RE::BSScript::Internal::VirtualMachine::GetSingleton();
             if (!vm)
                 return;
             const RE::BSFixedString className("Game");
             const RE::BSFixedString fnName("QueryStat");
-            for (const auto& stat : kStats) {
+            for (std::size_t n = 0; n < kBatchSize; ++n) {
+                const auto& stat = kStats[s_nextStat];
+                s_nextStat       = (s_nextStat + 1) % kStats.size();
                 RE::BSTSmartPointer<RE::BSScript::IStackCallbackFunctor> callback =
                     RE::make_smart<StatCallback>(std::string(stat.name));
                 auto* args = RE::MakeFunctionArguments(RE::BSFixedString(std::string(stat.name)));
@@ -142,7 +150,7 @@ namespace PlayerRecords
         }
         if (refresh) {
             try {
-                RefreshAsync();
+                RefreshBatch();
             } catch (...) {
                 logger::warn("[PlayerRecords] QueryStat dispatch failed");
             }

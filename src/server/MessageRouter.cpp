@@ -8,7 +8,9 @@
 #include "../game/HotkeyCommands.h"
 #include "../game/InventoryCommands.h"
 #include "../game/MagicCommands.h"
+#include "../game/LocalMap.h"
 #include "../game/MapCommands.h"
+#include "../game/PerfStats.h"
 #include "../game/QuestCommands.h"
 #include "../game/ScreenshotCommands.h"
 #include "../Utils.h"
@@ -278,6 +280,30 @@ namespace MessageRouter
                 auto result = FileCommands::GetTexturePreview(path, maxSize);
                 session->send(BuildCommandResultJson(cmdId, result));
             });
+            return;
+        }
+
+        // ─── Local map (navmesh floor plan) ────────────────────────────────
+        if (command == "local_map_get") {
+            SKSE::GetTaskInterface()->AddTask([session, cmdId]() {
+                Common::CommandResult result;
+                try {
+                    result = LocalMap::Read();
+                } catch (const std::exception& e) {
+                    result = { false, std::string("local_map_get failed: ") + e.what() };
+                } catch (...) {
+                    result = { false, "local_map_get failed: bad memory read" };
+                }
+                std::string json = BuildCommandResultJson(cmdId, result);
+                asio::post(session->ioc(), [session, json] { session->send(json); });
+            });
+            return;
+        }
+
+        // ─── Diagnostics ──────────────────────────────────────────────────
+        if (command == "perf_reset") {
+            PerfStats::Reset();
+            session->send(BuildCommandResultJson(cmdId, { true, "" }));
             return;
         }
 
