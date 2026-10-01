@@ -17,8 +17,9 @@ namespace TextureConverter
     };
 
     // Reads a DDS texture from the game's virtual filesystem (BSA archives and
-    // loose files), decodes it to RGBA8 (DXT1/DXT3/DXT5 or uncompressed
-    // 24/32-bit) and encodes it as a PNG. The alpha channel is preserved, so
+    // loose files), decodes it to RGBA8 (BC1-BC5 and BC7, legacy or DX10
+    // header, or uncompressed 24/32-bit) and encodes it as a PNG. With
+    // maxSize, decoding starts at the smallest mip level that still covers it. The alpha channel is preserved, so
     // textures with transparent backgrounds stay transparent.
     //
     // `path` is a game data path such as
