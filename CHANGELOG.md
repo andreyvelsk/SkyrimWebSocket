@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+### [1.16.2](https://github.com/andreyvelsk/SkyrimWebSocket/compare/v1.16.1...v1.16.2) (2026-10-03)
+
+
+### 🐛 Bug Fixes
+
+* **player_position:** improve player position handling in interiors ([#58](https://github.com/andreyvelsk/SkyrimWebSocket/issues/58)) ([4887f52](https://github.com/andreyvelsk/SkyrimWebSocket/commits/4887f5280fdd6dc08420fa48a6f45ce3f61097c5))
+
 ### [1.16.1](https://github.com/andreyvelsk/SkyrimWebSocket/compare/v1.16.0...v1.16.1) (2026-08-24)
 
 
