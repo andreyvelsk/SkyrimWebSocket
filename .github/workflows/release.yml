@@ -5,111 +5,33 @@ on:
     tags:
       - "v*"
 
-env:
-  VCPKG_COMMIT: "77df67cfff9c12ccfdb52284e07c87c75092f723"
-  VCPKG_BINARY_CACHE: ${{ github.workspace }}/.vcpkg-binary-cache
-  VCPKG_BINARY_SOURCES: "clear;files,${{ github.workspace }}/.vcpkg-binary-cache,readwrite"
-  VCPKG_FEATURE_FLAGS: "manifests,binarycaching"
-  CCACHE_DIR: ${{ github.workspace }}/.ccache
-  CCACHE_MAXSIZE: 500M
-  CCACHE_MSVC: 1
-  CCACHE_SLOPPINESS: pch_defines,time_macros
-  CCACHE_BASEDIR: ${{ github.workspace }}
-  CCACHE_NOHASHDIR: true
-
 permissions:
   contents: write
 
 jobs:
+  # Same build pipeline as the main branch (see _build.yml) — no more drift.
   build:
-    runs-on: windows-latest
+    uses: ./.github/workflows/_build.yml
+    permissions:
+      contents: read
+
+  release:
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
 
     steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
+      - name: Download compiled DLL
+        uses: actions/download-artifact@v4
         with:
-          submodules: 'recursive'
-
-      - name: Setup MSVC Developer Command Prompt
-        uses: ilammy/msvc-dev-cmd@v1
-        with:
-          arch: x64
-
-      - name: Setup vcpkg
-        uses: lukka/run-vcpkg@v11
-        with:
-          vcpkgGitCommitId: ${{ env.VCPKG_COMMIT }}
-
-      - name: Compute vcpkg cache key
-        id: vcpkg-cache
-        shell: pwsh
-        run: |
-          $parts = @(
-            "vs$env:VSCMD_VER",
-            "msvc$env:VCToolsVersion",
-            "sdk$env:WindowsSDKVersion",
-            "ucrt$env:UCRTVersion",
-            "image$env:ImageVersion"
-          ) | ForEach-Object { $_ -replace '[^A-Za-z0-9_.-]', '-' }
-          "toolchain=$($parts -join '-')" >> $env:GITHUB_OUTPUT
-
-      - name: Cache vcpkg binary artifacts
-        uses: actions/cache@v4
-        with:
-          path: ${{ env.VCPKG_BINARY_CACHE }}
-          key: vcpkg-${{ runner.os }}-x64-windows-static-md-${{ env.VCPKG_COMMIT }}-${{ steps.vcpkg-cache.outputs.toolchain }}-${{ hashFiles('vcpkg.json', 'vcpkg-configuration.json', 'CMakePresets.json', 'cmake/**') }}
-          restore-keys: |
-            vcpkg-${{ runner.os }}-x64-windows-static-md-${{ env.VCPKG_COMMIT }}-${{ steps.vcpkg-cache.outputs.toolchain }}-
-
-      - name: Prepare vcpkg binary cache
-        run: cmake -E make_directory "${{ env.VCPKG_BINARY_CACHE }}"
-
-      - name: Install ccache
-        shell: pwsh
-        run: |
-          $url = "https://github.com/ccache/ccache/releases/download/v4.10.2/ccache-4.10.2-windows-x86_64.zip"
-          $zip = "${{ runner.temp }}\ccache.zip"
-          curl -L -o $zip $url
-          $tmpDir = "${{ runner.temp }}\ccache-install"
-          mkdir -Force $tmpDir
-          7z x $zip -o"$tmpDir" -y
-          $subdir = Get-ChildItem "$tmpDir" -Directory | Select-Object -First 1
-          Move-Item "$($subdir.FullName)\*" "$tmpDir" -Force
-          Remove-Item "$($subdir.FullName)" -Recurse -Force
-          echo "$tmpDir" | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
-
-      - name: Cache ccache artifacts
-        id: ccache-cache
-        uses: actions/cache@v4
-        with:
-          path: ${{ env.CCACHE_DIR }}
-          key: ccache-v4.10.2-${{ runner.os }}-${{ steps.vcpkg-cache.outputs.toolchain }}-${{ hashFiles('lib/commonlibsse-ng/CMakeLists.txt', 'CMakePresets.json') }}
-          restore-keys: |
-            ccache-v4.10.2-${{ runner.os }}-${{ steps.vcpkg-cache.outputs.toolchain }}-
-
-      - name: Show ccache stats (before build)
-        run: ccache -s
-
-      - name: Configure CMake (Release)
-        run: cmake --preset release -DCMAKE_CXX_COMPILER_LAUNCHER=ccache -DCOMMONLIB_PREBUILT=ON
-
-      - name: Build (Release)
-        run: cmake --build build/release --config Release
-
-      - name: Show ccache stats (after build)
-        run: ccache -s
-
-      - name: Upload compiled DLL (artifact)
-        uses: actions/upload-artifact@v4
-        with:
-          name: SkyrimWebSocket-${{ github.sha }}
-          path: build/release/SkyrimWebSocket.dll
-          if-no-files-found: error
+          name: ${{ needs.build.outputs.artifact_name }}
+          path: dist
 
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         with:
           name: SkyrimWebSocket ${{ github.ref_name }}
           generate_release_notes: true
-          files: build/release/SkyrimWebSocket.dll
+          files: dist/SkyrimWebSocket.dll
           fail_on_unmatched_files: true

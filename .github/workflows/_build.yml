@@ -1,0 +1,137 @@
+name: Build (reusable)
+
+# Reusable build pipeline shared by build.yml (branch/PR) and release.yml (tags).
+# Keeping the build steps in ONE place prevents the two callers from drifting apart
+# (which is exactly what made the v1.16.2 tag build fail while main passed).
+on:
+  workflow_call:
+    inputs:
+      artifact_name:
+        description: "Base name for the uploaded build artifact"
+        required: false
+        type: string
+        default: "SkyrimWebSocket"
+    outputs:
+      artifact_name:
+        description: "Name of the uploaded build artifact"
+        value: ${{ jobs.build.outputs.artifact_name }}
+
+env:
+  VCPKG_COMMIT: "77df67cfff9c12ccfdb52284e07c87c75092f723"
+  VCPKG_BINARY_CACHE: ${{ github.workspace }}/.vcpkg-binary-cache
+  VCPKG_BINARY_SOURCES: "clear;files,${{ github.workspace }}/.vcpkg-binary-cache,readwrite"
+  VCPKG_FEATURE_FLAGS: "manifests,binarycaching"
+  CCACHE_DIR: ${{ github.workspace }}/.ccache
+  CCACHE_MAXSIZE: 500M
+  CCACHE_MSVC: 1
+  CCACHE_SLOPPINESS: pch_defines,time_macros
+  CCACHE_BASEDIR: ${{ github.workspace }}
+  CCACHE_NOHASHDIR: true
+
+jobs:
+  build:
+    runs-on: windows-latest
+    outputs:
+      artifact_name: ${{ steps.artifact.outputs.name }}
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          submodules: 'recursive'
+
+      - name: Bump CommonLibSSE-NG to 10.0.0 (Skyrim 1.7.x support)
+        shell: bash
+        run: |
+          cd lib/commonlibsse-ng
+          git fetch --depth=1 origin d61bca4de789428aa7d98a770b1323ddf1bb855c
+          git checkout d61bca4de789428aa7d98a770b1323ddf1bb855c
+          git submodule update --init --recursive
+
+      - name: Patch quest offsets for AE 1.7.99+
+        shell: bash
+        run: |
+          sed -i -E 's/REL::Module::IsAE\(\) \? (0x5[0-9A-F]{2}) : (0x5[0-9A-F]{2});/REL::Module::IsAE() ? REL::VersionShift(\1, 0x8, SKSE::RUNTIME_SSE_1_7_99) : \2;/' src/game/QuestMarkers.cpp src/game/QuestReader.cpp src/game/QuestText.cpp
+          grep -c VersionShift src/game/QuestMarkers.cpp src/game/QuestReader.cpp src/game/QuestText.cpp
+
+      - name: Setup MSVC Developer Command Prompt
+        uses: ilammy/msvc-dev-cmd@v1
+        with:
+          arch: x64
+
+      - name: Setup vcpkg
+        uses: lukka/run-vcpkg@v11
+        with:
+          vcpkgGitCommitId: ${{ env.VCPKG_COMMIT }}
+
+      - name: Compute vcpkg cache key
+        id: vcpkg-cache
+        shell: pwsh
+        run: |
+          $parts = @(
+            "vs$env:VSCMD_VER",
+            "msvc$env:VCToolsVersion",
+            "sdk$env:WindowsSDKVersion",
+            "ucrt$env:UCRTVersion",
+            "image$env:ImageVersion"
+          ) | ForEach-Object { $_ -replace '[^A-Za-z0-9_.-]', '-' }
+          "toolchain=$($parts -join '-')" >> $env:GITHUB_OUTPUT
+
+      - name: Cache vcpkg binary artifacts
+        uses: actions/cache@v4
+        with:
+          path: ${{ env.VCPKG_BINARY_CACHE }}
+          key: vcpkg-${{ runner.os }}-x64-windows-static-md-${{ env.VCPKG_COMMIT }}-${{ steps.vcpkg-cache.outputs.toolchain }}-${{ hashFiles('vcpkg.json', 'vcpkg-configuration.json', 'CMakePresets.json', 'cmake/**') }}
+          restore-keys: |
+            vcpkg-${{ runner.os }}-x64-windows-static-md-${{ env.VCPKG_COMMIT }}-${{ steps.vcpkg-cache.outputs.toolchain }}-
+
+      - name: Prepare vcpkg binary cache
+        run: cmake -E make_directory "${{ env.VCPKG_BINARY_CACHE }}"
+
+      - name: Install ccache
+        shell: pwsh
+        run: |
+          $url = "https://github.com/ccache/ccache/releases/download/v4.10.2/ccache-4.10.2-windows-x86_64.zip"
+          $zip = "${{ runner.temp }}\ccache.zip"
+          curl -L -o $zip $url
+          $tmpDir = "${{ runner.temp }}\ccache-install"
+          mkdir -Force $tmpDir
+          7z x $zip -o"$tmpDir" -y
+          # zip has versioned subdir, move exe up
+          $subdir = Get-ChildItem "$tmpDir" -Directory | Select-Object -First 1
+          Move-Item "$($subdir.FullName)\*" "$tmpDir" -Force
+          Remove-Item "$($subdir.FullName)" -Recurse -Force
+          echo "$tmpDir" | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
+
+      - name: Cache ccache artifacts
+        id: ccache-cache
+        uses: actions/cache@v4
+        with:
+          path: ${{ env.CCACHE_DIR }}
+          key: ccache-v4.10.2-${{ runner.os }}-${{ steps.vcpkg-cache.outputs.toolchain }}-${{ hashFiles('lib/commonlibsse-ng/CMakeLists.txt', 'CMakePresets.json') }}
+          restore-keys: |
+            ccache-v4.10.2-${{ runner.os }}-${{ steps.vcpkg-cache.outputs.toolchain }}-
+
+      - name: Show ccache stats (before build)
+        run: ccache -s
+
+      - name: Configure CMake (Release)
+        run: cmake -E env --unset=GITHUB_ACTIONS cmake --preset release -DCMAKE_CXX_COMPILER_LAUNCHER=ccache -DCOMMONLIB_PREBUILT=OFF
+
+      - name: Build (Release)
+        run: cmake --build build/release --config Release
+
+      - name: Show ccache stats (after build)
+        run: ccache -s
+
+      - name: Compute artifact name
+        id: artifact
+        shell: bash
+        run: echo "name=${{ inputs.artifact_name }}-${{ github.sha }}" >> "$GITHUB_OUTPUT"
+
+      - name: Upload compiled DLL
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ steps.artifact.outputs.name }}
+          path: build/release/SkyrimWebSocket.dll
+          if-no-files-found: error
