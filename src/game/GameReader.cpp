@@ -1,17 +1,80 @@
 #include "GameReader.h"
 #include "EventBus.h"
 #include "FieldRegistry.h"
+#include "PerfStats.h"
 
 #include <chrono>
 #include <cmath>
 #include <nlohmann/json.hpp>
 
+#include "../../logger.h"
+
+#include <exception>
+#include <mutex>
+#include <string>
+#include <unordered_set>
+
 namespace GameReader
 {
+    namespace
+    {
+        // Serialise without throwing on invalid UTF-8 (game strings are often
+        // Windows-1252). A throw here happens on the game thread inside an
+        // SKSE task, where it is uncaught and terminates Skyrim.
+        std::string SafeDump(const nlohmann::json& j)
+        {
+            return j.dump(-1, ' ', false, nlohmann::json::error_handler_t::replace);
+        }
+
+        // Run a JSON resolver so that a failure in one field returns null
+        // instead of killing the game. Built with /EHa, catch(...) also
+        // catches access violations (SEH) raised by bad game-memory reads.
+        template <class Fn>
+        nlohmann::json SafeResolve(const std::string& key, Fn&& fn)
+        {
+            static std::mutex                      s_lock;
+            static std::unordered_set<std::string> s_reported;
+            const auto started = std::chrono::steady_clock::now();
+            struct Timer
+            {
+                const std::string&                    key;
+                std::chrono::steady_clock::time_point started;
+                ~Timer()
+                {
+                    PerfStats::Record(key, std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - started).count());
+                }
+            } timer{ key, started };
+            try {
+                return fn();
+            } catch (const std::exception& e) {
+                std::scoped_lock l(s_lock);
+                if (s_reported.insert(key).second)
+                    logger::error("[GameReader] resolver '{}' threw C++ exception: {} (field returns null)", key, e.what());
+            } catch (...) {
+                std::scoped_lock l(s_lock);
+                if (s_reported.insert(key).second)
+                    logger::error("[GameReader] resolver '{}' raised a structured exception (bad memory read?) (field returns null)", key);
+            }
+            return nullptr;
+        }
+    }
+
     std::string BuildSubscriptionJson(SubscriptionState& state)
     {
         if (state.fields.empty())
             return {};
+
+        // Whole push, serialisation included.
+        const auto buildStarted = std::chrono::steady_clock::now();
+        struct BuildTimer
+        {
+            const std::string&                    id;
+            std::chrono::steady_clock::time_point started;
+            ~BuildTimer()
+            {
+                PerfStats::Record("sub:" + id, std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - started).count());
+            }
+        } buildTimer{ state.id, buildStarted };
 
         const bool inGame = FieldRegistry::IsInGame();
 
@@ -63,7 +126,7 @@ namespace GameReader
                 if (!std::isfinite(val))
                     val = 0.f;
 
-                std::string valStr = nlohmann::json(val).dump();
+                std::string valStr = SafeDump(nlohmann::json(val));
                 if (state.sendOnChange) {
                     auto it = state.lastValues.find(alias);
                     if (it != state.lastValues.end() && it->second == valStr)
@@ -78,6 +141,7 @@ namespace GameReader
 
             // --- JSON fields (inventory, etc.) ---
             auto jsonEntryOpt = FieldRegistry::ResolveJson(registryKey);
+            const std::string& keyRef = registryKey;
             if (jsonEntryOpt) {
                 // Event-driven fast path: if the registry key is wired to
                 // EventBus and its version has not advanced since we last
@@ -111,14 +175,14 @@ namespace GameReader
                     // been computed for the current version.
                     const auto& jsonEntry = *jsonEntryOpt;
                     auto cached = EventBus::ResolveCached(registryKey,
-                                                          [&]() { return jsonEntry.resolve(); });
+                                                          [&]() { return SafeResolve(keyRef, [&]() { return jsonEntry.resolve(); }); });
                     val = std::move(cached.value);
                     if (state.sendOnChange)
                         state.lastVersions[alias] = cached.version;
                 } else {
-                    val = jsonEntryOpt->resolve();
+                    val = SafeResolve(keyRef, [&]() { return jsonEntryOpt->resolve(); });
                 }
-                std::string valStr = val.dump();
+                std::string valStr = SafeDump(val);
 
                 if (state.sendOnChange) {
                     auto it = state.lastValues.find(alias);
@@ -147,6 +211,6 @@ namespace GameReader
         msg["id"]     = state.id;
         msg["ts"]     = nowMs;
         msg["fields"] = dataFields;
-        return msg.dump();
+        return SafeDump(msg);
     }
 }

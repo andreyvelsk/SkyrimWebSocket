@@ -137,6 +137,11 @@ below.
 | `favorite` | Toggle the favorite flag on an inventory item. | [↓](#favorite) |
 | `texture_preview` | Produce a base64 PNG preview from a raw DDS texture path. | [↓](#texture_preview) |
 | `file_download` | Download an arbitrary file (BSA / loose) as base64. | [↓](#file_download) |
+| `screenshot_take` | Take an in-game screenshot with the engine's own screenshot feature. | [↓](#screenshot_take) |
+| `screenshot_list` | List screenshot files in the game folder, newest first. | [↓](#screenshot_list) |
+| `screenshot_get` | Read one screenshot, optionally scaled down to a JPEG. | [↓](#screenshot_get) |
+| `local_map_get` | Floor plan of the player's surroundings from the navmesh. | [↓](#local_map_get) |
+| `perf_reset` | Clear the `Debug::FieldTimings` counters. | [↓](#perf_reset) |
 | `equip_spell` | Equip a known spell to a hand. | [↓](#equip_spell) |
 | `unequip_spell` | Unequip a spell from a hand. | [↓](#unequip_spell) |
 | `favorite_spell` | Toggle the favorite flag on a known spell or power. | [↓](#favorite_spell) |
@@ -296,6 +301,7 @@ art, etc.) and is also useful for testing the DDS→PNG pipeline.
 | Field | Required | Default | Description |
 |---|---|---|---|
 | `path` | **yes** | — | DDS path relative to the game `Data` folder, e.g. `"textures/interface/icons/weapons/ironsword.dds"`. Backslashes are accepted. |
+| `maxSize` | no | `0` | When > 0, the image is box-downsampled (by halves) until its longest side is ≤ `maxSize` px. Use for thumbnails; `0` keeps full resolution. Capped at 4096. |
 
 **Response** — the `data` object of `commandResult`:
 
@@ -359,6 +365,88 @@ and loose files) and returns it as base64. Useful for any non-texture asset:
   }
 }
 ```
+
+---
+
+#### `screenshot_take`
+
+Queues one screenshot through the engine's PrintScreen handler. Before it
+queues, the plugin sets `bAllowScreenShot:Display` to `1` for this game
+session. The engine writes the file one or two frames later, into the game
+folder, named after `sScreenShotBaseName:Display` (default `ScreenShot`).
+Feature flag: `screenshots`.
+
+No extra fields. **Response** `data`: `{ "queued": bool }`. `queued` is
+`false` when a screenshot is already pending.
+
+---
+
+#### `screenshot_list`
+
+Lists screenshot files (`.png`, `.bmp`, `.jpg`) in the game folder whose
+names start with the screenshot base name. Newest first.
+
+| Field | Required | Default | Description |
+|---|---|---|---|
+| `limit` | no | `50` | Maximum number of files (1–500). |
+
+**Response** `data`:
+
+| Field | Type | Description |
+|---|---|---|
+| `directory` | string | Game folder that was scanned. |
+| `baseName` | string | Value of `sScreenShotBaseName:Display`. |
+| `total` | integer | Number of matching files. |
+| `files` | array | `{ "name": string, "size": int, "modified": int }`; `modified` is Unix seconds. |
+
+---
+
+#### `screenshot_get`
+
+Reads one file from the `screenshot_list` result. Names that are not in that
+list are refused.
+
+| Field | Required | Default | Description |
+|---|---|---|---|
+| `name` | **yes** | — | A `name` from `screenshot_list`. |
+| `maxSize` | no | `0` | `> 0`: decode, scale so the longest side is at most `maxSize` px, return a JPEG. `0`: return the file bytes unchanged. |
+
+**Response** `data`: `{ "name", "mimeType", "width", "height", "size", "dataBase64" }`
+(`width`/`height` only when `maxSize > 0`).
+
+---
+
+#### `local_map_get`
+
+Returns the walkable surface (navmesh) around the player, for drawing a local
+map. Inside: the current cell. Outside: the player's cell and its eight
+neighbours. Runs on the game thread; cost is a copy of the navmesh arrays.
+Feature flag: `map.local`.
+
+No extra fields. **Response** `data`:
+
+| Field | Type | Description |
+|---|---|---|
+| `key` | string | `c:<cell formId>` inside, `w:<worldspace formId>:<cellX>:<cellY>` outside. |
+| `isInterior` | bool | |
+| `name` | string | Cell name (inside) or worldspace name (outside). |
+| `cellFormId` | string | The player's cell. |
+| `worldspace` | string\|null | Worldspace editor ID outside, `null` inside. |
+| `minX` … `maxZ` | integer | Bounds of all vertices, world units. |
+| `vertexCount`, `triangleCount` | integer | |
+| `truncated` | bool | `true` when the 150 000-triangle cap was hit. |
+| `vertices` | base64 | Int32 little-endian `x, y, z` per vertex. |
+| `triangles` | base64 | Uint32 little-endian vertex indices `a, b, c` per triangle. |
+| `edges` | base64 | One byte per triangle. Bit `i` set: edge `i` (vertex `i` → `i+1`) has no neighbour — a wall or a drop. |
+| `doors` | array | Load doors: `{ "x", "y", "z", "name" }`; `name` is where the door leads. |
+
+Fails with `"No navmesh here"` when the area has no navmesh.
+
+---
+
+#### `perf_reset`
+
+Clears the counters behind `Debug::FieldTimings`. No extra fields.
 
 ---
 
@@ -772,6 +860,13 @@ Fields of different types can be freely mixed in a single `subscribe` or `query`
 - [docs/Game.md](docs/Game.md) — Game-level settings such as the current language
 - [docs/Magic.md](docs/Magic.md) — All Magic fields with spell information and status
 - [docs/Hotkeys.md](docs/Hotkeys.md) — Hotkey slot bindings (`Hotkey::Items`)
+
+Diagnostics and journal fields:
+
+| Key | Type | Description |
+|---|---|---|
+| `Player::Discoveries` | object | `{ seq, recent: [ { seq, name, type, worldspace, x, y } ] }`. Locations discovered since the game started (LocationDiscovery event), newest last, at most 20. `seq` only grows. |
+| `Debug::FieldTimings` | object | `{ sinceSeconds, entries: [ { key, calls, avgMs, maxMs, lastMs, slowCalls } ] }`. Game-thread time per field resolver and per subscription push (`sub:<id>`), slowest first. `slowCalls` counts calls over 4 ms. Calls over 8 ms are also logged (at most once per 30 s per key). |
 
 ---
 

@@ -2,6 +2,7 @@
 
 #include "Common.h"
 
+#include <cstdint>
 #include <string>
 
 namespace FileCommands
@@ -15,7 +16,9 @@ namespace FileCommands
     //   { "mimeType": "image/png", "width": int, "height": int, "imageBase64": string }
     // Heavy (file read + DDS decode + PNG encode + base64): call from the
     // io_context thread, NOT the game thread, to avoid freezing the game.
-    CommandResult GetTexturePreview(const std::string& path);
+    // maxSize > 0 downsamples the PNG so its longest side is at most maxSize
+    // pixels (much smaller payload for thumbnails); 0 keeps full resolution.
+    CommandResult GetTexturePreview(const std::string& path, std::uint32_t maxSize = 0);
 
     // Read an arbitrary file from the game's virtual filesystem (BSA + loose
     // files) and return it as base64. `path` is relative to the game Data

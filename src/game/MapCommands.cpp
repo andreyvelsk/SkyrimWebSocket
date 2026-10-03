@@ -110,8 +110,14 @@ namespace MapCommands
     // empty string when the player is allowed to travel.
     static std::string ValidatePlayerCanTravel(RE::PlayerCharacter* player)
     {
+        // Papyrus runs only while the game is not paused, so a call queued
+        // now would fire later, unexpectedly, when a menu closes.
+        if (auto* ui = RE::UI::GetSingleton(); ui && ui->GameIsPaused())
+            return "The game is paused (a menu is open). Close it and try again";
         if (player->IsInCombat())
             return "Cannot fast-travel while in combat";
+        if (player->IsOverEncumbered())
+            return "Cannot fast-travel while carrying too much";
         logger::info("[FastTravel] step5: player ok, inCombat=false");
 
         auto* playerCell = player->GetParentCell();
@@ -222,7 +228,22 @@ namespace MapCommands
             return {false, "Papyrus VM unavailable"};
 
         auto* fnArgs = RE::MakeFunctionArguments(static_cast<RE::TESObjectREFR*>(target.ref));
-        RE::BSTSmartPointer<RE::BSScript::IStackCallbackFunctor> callback;
+        // Logs when the VM has actually run the call (diagnostics: a call
+        // that never returns means the VM was not running).
+        class Done final : public RE::BSScript::IStackCallbackFunctor
+        {
+        public:
+            explicit Done(RE::FormID a_id) : id(a_id) {}
+            void operator()(RE::BSScript::Variable) override
+            {
+                logger::info("[FastTravel] Game.FastTravel(0x{:08X}) returned", id);
+            }
+            void SetObject(const RE::BSTSmartPointer<RE::BSScript::Object>&) override {}
+
+        private:
+            RE::FormID id;
+        };
+        RE::BSTSmartPointer<RE::BSScript::IStackCallbackFunctor> callback = RE::make_smart<Done>(formId);
         const bool dispatched = vm->DispatchStaticCall(RE::BSFixedString("Game"),
                                                        RE::BSFixedString("FastTravel"),
                                                        fnArgs,

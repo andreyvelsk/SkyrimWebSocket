@@ -81,10 +81,13 @@ namespace PlayerPosition
         if (cell) {
             const char* cedid = cell->GetFormEditorID();
             pos["cell"]       = cedid ? std::string(cedid) : std::string();
+            const char* cname = cell->GetFullName();
+            pos["cellName"]   = cname ? std::string(cname) : std::string();
             pos["cellFormId"] = Common::FormIdToString(cell->GetFormID());
             pos["isInterior"] = cell->IsInteriorCell();
         } else {
             pos["cell"]       = nullptr;
+            pos["cellName"]   = nullptr;
             pos["cellFormId"] = nullptr;
             pos["isInterior"] = false;
         }

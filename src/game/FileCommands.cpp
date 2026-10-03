@@ -15,9 +15,9 @@ namespace FileCommands
     // ─── Private helpers ───────────────────────────────────────────────────
 
     // Runs TextureConverter and builds the JSON response.
-    static CommandResult BuildPreviewResult(const std::string& ddsPath)
+    static CommandResult BuildPreviewResult(const std::string& ddsPath, std::uint32_t maxSize)
     {
-        const auto preview = TextureConverter::DdsToPngBase64(ddsPath);
+        const auto preview = TextureConverter::DdsToPngBase64(ddsPath, maxSize);
         if (!preview.success)
             return { false, preview.error };
 
@@ -65,10 +65,10 @@ namespace FileCommands
 
     // ─── Commands ─────────────────────────────────────────────────────────
 
-    CommandResult GetTexturePreview(const std::string& path)
+    CommandResult GetTexturePreview(const std::string& path, std::uint32_t maxSize)
     {
-        logger::debug("texture_preview path='{}'", path);
-        return BuildPreviewResult(path);
+        logger::debug("texture_preview path='{}' maxSize={}", path, maxSize);
+        return BuildPreviewResult(path, maxSize);
     }
 
     CommandResult GetFileDownload(const std::string& path)

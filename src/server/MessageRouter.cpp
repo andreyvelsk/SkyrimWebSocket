@@ -8,10 +8,14 @@
 #include "../game/HotkeyCommands.h"
 #include "../game/InventoryCommands.h"
 #include "../game/MagicCommands.h"
+#include "../game/LocalMap.h"
 #include "../game/MapCommands.h"
+#include "../game/PerfStats.h"
 #include "../game/QuestCommands.h"
+#include "../game/ScreenshotCommands.h"
 #include "../Utils.h"
 
+#include <algorithm>
 #include <chrono>
 #include <cctype>
 #include <nlohmann/json.hpp>
@@ -31,7 +35,7 @@ namespace MessageRouter
                 nlohmann::json err;
                 err["type"]    = "error";
                 err["message"] = "Field value for '" + alias + "' must be a string";
-                session->send(err.dump());
+                session->send(err.dump(-1, ' ', false, nlohmann::json::error_handler_t::replace));
                 return false;
             }
             std::string registryKey = keyVal.get<std::string>();
@@ -39,7 +43,7 @@ namespace MessageRouter
                 nlohmann::json err;
                 err["type"]    = "error";
                 err["message"] = "Unknown field key: '" + registryKey + "'";
-                session->send(err.dump());
+                session->send(err.dump(-1, ' ', false, nlohmann::json::error_handler_t::replace));
                 return false;
             }
             out[alias] = registryKey;
@@ -81,7 +85,7 @@ namespace MessageRouter
             resp["error"] = result.error;
         if (!result.data.is_null())
             resp["data"] = result.data;
-        return resp.dump();
+        return resp.dump(-1, ' ', false, nlohmann::json::error_handler_t::replace);
     }
 
     // Dispatch a "command" message to the game thread.
@@ -117,7 +121,7 @@ namespace MessageRouter
                     err["id"]      = cmdId;
                     err["success"] = false;
                     err["error"]   = "player_marker_set requires numeric 'x' and 'y' (and optional numeric 'z')";
-                    session->send(err.dump());
+                    session->send(err.dump(-1, ' ', false, nlohmann::json::error_handler_t::replace));
                     return;
                 }
                 // 'z' is optional — defaults to 0 when omitted.
@@ -128,7 +132,7 @@ namespace MessageRouter
                         err["id"]      = cmdId;
                         err["success"] = false;
                         err["error"]   = "player_marker_set 'z' must be numeric when present";
-                        session->send(err.dump());
+                        session->send(err.dump(-1, ' ', false, nlohmann::json::error_handler_t::replace));
                         return;
                     }
                     z = msg["z"].get<float>();
@@ -162,7 +166,7 @@ namespace MessageRouter
                 err["id"]      = cmdId;
                 err["success"] = false;
                 err["error"]   = "Missing or invalid 'slot' (expected integer 1..8)";
-                session->send(err.dump());
+                session->send(err.dump(-1, ' ', false, nlohmann::json::error_handler_t::replace));
                 return;
             }
             const int slot = msg["slot"].get<int>();
@@ -175,7 +179,7 @@ namespace MessageRouter
                     err["id"]      = cmdId;
                     err["success"] = false;
                     err["error"]   = "Missing 'formId' field";
-                    session->send(err.dump());
+                    session->send(err.dump(-1, ' ', false, nlohmann::json::error_handler_t::replace));
                     return;
                 }
                 const std::string formIdStr = msg["formId"].get<std::string>();
@@ -186,7 +190,7 @@ namespace MessageRouter
                     err["id"]      = cmdId;
                     err["success"] = false;
                     err["error"]   = "Invalid formId: '" + formIdStr + "'";
-                    session->send(err.dump());
+                    session->send(err.dump(-1, ' ', false, nlohmann::json::error_handler_t::replace));
                     return;
                 }
                 formId = *parsed;
@@ -217,7 +221,7 @@ namespace MessageRouter
                 err["id"]      = cmdId;
                 err["success"] = false;
                 err["error"]   = "quest_set_active requires string 'formId'";
-                session->send(err.dump());
+                session->send(err.dump(-1, ' ', false, nlohmann::json::error_handler_t::replace));
                 return;
             }
             if (!msg.contains("active") || !msg["active"].is_boolean()) {
@@ -226,7 +230,7 @@ namespace MessageRouter
                 err["id"]      = cmdId;
                 err["success"] = false;
                 err["error"]   = "quest_set_active requires boolean 'active'";
-                session->send(err.dump());
+                session->send(err.dump(-1, ' ', false, nlohmann::json::error_handler_t::replace));
                 return;
             }
 
@@ -238,7 +242,7 @@ namespace MessageRouter
                 err["id"]      = cmdId;
                 err["success"] = false;
                 err["error"]   = "Invalid formId: '" + formIdStr + "'";
-                session->send(err.dump());
+                session->send(err.dump(-1, ' ', false, nlohmann::json::error_handler_t::replace));
                 return;
             }
 
@@ -259,14 +263,103 @@ namespace MessageRouter
                 err["id"]      = cmdId;
                 err["success"] = false;
                 err["error"]   = "texture_preview requires string 'path'";
-                session->send(err.dump());
+                session->send(err.dump(-1, ' ', false, nlohmann::json::error_handler_t::replace));
                 return;
             }
             const std::string path = msg["path"].get<std::string>();
+            // Optional: cap the longest side (thumbnails). 0 / absent = full size.
+            std::uint32_t maxSize = 0;
+            if (msg.contains("maxSize") && msg["maxSize"].is_number_integer()) {
+                const auto requested = msg["maxSize"].get<std::int64_t>();
+                if (requested > 0)
+                    maxSize = static_cast<std::uint32_t>(std::min<std::int64_t>(requested, 4096));
+            }
             // Decode + PNG encode + base64 are heavy: run them on the
             // io_context thread, not the game thread, to avoid freezing the game.
-            asio::post(session->ioc(), [session, cmdId, path]() {
-                auto result = FileCommands::GetTexturePreview(path);
+            asio::post(session->ioc(), [session, cmdId, path, maxSize]() {
+                auto result = FileCommands::GetTexturePreview(path, maxSize);
+                session->send(BuildCommandResultJson(cmdId, result));
+            });
+            return;
+        }
+
+        // ─── Local map (navmesh floor plan) ────────────────────────────────
+        if (command == "local_map_get") {
+            SKSE::GetTaskInterface()->AddTask([session, cmdId]() {
+                Common::CommandResult result;
+                try {
+                    result = LocalMap::Read();
+                } catch (const std::exception& e) {
+                    result = { false, std::string("local_map_get failed: ") + e.what() };
+                } catch (...) {
+                    result = { false, "local_map_get failed: bad memory read" };
+                }
+                std::string json = BuildCommandResultJson(cmdId, result);
+                asio::post(session->ioc(), [session, json] { session->send(json); });
+            });
+            return;
+        }
+
+        // ─── Diagnostics ──────────────────────────────────────────────────
+        if (command == "perf_reset") {
+            PerfStats::Reset();
+            session->send(BuildCommandResultJson(cmdId, { true, "" }));
+            return;
+        }
+
+        // ─── In-game screenshots ──────────────────────────────────────────
+        if (command == "screenshot_take") {
+            SKSE::GetTaskInterface()->AddTask([session, cmdId]() {
+                Common::CommandResult result;
+                try {
+                    result = ScreenshotCommands::TakeScreenshot();
+                } catch (const std::exception& e) {
+                    result = { false, std::string("screenshot_take failed: ") + e.what() };
+                }
+                std::string json = BuildCommandResultJson(cmdId, result);
+                asio::post(session->ioc(), [session, json] { session->send(json); });
+            });
+            return;
+        }
+
+        if (command == "screenshot_list") {
+            std::size_t limit = 50;
+            if (msg.contains("limit") && msg["limit"].is_number_integer()) {
+                const auto requested = msg["limit"].get<std::int64_t>();
+                if (requested > 0)
+                    limit = static_cast<std::size_t>(std::min<std::int64_t>(requested, 500));
+            }
+            asio::post(session->ioc(), [session, cmdId, limit]() {
+                Common::CommandResult result;
+                try {
+                    result = ScreenshotCommands::ListScreenshots(limit);
+                } catch (const std::exception& e) {
+                    result = { false, std::string("screenshot_list failed: ") + e.what() };
+                }
+                session->send(BuildCommandResultJson(cmdId, result));
+            });
+            return;
+        }
+
+        if (command == "screenshot_get") {
+            if (!msg.contains("name") || !msg["name"].is_string()) {
+                session->send(BuildCommandResultJson(cmdId, { false, "screenshot_get requires string 'name'" }));
+                return;
+            }
+            const std::string name = msg["name"].get<std::string>();
+            std::uint32_t maxSize = 0;
+            if (msg.contains("maxSize") && msg["maxSize"].is_number_integer()) {
+                const auto requested = msg["maxSize"].get<std::int64_t>();
+                if (requested > 0)
+                    maxSize = static_cast<std::uint32_t>(std::min<std::int64_t>(requested, 4096));
+            }
+            asio::post(session->ioc(), [session, cmdId, name, maxSize]() {
+                Common::CommandResult result;
+                try {
+                    result = ScreenshotCommands::GetScreenshot(name, maxSize);
+                } catch (const std::exception& e) {
+                    result = { false, std::string("screenshot_get failed: ") + e.what() };
+                }
                 session->send(BuildCommandResultJson(cmdId, result));
             });
             return;
@@ -279,7 +372,7 @@ namespace MessageRouter
                 err["id"]      = cmdId;
                 err["success"] = false;
                 err["error"]   = "file_download requires string 'path'";
-                session->send(err.dump());
+                session->send(err.dump(-1, ' ', false, nlohmann::json::error_handler_t::replace));
                 return;
             }
             const std::string path = msg["path"].get<std::string>();
@@ -309,7 +402,7 @@ namespace MessageRouter
             err["id"]      = cmdId;
             err["success"] = false;
             err["error"]   = "Invalid formId: '" + formIdStr + "'";
-            session->send(err.dump());
+            session->send(err.dump(-1, ' ', false, nlohmann::json::error_handler_t::replace));
             return;
         }
         const RE::FormID formId = *parsed;
@@ -411,7 +504,7 @@ namespace MessageRouter
             nlohmann::json resp;
             resp["type"] = "heartbeat";
             resp["ts"]   = nowMs;
-            session->send(resp.dump());
+            session->send(resp.dump(-1, ' ', false, nlohmann::json::error_handler_t::replace));
 
         } else if (type == "query") {
             if (!msg.contains("id") || !msg["id"].is_string()) {
@@ -430,7 +523,12 @@ namespace MessageRouter
                 return;
 
             SKSE::GetTaskInterface()->AddTask([session, oneShot]() mutable {
-                std::string json = GameReader::BuildSubscriptionJson(oneShot);
+                std::string json;
+                try {
+                    json = GameReader::BuildSubscriptionJson(oneShot);
+                } catch (...) {
+                    SKSE::log::error("[MessageRouter] query '{}' failed", oneShot.id);
+                }
                 asio::post(session->ioc(), [session, json] {
                     if (!json.empty())
                         session->send(json);

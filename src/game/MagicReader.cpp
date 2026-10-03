@@ -1,4 +1,6 @@
 #include "MagicReader.h"
+
+#include <unordered_set>
 #include "Common.h"
 
 #include <format>
@@ -484,12 +486,22 @@ namespace MagicReader
                 default: break;
             }
         };
+        std::unordered_set<RE::SpellItem*> seenPowers;
+        auto countOnce = [&](RE::SpellItem* spell) {
+            if (spell && seenPowers.insert(spell).second)
+                countPower(spell);
+        };
         if (spellData) {
             for (std::uint32_t i = 0; i < spellData->numSpells; ++i)
-                countPower(spellData->spells[i]);
+                countOnce(spellData->spells[i]);
+        }
+        // Racial powers (Battle Cry, Night Eye, Dragonskin, ...) live on the race.
+        if (auto* race = player->GetRace(); race && race->actorEffects) {
+            for (std::uint32_t i = 0; i < race->actorEffects->numSpells; ++i)
+                countOnce(race->actorEffects->spells[i]);
         }
         for (auto* spell : player->GetActorRuntimeData().addedSpells)
-            countPower(spell);
+            countOnce(spell);
 
         if (powerCount > 0)
             result.push_back({
@@ -674,10 +686,13 @@ namespace MagicReader
         auto* favorites = RE::MagicFavorites::GetSingleton();
         nlohmann::json result = nlohmann::json::array();
 
+        std::unordered_set<RE::SpellItem*> seen;
         auto tryAdd = [&](RE::SpellItem* spell) {
             if (!spell)
                 return;
             if (spell->GetSpellType() != type)
+                return;
+            if (!seen.insert(spell).second)
                 return;
             result.push_back(BuildPowerEntry(spell, favorites, player));
         };
@@ -688,6 +703,12 @@ namespace MagicReader
         if (spellData) {
             for (std::uint32_t i = 0; i < spellData->numSpells; ++i)
                 tryAdd(spellData->spells[i]);
+        }
+
+        // 1b) Racial powers live on the race's spell list, not the NPC's.
+        if (auto* race = player->GetRace(); race && race->actorEffects) {
+            for (std::uint32_t i = 0; i < race->actorEffects->numSpells; ++i)
+                tryAdd(race->actorEffects->spells[i]);
         }
 
         // 2) Powers added at runtime (AddSpell(), mods, console, etc.).

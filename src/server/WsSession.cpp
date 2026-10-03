@@ -142,7 +142,12 @@ void WsSession::doPush(const std::string& id)
     const std::uint64_t generation = it->second.generation;
 
     SKSE::GetTaskInterface()->AddTask([self = shared_from_this(), snapshot, generation]() mutable {
-        std::string json = GameReader::BuildSubscriptionJson(snapshot);
+        std::string json;
+        try {
+            json = GameReader::BuildSubscriptionJson(snapshot);
+        } catch (...) {
+            SKSE::log::error("[WsSession] BuildSubscriptionJson failed for '{}'", snapshot.id);
+        }
 
         asio::post(self->ioc_, [self, json, id = snapshot.id,
                                 lastValues   = snapshot.lastValues,

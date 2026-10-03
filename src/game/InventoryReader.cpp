@@ -2,7 +2,9 @@
 #include "Common.h"
 #include "../Utils.h"
 
+#include <algorithm>
 #include <array>
+#include <cctype>
 #include <format>
 #include <unordered_map>
 
@@ -204,6 +206,60 @@ namespace InventoryReader
         return slots;
     }
 
+    // Normalises a model path from a TESModel ("Weapons\\Iron\\Dagger.nif")
+    // into a Data-relative path the file_download command accepts
+    // ("meshes/weapons/iron/dagger.nif"). Returns "" when there is no model.
+    static std::string NormalizeModelPath(const char* a_model)
+    {
+        if (!a_model || !*a_model)
+            return {};
+        std::string path(a_model);
+        std::replace(path.begin(), path.end(), '\\', '/');
+        std::transform(path.begin(), path.end(), path.begin(),
+                       [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
+        while (!path.empty() && path.front() == '/')
+            path.erase(path.begin());
+        if (!path.starts_with("meshes/"))
+            path = "meshes/" + path;
+        return path;
+    }
+
+    // The model the game shows for this item on the ground / in the
+    // inventory preview. Armor keeps it in the biped world models (male first).
+    static std::string GetItemModelPath(RE::TESBoundObject* item)
+    {
+        if (!item)
+            return {};
+        if (auto* armor = item->As<RE::TESObjectARMO>()) {
+            using Sexes = RE::TESBipedModelForm::Sexes;
+            auto path = NormalizeModelPath(armor->worldModels[Sexes::kMale].GetModel());
+            if (path.empty())
+                path = NormalizeModelPath(armor->worldModels[Sexes::kFemale].GetModel());
+            return path;
+        }
+        if (auto* model = item->As<RE::TESModel>())
+            return NormalizeModelPath(model->GetModel());
+        return {};
+    }
+
+    // Keyword editor IDs (e.g. "WeapMaterialDaedric", "ArmorMaterialGlass").
+    // The app derives material tint and icon variants from these.
+    static nlohmann::json GetItemKeywords(RE::TESBoundObject* item)
+    {
+        nlohmann::json out = nlohmann::json::array();
+        auto* keywordForm = item ? item->As<RE::BGSKeywordForm>() : nullptr;
+        if (!keywordForm)
+            return out;
+        for (auto* keyword : keywordForm->GetKeywords()) {
+            if (!keyword)
+                continue;
+            const char* editorId = keyword->GetFormEditorID();
+            if (editorId && *editorId)
+                out.push_back(editorId);
+        }
+        return out;
+    }
+
     // Builds the fields common to every inventory item.
     static nlohmann::json BuildBaseEntry(
         RE::TESBoundObject*                                               item,
@@ -218,6 +274,11 @@ namespace InventoryReader
         j["value"]      = entry ? entry->GetValue() : 0;
         j["isFavorite"] = entry ? entry->IsFavorited() : false;
         j["isStolen"]   = IsItemStolen(entry);
+        j["keywords"]   = GetItemKeywords(item);
+        if (auto modelPath = GetItemModelPath(item); !modelPath.empty())
+            j["modelPath"] = std::move(modelPath);
+        else
+            j["modelPath"] = nullptr;
         return j;
     }
 

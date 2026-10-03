@@ -20,4 +20,11 @@ inline constexpr std::array kAppFeatures = {
     std::string_view{"map"},
     std::string_view{"texture_preview"},
     std::string_view{"file_download"},
+    std::string_view{"inventory.models"},          // items carry modelPath + keywords
+    std::string_view{"texture_preview.maxSize"},   // texture_preview accepts maxSize
+    std::string_view{"screenshots"},               // screenshot_take / screenshot_list / screenshot_get
+    std::string_view{"player.records"},            // Player::MiscStats + Player::ActiveEffects
+    std::string_view{"debug.timings"},             // Debug::FieldTimings + perf_reset
+    std::string_view{"player.discoveries"},        // Player::Discoveries
+    std::string_view{"map.local"},                 // local_map_get (navmesh floor plan)
 };

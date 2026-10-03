@@ -12,6 +12,12 @@
 #define STB_IMAGE_WRITE_IMPLEMENTATION
 #include "../../third_party/stb/stb_image_write.h"
 
+// bcdec: BC4/BC5/BC7 block decoders (MIT / Unlicense). Skyrim SE ships many
+// textures as BC7 (DX10 header); texture replacer mods nearly always do.
+#define BCDEC_IMPLEMENTATION
+#define BCDEC_STATIC
+#include "../../third_party/bcdec/bcdec.h"
+
 namespace
 {
     constexpr std::uint32_t kDdsMagic   = 0x20534444u;  // "DDS "
@@ -20,6 +26,12 @@ namespace
     constexpr std::uint32_t kFourCC_DXT1 = 0x31545844u;  // "DXT1"
     constexpr std::uint32_t kFourCC_DXT3 = 0x33545844u;  // "DXT3"
     constexpr std::uint32_t kFourCC_DXT5 = 0x35545844u;  // "DXT5"
+    constexpr std::uint32_t kFourCC_DX10 = 0x30315844u;  // "DX10": extended header follows
+    constexpr std::uint32_t kFourCC_ATI1 = 0x31495441u;  // "ATI1" (BC4)
+    constexpr std::uint32_t kFourCC_BC4U = 0x55344342u;  // "BC4U"
+    constexpr std::uint32_t kFourCC_ATI2 = 0x32495441u;  // "ATI2" (BC5)
+    constexpr std::uint32_t kFourCC_BC5U = 0x55354342u;  // "BC5U"
+    constexpr std::uint32_t kDdsdMipMapCount = 0x20000u;
 
     // ─── Byte helpers ──────────────────────────────────────────────────────
 
@@ -173,6 +185,9 @@ namespace
         kDxt1,
         kDxt3,
         kDxt5,
+        kBc4,
+        kBc5,
+        kBc7,
         kUncompressed,
         kUnsupported,
     };
@@ -184,7 +199,38 @@ namespace
         std::uint32_t height = 0;
         std::uint32_t bytesPerPixel = 0;
         std::uint32_t rMask = 0, gMask = 0, bMask = 0, aMask = 0;
+        std::uint32_t mipCount = 1;
+        bool          dx10 = false;  // a 20-byte DXGI header follows the 128-byte header
     };
+
+    // DXGI_FORMAT values found in game textures.
+    void ApplyDxgiFormat(DdsInfo& info, std::uint32_t dxgi)
+    {
+        switch (dxgi) {
+            case 70: case 71: case 72: info.format = DdsFormat::kDxt1; break;  // BC1
+            case 73: case 74: case 75: info.format = DdsFormat::kDxt3; break;  // BC2
+            case 76: case 77: case 78: info.format = DdsFormat::kDxt5; break;  // BC3
+            case 79: case 80:          info.format = DdsFormat::kBc4; break;
+            case 82: case 83:          info.format = DdsFormat::kBc5; break;
+            case 97: case 98: case 99: info.format = DdsFormat::kBc7; break;
+            case 27: case 28: case 29:  // R8G8B8A8
+                info.format = DdsFormat::kUncompressed;
+                info.bytesPerPixel = 4;
+                info.rMask = 0x000000FFu; info.gMask = 0x0000FF00u; info.bMask = 0x00FF0000u; info.aMask = 0xFF000000u;
+                break;
+            case 87: case 90: case 91:  // B8G8R8A8
+                info.format = DdsFormat::kUncompressed;
+                info.bytesPerPixel = 4;
+                info.rMask = 0x00FF0000u; info.gMask = 0x0000FF00u; info.bMask = 0x000000FFu; info.aMask = 0xFF000000u;
+                break;
+            case 88: case 92: case 93:  // B8G8R8X8
+                info.format = DdsFormat::kUncompressed;
+                info.bytesPerPixel = 4;
+                info.rMask = 0x00FF0000u; info.gMask = 0x0000FF00u; info.bMask = 0x000000FFu; info.aMask = 0;
+                break;
+            default: info.format = DdsFormat::kUnsupported; break;
+        }
+    }
 
     // Parses the 128-byte DDS header (already validated magic).
     DdsInfo ParseHeader(const std::uint8_t* h)
@@ -195,15 +241,23 @@ namespace
         if (info.width == 0 || info.height == 0)
             return info;
 
-        const std::uint32_t pfFlags = ReadU32(h + 80);
-        const std::uint32_t fourCC  = ReadU32(h + 84);
+        const std::uint32_t flags    = ReadU32(h + 8);
+        const std::uint32_t pfFlags  = ReadU32(h + 80);
+        const std::uint32_t fourCC   = ReadU32(h + 84);
         const std::uint32_t bitCount = ReadU32(h + 88);
+        if ((flags & kDdsdMipMapCount) != 0)
+            info.mipCount = std::max<std::uint32_t>(1, ReadU32(h + 28));
 
         if ((pfFlags & kDdspfFourCC) != 0) {
             switch (fourCC) {
                 case kFourCC_DXT1: info.format = DdsFormat::kDxt1; break;
                 case kFourCC_DXT3: info.format = DdsFormat::kDxt3; break;
                 case kFourCC_DXT5: info.format = DdsFormat::kDxt5; break;
+                case kFourCC_ATI1:
+                case kFourCC_BC4U: info.format = DdsFormat::kBc4; break;
+                case kFourCC_ATI2:
+                case kFourCC_BC5U: info.format = DdsFormat::kBc5; break;
+                case kFourCC_DX10: info.dx10 = true; break;  // format from the DXGI header
                 default:           info.format = DdsFormat::kUnsupported; break;
             }
         } else if (bitCount == 24 || bitCount == 32) {
@@ -217,20 +271,29 @@ namespace
         return info;
     }
 
-    // Size in bytes of the first (largest) mip level.
-    std::size_t Mip0Size(const DdsInfo& info)
+    // Bytes per 4×4 block (0 for uncompressed formats).
+    std::uint32_t BlockBytes(DdsFormat format)
     {
-        const std::uint32_t bw = (info.width + 3) / 4;
-        const std::uint32_t bh = (info.height + 3) / 4;
-        switch (info.format) {
-            case DdsFormat::kDxt1: return static_cast<std::size_t>(bw) * bh * 8;
+        switch (format) {
+            case DdsFormat::kDxt1:
+            case DdsFormat::kBc4: return 8;
             case DdsFormat::kDxt3:
-            case DdsFormat::kDxt5: return static_cast<std::size_t>(bw) * bh * 16;
-            case DdsFormat::kUncompressed:
-                return static_cast<std::size_t>(info.width) * info.height * info.bytesPerPixel;
-            default:
-                return 0;
+            case DdsFormat::kDxt5:
+            case DdsFormat::kBc5:
+            case DdsFormat::kBc7: return 16;
+            default: return 0;
         }
+    }
+
+    // Size in bytes of one mip level of the given dimensions.
+    std::size_t MipSize(const DdsInfo& info, std::uint32_t width, std::uint32_t height)
+    {
+        if (info.format == DdsFormat::kUncompressed)
+            return static_cast<std::size_t>(width) * height * info.bytesPerPixel;
+        const std::uint32_t bytes = BlockBytes(info.format);
+        const std::uint32_t bw    = (width + 3) / 4;
+        const std::uint32_t bh    = (height + 3) / 4;
+        return static_cast<std::size_t>(bw) * bh * bytes;
     }
 
     // ─── DDS → RGBA decoding pipeline ──────────────────────────────────────
@@ -238,7 +301,7 @@ namespace
     // Reads and validates the DDS header + mip-0 pixel data from the stream.
     // On failure, fills result.error and returns false.
     static bool ReadDdsData(RE::BSResourceNiBinaryStream& stream, const std::string& path,
-                            DdsInfo& info, std::vector<std::uint8_t>& block,
+                            std::uint32_t maxSize, DdsInfo& info, std::vector<std::uint8_t>& block,
                             TextureConverter::Preview& result)
     {
         std::array<std::uint8_t, 128> header{};
@@ -252,12 +315,49 @@ namespace
         }
 
         info = ParseHeader(header.data());
+        if (info.dx10) {
+            std::array<std::uint8_t, 20> dx10{};
+            if (!stream.read(dx10.data(), static_cast<std::uint32_t>(dx10.size()))) {
+                result.error = "Failed to read DDS DX10 header: " + path;
+                return false;
+            }
+            ApplyDxgiFormat(info, ReadU32(dx10.data()));
+        }
         if (info.format == DdsFormat::kUnsupported) {
             result.error = "Unsupported DDS pixel format: " + path;
             return false;
         }
 
-        const std::size_t mipSize = Mip0Size(info);
+        // Start from the smallest mip that is still at least maxSize: a
+        // 128 px preview of a 2048 px texture reads 1/256 of the pixels.
+        std::uint32_t level = 0;
+        if (maxSize > 0) {
+            while (level + 1 < info.mipCount) {
+                const std::uint32_t nw = std::max<std::uint32_t>(1, info.width >> (level + 1));
+                const std::uint32_t nh = std::max<std::uint32_t>(1, info.height >> (level + 1));
+                if (std::max(nw, nh) < maxSize)
+                    break;
+                ++level;
+            }
+        }
+        std::size_t skip = 0;
+        for (std::uint32_t l = 0; l < level; ++l)
+            skip += MipSize(info, std::max<std::uint32_t>(1, info.width >> l), std::max<std::uint32_t>(1, info.height >> l));
+        if (skip > 0) {
+            std::vector<std::uint8_t> scratch(std::min<std::size_t>(skip, 1u << 20));
+            while (skip > 0) {
+                const auto n = static_cast<std::uint32_t>(std::min(skip, scratch.size()));
+                if (!stream.read(scratch.data(), n)) {
+                    result.error = "Failed to skip DDS mip levels: " + path;
+                    return false;
+                }
+                skip -= n;
+            }
+            info.width  = std::max<std::uint32_t>(1, info.width >> level);
+            info.height = std::max<std::uint32_t>(1, info.height >> level);
+        }
+
+        const std::size_t mipSize = MipSize(info, info.width, info.height);
         if (mipSize == 0) {
             result.error = "Invalid DDS dimensions: " + path;
             return false;
@@ -291,6 +391,23 @@ namespace
                     case DdsFormat::kDxt5:
                         DecodeDxt5Block(block.data() + (by * bw + bx) * 16, decoded);
                         break;
+                    case DdsFormat::kBc7:
+                        bcdec_bc7(block.data() + (by * bw + bx) * 16, decoded, 4 * sizeof(RGBA));
+                        break;
+                    case DdsFormat::kBc4: {
+                        std::uint8_t r[16];
+                        bcdec_bc4(block.data() + (by * bw + bx) * 8, r, 4);
+                        for (int i = 0; i < 16; ++i)
+                            decoded[i] = RGBA{ r[i], r[i], r[i], 255 };
+                        break;
+                    }
+                    case DdsFormat::kBc5: {
+                        std::uint8_t rg[32];
+                        bcdec_bc5(block.data() + (by * bw + bx) * 16, rg, 8);
+                        for (int i = 0; i < 16; ++i)
+                            decoded[i] = RGBA{ rg[i * 2], rg[i * 2 + 1], 255, 255 };
+                        break;
+                    }
                     default: break;
                 }
 
@@ -313,6 +430,36 @@ namespace
         }
     }
 
+    // Halves the image (2x2 box filter) until the longest side is <= maxSize.
+    static void DownsampleToFit(std::vector<RGBA>& rgba, std::uint32_t& width,
+                                std::uint32_t& height, std::uint32_t maxSize)
+    {
+        if (maxSize == 0)
+            return;
+        while ((width > maxSize || height > maxSize) && width >= 2 && height >= 2) {
+            const std::uint32_t nw = width / 2;
+            const std::uint32_t nh = height / 2;
+            std::vector<RGBA>   out(static_cast<std::size_t>(nw) * nh);
+            for (std::uint32_t y = 0; y < nh; ++y) {
+                for (std::uint32_t x = 0; x < nw; ++x) {
+                    const RGBA& a = rgba[(2 * y) * width + 2 * x];
+                    const RGBA& b = rgba[(2 * y) * width + 2 * x + 1];
+                    const RGBA& c = rgba[(2 * y + 1) * width + 2 * x];
+                    const RGBA& d = rgba[(2 * y + 1) * width + 2 * x + 1];
+                    out[y * nw + x] = RGBA{
+                        static_cast<std::uint8_t>((a.r + b.r + c.r + d.r + 2) / 4),
+                        static_cast<std::uint8_t>((a.g + b.g + c.g + d.g + 2) / 4),
+                        static_cast<std::uint8_t>((a.b + b.b + c.b + d.b + 2) / 4),
+                        static_cast<std::uint8_t>((a.a + b.a + c.a + d.a + 2) / 4)
+                    };
+                }
+            }
+            rgba   = std::move(out);
+            width  = nw;
+            height = nh;
+        }
+    }
+
     // Encodes RGBA8 pixels to an in-memory PNG via stb_image_write.
     // Returns the PNG bytes; caller must free with STBIW_FREE.
     static unsigned char* EncodePng(const std::vector<RGBA>& rgba,
@@ -330,7 +477,7 @@ namespace
 
 namespace TextureConverter
 {
-    Preview DdsToPngBase64(const std::string& path)
+    Preview DdsToPngBase64(const std::string& path, std::uint32_t maxSize)
     {
         Preview result;
         if (path.empty()) {
@@ -349,14 +496,18 @@ namespace TextureConverter
 
         DdsInfo info;
         std::vector<std::uint8_t> block;
-        if (!ReadDdsData(stream, path, info, block, result))
+        if (!ReadDdsData(stream, path, maxSize, info, block, result))
             return result;
 
         std::vector<RGBA> rgba(info.width * info.height);
         DecodeDdsToRGBA(info, block, rgba);
 
+        std::uint32_t outWidth  = info.width;
+        std::uint32_t outHeight = info.height;
+        DownsampleToFit(rgba, outWidth, outHeight, maxSize);
+
         int            pngLen = 0;
-        unsigned char* png    = EncodePng(rgba, info.width, info.height, pngLen);
+        unsigned char* png    = EncodePng(rgba, outWidth, outHeight, pngLen);
         if (!png || pngLen <= 0) {
             result.error = "Failed to encode PNG: " + path;
             return result;
@@ -364,8 +515,8 @@ namespace TextureConverter
 
         result.success     = true;
         result.mimeType    = "image/png";
-        result.width       = info.width;
-        result.height      = info.height;
+        result.width       = outWidth;
+        result.height      = outHeight;
         result.imageBase64 = Common::Base64Encode(png, static_cast<std::size_t>(pngLen));
         STBIW_FREE(png);
         return result;

@@ -179,15 +179,6 @@ namespace QuestReader
             return cached.entries;
         }
 
-        std::size_t RuntimeObjectiveOffset()
-        {
-            return REL::Module::IsAE() ? 0x588 : 0x580;
-        }
-
-        std::size_t QuestLogOffset()
-        {
-            return REL::Module::IsAE() ? 0x578 : 0x570;
-        }
 
         std::unordered_map<RE::BGSQuestObjective*, ObjectiveRuntimeInfo>
         BuildRuntimeObjectiveMap(RE::PlayerCharacter* player)
@@ -196,9 +187,7 @@ namespace QuestReader
             if (!player || REL::Module::IsVR())
                 return result;
 
-            const auto base = reinterpret_cast<std::uintptr_t>(player);
-            const auto& instances =
-                *reinterpret_cast<const RE::BSTArray<RE::BGSInstancedQuestObjective>*>(base + RuntimeObjectiveOffset());
+            const auto& instances = player->GetPlayerRuntimeData().objectives;
 
             std::size_t order = 0;
             for (const auto& inst : instances) {
@@ -258,9 +247,7 @@ namespace QuestReader
             if (!player || REL::Module::IsVR())
                 return result;
 
-            const auto base = reinterpret_cast<std::uintptr_t>(player);
-            auto& questLog =
-                *reinterpret_cast<RE::BSSimpleList<RE::TESQuestStageItem*>*>(base + QuestLogOffset());
+            auto& questLog = player->GetPlayerRuntimeData().questLog;
 
             for (auto* item : questLog) {
                 if (!item || !item->owner)
